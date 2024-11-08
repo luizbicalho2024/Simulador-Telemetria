@@ -18,7 +18,7 @@ if modeloPF == "GPRS / Gsm":
 
     if desconto:
         porcetagem = st.text_input(f'Qual Porcentagem de Desconto:')
-        desconto_calc = gprs - (gprs * porcetagem/100)
+        desconto_calc = gprs - (gprs * (porcetagem/100))
         st.write(f"### Valor Anual com Desconto: R$ {desconto_calc:,.2f}")
                 
 else:
