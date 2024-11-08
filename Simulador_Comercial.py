@@ -14,7 +14,7 @@ modeloPF = st.selectbox(
 
 if modeloPF == "GPRS / Gsm":
     st.write(f"### Valor Anual À Vista: R$ {gprs:,.2f}")
-    desconto = st.checkbox("Efetuar Desconto: ",value=False)
+    desconto = st.checkbox("Efetuar Desconto: ")
 
     if desconto:
         porcetagem = st.text_input(f'Qual Porcentagem de Desconto:')
