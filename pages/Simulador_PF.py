@@ -27,41 +27,36 @@ redecan36 = 41.81
 mdvr36 = 330.89
 dms36 = 180.42
 
-modeloPF = st.selectbox(
+modeloPF = st.radio(
             'Tipo de Rastreador: ',
             ("GPRS / Gsm", "Satelital"))
 if modeloPF == "GPRS / Gsm":
     st.write(f"### Valor Anual Unitário À Vista: R$ {gprs:,.2f}")
-    parcelamentos = st.radio(
-        "Deseja Parcelar: ",
-        ("Não","Sim")
-    )
-    if parcelamentos == 'Sim':
-        option = st.selectbox(
-                        "Quantas Parcelas: ",
-                        ("2", "3", "4","5","6","7","8","9","10","11","12"),
-                        #index="Avista",
-                        placeholder="Selecione a quantidade de Parcelas",
-                    )
-        st.write(f"Parcelamento: {option}x")
-        margem = int(option) * 0.0408
-        parce = gprs / int(option)
-        calc_par = parce + (parce * margem)
-        total = calc_par * int(option)
-        st.write(f"{option} Parcelas de: R$ {calc_par:,.2f}")  
-        st.write(f"### Valor Anual Unitário: R$ {total:,.2f}")             
-    else:
-        st.write(f"### Valor Anual Unitário À Vista: R$ {satelite:,.2f}")
-        option = st.selectbox(
-                        "Quantas Parcelas: ",
-                        ("2", "3", "4","5","6","7","8","9","10","11","12"),
-                        #index="Avista",
-                        placeholder="Selecione a quantidade de Parcelas",
-                    )
-        st.write(f"Parcelamento: {option}x")
-        margem = int(option) * 0.0408
-        parce = satelite / int(option)
-        calc_par = parce + (parce * margem)
-        total = calc_par * int(option)
-        st.write(f"{option} Parcelas de: R$ {calc_par:,.2f}")  
-        st.write(f"### Valor Anual Unitário: R$ {total:,.2f}")  
+    option = st.selectbox(
+                    "Deseja Parcelar: ",
+                    ("2", "3", "4","5","6","7","8","9","10","11","12"),
+                    #index="Avista",
+                    placeholder="Selecione a quantidade de Parcelas",
+                )
+    st.write(f"Parcelamento: {option}x")
+    margem = int(option) * 0.0408
+    parce = gprs / int(option)
+    calc_par = parce + (parce * margem)
+    total = calc_par * int(option)
+    st.write(f"{option} Parcelas de: R$ {calc_par:,.2f}")  
+    st.write(f"### Valor Anual Unitário: R$ {total:,.2f}")             
+else:
+    st.write(f"### Valor Anual Unitário À Vista: R$ {satelite:,.2f}")
+    option = st.selectbox(
+                    "Deseja Parcelar: ",
+                    ("2", "3", "4","5","6","7","8","9","10","11","12"),
+                    #index="Avista",
+                    placeholder="Selecione a quantidade de Parcelas",
+                )
+    st.write(f"Parcelamento: {option}x")
+    margem = int(option) * 0.0408
+    parce = satelite / int(option)
+    calc_par = parce + (parce * margem)
+    total = calc_par * int(option)
+    st.write(f"{option} Parcelas de: R$ {calc_par:,.2f}")  
+    st.write(f"### Valor Anual Unitário: R$ {total:,.2f}")  
