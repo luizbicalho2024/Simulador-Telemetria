@@ -14,8 +14,8 @@ modeloPF = st.selectbox(
 
 if modeloPF == "GPRS / Gsm":
     st.write(f"### Valor Anual À Vista: R$ {gprs:,.2f}")
-    desconto = st.checkbox("Efetuar Desconto: ",value=False)
 
+    desconto = st.checkbox("Efetuar Desconto: ",value=False)
     if desconto:
         porcetagem = st.text_input(f'Qual Porcentagem de Desconto:',value='0')
         desconto_calc = gprs - (gprs * (int(porcetagem)/100))
@@ -24,6 +24,13 @@ if modeloPF == "GPRS / Gsm":
                 
 else:
     st.write(f"### Valor Anual À Vista: R$ {satelite:,.2f}")
+
+    desconto = st.checkbox("Efetuar Desconto: ",value=False)
+    if desconto:
+        porcetagem = st.text_input(f'Qual Porcentagem de Desconto:',value='0')
+        desconto_calc = satelite - (satelite * (int(porcetagem)/100))
+        st.write(f"Porcentagem Selecionada: {int(porcetagem)}%")
+        st.write(f"### Valor Anual com Desconto: R$ {desconto_calc:,.2f}")
 
 parcelamento = st.checkbox("Deseja Parcelar: ",value=False)
 
@@ -40,8 +47,8 @@ if parcelamento:
         parce = gprs / int(option)
         calc_par = parce + (parce * margem)
         total = calc_par * int(option)
-        st.write(f"{option} Parcelas de: R$ {calc_par:,.2f}")  
-        st.write(f"### Valor Anual Unitário: R$ {total:,.2f}") 
+        st.write(f"{option} Parcelas no valor de: R$ {calc_par:,.2f}")  
+        st.write(f"### Valor Anual: R$ {total:,.2f}") 
         
     else:
         option = st.selectbox(
@@ -55,5 +62,5 @@ if parcelamento:
         parce = satelite / int(option)
         calc_par = parce + (parce * margem)
         total = calc_par * int(option)
-        st.write(f"{option} Parcelas de: R$ {calc_par:,.2f}")  
-        st.write(f"### Valor Anual Unitário: R$ {total:,.2f}") 
+        st.write(f"{option} Parcelas no valor de: R$ {calc_par:,.2f}")  
+        st.write(f"### Valor Anual: R$ {total:,.2f}") 
