@@ -91,6 +91,6 @@ else :
         if st.checkbox(item):
             soma_total += valor
             valor_total = soma_total * int(st.session_state.qtd)
-            contrato_total = valor_total * contrat
+    contrato_total = valor_total * contrat
     st.write(f"## Valor total Unitário: R$ {valor_total:,.2f}")
     st.write(f"## Valor total do Contrato: R$ {contrato_total:,.2f}")
