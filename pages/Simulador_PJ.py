@@ -1,7 +1,7 @@
 import streamlit as st
 import time
 
-st.markdown("## Simulador de Venda")
+st.markdown("## Simulador de Venda Verdio Pessoa Jurídica")
 #st.sidebar.markdown("## Simulador de Venda")
 
 gprs = 970.56
