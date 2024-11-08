@@ -4,7 +4,7 @@ import time
 st.markdown("## Simulador de Comandos para Suntech e-Trac")
 #st.sidebar.markdown("## Simulador de Comandos para Suntech e-Trac")
 
-st.text_input("Insira o Serial: ", key="serial")
+st.text_input("Insira o Serial: ", value="XXXXXXX", key="serial")
 
 left_column, right_column = st.columns(2)
 
