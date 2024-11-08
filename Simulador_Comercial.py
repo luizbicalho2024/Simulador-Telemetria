@@ -3,4 +3,4 @@ import time
 
 
 sidebar_logo = "imgs\logo.png"
-st.logo(sidebar_logo, icon_image=main_body_logo)
+st.logo(sidebar_logo, icon_image=sidebar_logo)
