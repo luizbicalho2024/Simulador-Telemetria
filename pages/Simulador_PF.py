@@ -27,14 +27,7 @@ redecan36 = 41.81
 mdvr36 = 330.89
 dms36 = 180.42
 
-left_column, right_column = st.columns(2)
-
-with left_column:
-    cliente = st.radio(
-        'Tipo de Cliente: ',
-        ("Pessoa Física", "Pessoa Jurídica"))
-
-    if cliente == "Pessoa Física":
+if cliente == "Pessoa Física":
         modeloPF = st.radio(
             'Tipo de Rastreador: ',
             ("GPRS / Gsm", "Satelital"))
