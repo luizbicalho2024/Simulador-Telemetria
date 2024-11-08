@@ -27,54 +27,16 @@ redecan36 = 41.81
 mdvr36 = 330.89
 dms36 = 180.42
 
-left_column, right_column = st.columns(2)
-
-with left_column:
-    modeloPF = st.radio(
-            'Tipo de Rastreador: ',
-            ("GPRS / Gsm", "Satelital"))
-    if modeloPF == "GPRS / Gsm":
-            st.write(f"### Valor Anual Unitário À Vista: R$ {gprs:,.2f}")
-            option = st.selectbox(
-                    "Deseja Parcelar: ",
-                    ("2", "3", "4","5","6","7","8","9","10","11","12"),
-                    #index="Avista",
-                    placeholder="Selecione a quantidade de Parcelas",
-                )
-            st.write(f"Parcelamento: {option}x")
-            margem = int(option) * 0.0408
-            parce = gprs / int(option)
-            calc_par = parce + (parce * margem)
-            total = calc_par * int(option)
-            st.write(f"{option} Parcelas de: R$ {calc_par:,.2f}")  
-            st.write(f"### Valor Anual Unitário: R$ {total:,.2f}")             
-    else:
-            st.write(f"### Valor Anual Unitário À Vista: R$ {satelite:,.2f}")
-            option = st.selectbox(
-                    "Deseja Parcelar: ",
-                    ("2", "3", "4","5","6","7","8","9","10","11","12"),
-                    #index="Avista",
-                    placeholder="Selecione a quantidade de Parcelas",
-                )
-            st.write(f"Parcelamento: {option}x")
-            margem = int(option) * 0.0408
-            parce = satelite / int(option)
-            calc_par = parce + (parce * margem)
-            total = calc_par * int(option)
-            st.write(f"{option} Parcelas de: R$ {calc_par:,.2f}")  
-            st.write(f"### Valor Anual Unitário: R$ {total:,.2f}") 
-
-with right_column:
-    st.text_input("Quantos Veículos deseja realizar cotação: ", value='1', key="qtd")
+st.text_input("Quantos Veículos deseja realizar cotação: ", value='1', key="qtd")
         
-    temp = st.selectbox(
+temp = st.selectbox(
                     "Tempo de Contrato: ",
                     ("12 Meses", "24 Meses", "36 Meses"),
                     #index=None,
                     placeholder="Selecione o Tempo de Contrato",
                 )
-    st.write(f"Contrato: ", temp)
-    if temp == "12 Meses":   
+st.write(f"Contrato: ", temp)
+if temp == "12 Meses":   
             soma_total = 0
             valor_total = 0
             contrat = 12
@@ -94,7 +56,7 @@ with right_column:
             st.write(f"## Valor total Unitário: R$ {valor_total:,.2f}")
             st.write(f"## Valor total do Contrato: R$ {contrato_total:,.2f}")
         
-    elif temp == "24 Meses":   
+elif temp == "24 Meses":   
             soma_total = 0
             valor_total = 0
             contrat = 24
@@ -113,7 +75,7 @@ with right_column:
             contrato_total = valor_total * contrat
             st.write(f"## Valor total Unitário: R$ {valor_total:,.2f}")
             st.write(f"## Valor total do Contrato: R$ {contrato_total:,.2f}")
-    else :   
+else :   
             soma_total = 0
             valor_total = 0
             contrat = 36
