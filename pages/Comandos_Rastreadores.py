@@ -2,7 +2,7 @@ import streamlit as st
 import time
 
 st.markdown("## Simulador de Comandos para Suntech e-Trac")
-st.sidebar.markdown("## Simulador de Comandos para Suntech e-Trac")
+#st.sidebar.markdown("## Simulador de Comandos para Suntech e-Trac")
 
 st.text_input("Insira o Serial: ", key="serial")
 

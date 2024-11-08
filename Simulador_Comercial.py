@@ -2,7 +2,7 @@ import streamlit as st
 import time
 
 st.markdown("## Simulador de Venda")
-st.sidebar.markdown("## Simulador de Venda")
+#st.sidebar.markdown("## Simulador de Venda")
 
 gprs = 970.56
 satelite = 2325.60
