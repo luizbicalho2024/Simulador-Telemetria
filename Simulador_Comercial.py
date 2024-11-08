@@ -1,5 +1,8 @@
 import streamlit as st
 import time
 
-logo = "\imgs\logo2.png"
-st.logo(logo, size="medium", link=None)
+st.logo(
+    LOGO_URL_LARGE,
+    link="https://streamlit.io/gallery",
+    icon_image=LOGO_URL_SMALL,
+)
