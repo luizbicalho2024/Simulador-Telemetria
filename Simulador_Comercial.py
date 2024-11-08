@@ -127,11 +127,3 @@ with left_column:
                     soma_total += valor
                     valor_total = soma_total * int(st.session_state.qtd)
             st.write(f"## Valor total Unitário: R$ {valor_total:,.2f}")
-        
-
-latest_iteration = st.empty()
-bar = st.progress(0)
-for i in range(100):
-    latest_iteration.text(f'Carregado: {i+1}%')
-    bar.progress(i + 1)
-    time.sleep(0.01)
