@@ -3,7 +3,7 @@ import time
 
 st.markdown("## Simulador de Comandos para Suntech e-Trac")
 #st.sidebar.markdown("## Simulador de Comandos para Suntech e-Trac")
-st.set_page_config('Teste')
+st.set_page_config(page_title='Teste')
 st.text_input("Insira o Serial: ", key="serial")
 
 left_column, right_column = st.columns(2)
