@@ -54,3 +54,11 @@ with left_column:
         elif comandos == "NPTs":
             st.write('Segue código:')
             st.write(f'ST300NPT;{st.session_state.serial};02;20.0;1;30;0;1;500;300;5;10;100;10;180;100;1')
+    
+    if mod_rastreador == 'ST4315':        
+        st.write('Segue códigos:')
+        st.write('IP, Porta, APN, Redes')
+        st.write(f'RPR;{st.session_state.serial};OK;10;00#00;01#allcomiot.vivo.com.br;02#allcom;03#allcom;04#;05#54.94.190.167;06#9601;07#00;08#54.94.190.167;09#9601;10#00;11#0;12#0;13#00;60#600;70#01;71#600;61#00;62#500;63#300')
+        st.write('Disable ZIP')
+        st.write(f'RPR;{st.session_state.serial};OK;10;55#00;58#03;64#00;50#30;51#0;72#00;73#')
+        
