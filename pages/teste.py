@@ -49,9 +49,3 @@ with left_column:
     elif comandos == "NPTs":
         st.write('Segue código:')
         st.write(f'ST300NPT;{st.session_state.serial};02;20.0;1;30;0;1;500;300;5;10;100;10;180;100;1')
-latest_iteration = st.empty()
-bar = st.progress(0)
-for i in range(100):
-    latest_iteration.text(f'Carregando: {i+1}%')
-    bar.progress(i + 1)
-    time.sleep(0.01)
