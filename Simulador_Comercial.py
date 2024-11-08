@@ -1,5 +1,5 @@
 import streamlit as st
 import time
 
-
-st.logo(image="imgs\logo.png", size="medium", link=None)
+logo = "imgs\logo.png"
+st.logo(logo, size="medium", link=None)
