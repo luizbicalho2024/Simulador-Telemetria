@@ -81,6 +81,7 @@ with left_column:
         if temp == "12 Meses":   
             soma_total = 0
             valor_total = 0
+            contrat = 12
             checkboxes = {
                 f"GPRS / Gsm R$ {gprs12:,.2f}": gprs12,
                 f"Satélite R$ {satelite12:,.2f}": satelite12,
@@ -98,6 +99,7 @@ with left_column:
         elif temp == "24 Meses":   
             soma_total = 0
             valor_total = 0
+            contrat = 24
             checkboxes = {
                 f"GPRS / Gsm R$ {gprs24:,.2f}": gprs24,
                 f"Satélite R$ {satelite24:,.2f}": satelite24,
@@ -114,6 +116,7 @@ with left_column:
         else :   
             soma_total = 0
             valor_total = 0
+            contrat = 36
             checkboxes = {
                 f"GPRS / Gsm R$ {gprs36:,.2f}": gprs36,
                 f"Satélite R$ {satelite36:,.2f}": satelite36,
@@ -126,4 +129,6 @@ with left_column:
                 if st.checkbox(item):
                     soma_total += valor
                     valor_total = soma_total * int(st.session_state.qtd)
+                    contrato_total = valor_total * contrat
             st.write(f"## Valor total Unitário: R$ {valor_total:,.2f}")
+            st.write(f"## Valor total do Contrato: R$ {contrato_total:,.2f}")
