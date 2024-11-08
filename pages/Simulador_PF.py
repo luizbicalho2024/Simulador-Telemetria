@@ -27,7 +27,7 @@ redecan36 = 41.81
 mdvr36 = 330.89
 dms36 = 180.42
 
-modeloPF = st.radio(
+modeloPF = st.selectbox(
             'Tipo de Rastreador: ',
             ("GPRS / Gsm", "Satelital"))
 if modeloPF == "GPRS / Gsm":
