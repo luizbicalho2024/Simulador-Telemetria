@@ -34,6 +34,7 @@ if modeloPF == "GPRS / Gsm":
     st.write(f"### Valor Anual Unitário À Vista: R$ {gprs:,.2f}")
     parcelamentos = st.radio(
         "Deseja Parcelar: ",
+        index=None
         ("Sim")
     )
     if parcelamentos == 'Sim':
