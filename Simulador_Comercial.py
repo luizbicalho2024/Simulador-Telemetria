@@ -69,7 +69,7 @@ with left_column:
             st.write(f"{option} Parcelas de: R$ {calc_par:,.2f}")  
             st.write(f"### Valor Anual Unitário: R$ {total:,.2f}")  
     else:
-        st.text_input("Quantos Veículos deseja realizar cotação: ", key="qtd")
+        st.text_input("Quantos Veículos deseja realizar cotação: ", value='1', key="qtd")
         
         temp = st.selectbox(
                     "Tempo de Contrato: ",
