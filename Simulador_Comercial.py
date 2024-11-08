@@ -18,6 +18,11 @@ if modeloPF == "GPRS / Gsm":
 else:
     st.write(f"### Valor Anual Unitário À Vista: R$ {satelite:,.2f}")
 
+desconto = st.checkbox("Efetuar Desconto: ",value=False)
+
+if desconto:
+    porcetagem = st.text_input(f'Qual Porcentagem de Desconto: {porcetagem} %')
+
 parcelamento = st.checkbox("Deseja Parcelar: ",value=False)
 
 if parcelamento:
