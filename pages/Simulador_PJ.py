@@ -1,6 +1,9 @@
 import streamlit as st
 import time
 
+logo = ("imgs/logo.png")
+st.logo(logo)
+st.image("imgs/logo.png", width=200, output_format="auto",  caption="")
 st.markdown("## Simulador de Venda Verdio Pessoa Jurídica")
 #st.sidebar.markdown("## Simulador de Venda")
 
