@@ -35,10 +35,6 @@ for item, preco in precoCusto.items():
         itens_selecionados.append(item)
 
 
-instalacao = 50
-st.checkbox {f"Instalação - R$ {instalacao:,.2f}": instalacao}
-
-
 valor_total = 0
 for item in itens_selecionados:
     valor_total += precoCusto[item]
