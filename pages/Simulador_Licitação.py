@@ -7,7 +7,7 @@ st.markdown("## Simulador para Licitações e Editais")
 
 # Tabela de preços
 precoCusto = {
-    "Rastreador GPRS/GSM 2G": 216,
+    "Rastreador GPRS/GSM 2G": 280,
     "Rastreador GPRS/GSM 4G": 379,
     "Rastreador Satelital": 620,
     "Telemetria/CAN": 600,
@@ -17,16 +17,24 @@ precoCusto = {
 # Entrada de dados
 qtd_input = st.text_input("Quantos Veículos deseja realizar cotação: ", value="1", key="qtd")
 contrato_input = st.text_input("Tempo de Contrato (meses): ", value="12", key="contrato")
-margem_input = st.text_input("Margem de Lucro Desejado: ", value="0.3", key="margem")
+
+# Substituindo a margem de lucro por um slider
+margem = st.slider(
+    "Margem de Lucro Desejada (%)",
+    min_value=0.0,
+    max_value=1.0,
+    value=0.3,
+    step=0.01,
+    format="%.2f"
+)
 
 # Validação de entradas
 try:
     qtd = int(qtd_input) if qtd_input.isdigit() else 1  # Converte para inteiro ou usa 1 como padrão
-    contrato = int(contrato_input) if contrato_input.isdigit() else 12  # Converte para inteiro ou usa 12 como padrão
-    margem = float(margem_input) if margem_input.isdigit() else 0.3
+    contrato = int(contrato_input) if qtd_input.isdigit() else 12  # Converte para inteiro ou usa 12 como padrão
 except ValueError:
     st.error("Por favor, insira valores numéricos válidos para quantidade e contrato.")
-    qtd, contrato = 1, 12, 0.3  # Valores padrão em caso de erro
+    qtd, contrato = 1, 12  # Valores padrão em caso de erro
 
 # Seleção de itens
 itens_selecionados = []
@@ -41,6 +49,6 @@ un_margem = un_contrato + (un_contrato * margem)
 valor_total = un_margem * qtd * contrato
 
 # Exibição do resultado
-st.write(f"## Valor total unitário: R$ {un_margem:,.2f}")
+st.write(f"## Valor Unitário: R$ {un_margem:,.2f}")
 st.write(f"## Valor total: R$ {valor_total:,.2f}")
-st.write(f"#### (considerando {qtd} veículos e {contrato} meses)")
+st.write(f"##### (considerando {qtd} veículos e {contrato} meses)")
