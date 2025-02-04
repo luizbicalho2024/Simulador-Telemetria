@@ -10,23 +10,25 @@ st.markdown("## Simulador para Licitações e Editais")
 
 
 precoCusto = {
-        "GPRS/GSM": 216,
-        "Satelital": 620,
-        "TDI/CAN": 600,
-        "RFID": 154,
-        "Comunicação_GPRS": 5,
-        "Comunicação_Satelital": 69.20,
-        "Adesão_Satelital": 120,
+        "Rastreador GPRS/GSM 2G": 216,
+        "Rastreador GPRS/GSM 4G": 379,
+        "Rastreador Satelital": 620,
+        "Telemetria/CAN": 600,
+        "RFID ID Motorista": 154,
+        "Dados Mensal Un GPRS": 5,
+        "Dados Mensal Un Satélite": 69.20,
     }
 
 
 
 st.text_input("Quantos Veículos deseja realizar cotação: ", value='1', key="qtd")
 
+st.text_input("Tempo de Contrato deseja realizar cotação: ", value='12', key="contrato")
+
  
 soma_total = 0
 valor_total = 0
-contrat = 12
+
 
 itens_selecionados = []
 for item, preco in precoCusto.items():
