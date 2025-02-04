@@ -12,6 +12,7 @@ precoCusto = {
     "Rastreador Satelital": 620,
     "Telemetria/CAN": 600,
     "RFID ID Motorista": 154,
+    "Instalação": 50,
 }
 
 # Entrada de dados
@@ -50,5 +51,5 @@ valor_total = un_margem * qtd * contrato
 
 # Exibição do resultado
 st.write(f"## Valor Unitário: R$ {un_margem:,.2f}")
-st.write(f"## Valor total: R$ {valor_total:,.2f}")
+st.write(f"## Valor Total: R$ {valor_total:,.2f}")
 st.write(f"##### (considerando {qtd} veículos e {contrato} meses)")
