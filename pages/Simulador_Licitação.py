@@ -7,8 +7,8 @@ st.markdown("## Simulador para Licitações e Editais")
 
 # Tabela de preços
 precoCusto = {
-    "Rastreador GPRS/GSM 2G": 280,
-    "Rastreador GPRS/GSM 4G": 379,
+    "Rastreador GPRS/GSM 2G": 300,
+    "Rastreador GPRS/GSM 4G": 400,
     "Rastreador Satelital": 620,
     "Telemetria/CAN": 600,
     "RFID ID Motorista": 154,
