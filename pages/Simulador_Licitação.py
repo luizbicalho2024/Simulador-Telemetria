@@ -19,7 +19,7 @@ precoCusto = {
 qtd_input = st.text_input("Quantos Veículos deseja realizar cotação: ", value="1", key="qtd")
 contrato_input = st.text_input("Tempo de Contrato (meses): ", value="12", key="contrato")
 
-# Substituindo a margem de lucro por um slide
+# Substituindo a margem de lucro por um slider
 margem = st.slider(
     "Margem de Lucro Desejada (%)",
     min_value=0.0,
@@ -32,7 +32,7 @@ margem = st.slider(
 # Validação de entradas
 try:
     qtd = int(qtd_input) if qtd_input.isdigit() else 1  # Converte para inteiro ou usa 1 como padrão
-    contrato = int(contrato_input) if qtd_input.isdigit() else 12  # Converte para inteiro ou usa 12 como padrão
+    contrato = int(contrato_input) if contrato_input.isdigit() else 12  # Converte para inteiro ou usa 12 como padrão
 except ValueError:
     st.error("Por favor, insira valores numéricos válidos para quantidade e contrato.")
     qtd, contrato = 1, 12  # Valores padrão em caso de erro
@@ -40,8 +40,13 @@ except ValueError:
 # Seleção de itens
 itens_selecionados = []
 for item, preco in precoCusto.items():
-    if st.checkbox(f"{item} - R$ {preco:,.2f}"):
-        itens_selecionados.append(item)
+    if item == "Instalação":
+        # Pré-seleciona o item "Instalação"
+        if st.checkbox(f"{item} - R$ {preco:,.2f}", value=True):
+            itens_selecionados.append(item)
+    else:
+        if st.checkbox(f"{item} - R$ {preco:,.2f}"):
+            itens_selecionados.append(item)
 
 # Cálculo do valor total
 valor_total_unitario = sum(precoCusto[item] for item in itens_selecionados)
