@@ -38,4 +38,5 @@ valor_total = valor_total_unitario * qtd * contrato
 
 # Exibição do resultado
 st.write(f"## Valor total unitário: R$ {valor_total_unitario:,.2f}")
-st.write(f"## Valor total (considerando {qtd} veículos e {contrato} meses): R$ {valor_total:,.2f}")
+st.write(f"## Valor total: R$ {valor_total:,.2f}")
+st.write(f"#### (considerando {qtd} veículos e {contrato} meses)")
