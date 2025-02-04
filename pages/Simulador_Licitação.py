@@ -1,46 +1,41 @@
 import streamlit as st
-import time
 
+# Configuração inicial
 logo = ("imgs/logo.png")
-st.logo(logo)
-st.image("imgs/logo.png", width=200, output_format="auto",  caption="")
+st.image("imgs/logo.png", width=200, caption="Logo")
 st.markdown("## Simulador para Licitações e Editais")
-#st.sidebar.markdown("## Simulador de Venda")
 
-
-
+# Tabela de preços
 precoCusto = {
-        "Rastreador GPRS/GSM 2G": 216,
-        "Rastreador GPRS/GSM 4G": 379,
-        "Rastreador Satelital": 620,
-        "Telemetria/CAN": 600,
-        "RFID ID Motorista": 154,
-        "Dados Mensal Un GPRS": 5,
-        "Dados Mensal Un Satélite": 69.20,
-    }
+    "Rastreador GPRS/GSM 2G": 216,
+    "Rastreador GPRS/GSM 4G": 379,
+    "Rastreador Satelital": 620,
+    "Telemetria/CAN": 600,
+    "RFID ID Motorista": 154,
+}
 
+# Entrada de dados
+qtd_input = st.text_input("Quantos Veículos deseja realizar cotação: ", value="1", key="qtd")
+contrato_input = st.text_input("Tempo de Contrato (meses): ", value="12", key="contrato")
 
+# Validação de entradas
+try:
+    qtd = int(qtd_input) if qtd_input.isdigit() else 1  # Converte para inteiro ou usa 1 como padrão
+    contrato = int(contrato_input) if contrato_input.isdigit() else 12  # Converte para inteiro ou usa 12 como padrão
+except ValueError:
+    st.error("Por favor, insira valores numéricos válidos para quantidade e contrato.")
+    qtd, contrato = 1, 12  # Valores padrão em caso de erro
 
-st.text_input("Quantos Veículos deseja realizar cotação: ", value='1', key="qtd")
-
-st.text_input("Tempo de Contrato deseja realizar cotação: ", value='12', key="contrato")
-
- 
-soma_total = 0
-valor_total = 0
-
-
+# Seleção de itens
 itens_selecionados = []
 for item, preco in precoCusto.items():
-    # Crear un checkbox por cada item
     if st.checkbox(f"{item} - R$ {preco:,.2f}"):
         itens_selecionados.append(item)
 
+# Cálculo do valor total
+valor_total_unitario = sum(precoCusto[item] for item in itens_selecionados)
+valor_total = valor_total_unitario * qtd * contrato
 
-valor_total = 0
-for item in itens_selecionados:
-    valor_total += precoCusto[item]
-
-# Mostrando o valor total na interface
-st.write(f"## Valor total Un: R$ {valor_total:,.2f}")
-        
+# Exibição do resultado
+st.write(f"## Valor total unitário: R$ {valor_total_unitario:,.2f}")
+st.write(f"## Valor total (considerando {qtd} veículos e {contrato} meses): R$ {valor_total:,.2f}")
