@@ -17,16 +17,16 @@ precoCusto = {
 # Entrada de dados
 qtd_input = st.text_input("Quantos Veículos deseja realizar cotação: ", value="1", key="qtd")
 contrato_input = st.text_input("Tempo de Contrato (meses): ", value="12", key="contrato")
-margem_input = st.text_input("Margem de Lucro Desejado: ", value="30", key="margem")
+margem_input = st.text_input("Margem de Lucro Desejado: ", value="0.3", key="margem")
 
 # Validação de entradas
 try:
     qtd = int(qtd_input) if qtd_input.isdigit() else 1  # Converte para inteiro ou usa 1 como padrão
     contrato = int(contrato_input) if contrato_input.isdigit() else 12  # Converte para inteiro ou usa 12 como padrão
-    margem = int(margem_input) if margem_input.isdigit() else 30
+    margem = int(margem_input) if margem_input.isdigit() else 0.3
 except ValueError:
     st.error("Por favor, insira valores numéricos válidos para quantidade e contrato.")
-    qtd, contrato = 1, 12, 30  # Valores padrão em caso de erro
+    qtd, contrato = 1, 12, 0.3  # Valores padrão em caso de erro
 
 # Seleção de itens
 itens_selecionados = []
