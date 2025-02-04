@@ -12,7 +12,6 @@ precoCusto = {
     "Rastreador Satelital": 620,
     "Telemetria/CAN": 600,
     "RFID ID Motorista": 154,
-    "Instalação": 50,
 }
 
 # Entrada de dados
@@ -37,16 +36,14 @@ except ValueError:
     st.error("Por favor, insira valores numéricos válidos para quantidade e contrato.")
     qtd, contrato = 1, 12  # Valores padrão em caso de erro
 
-# Seleção de itens
+# Seleção de itens com layout em tabela
 itens_selecionados = []
-for item, preco in precoCusto.items():
-    if item == "Instalação":
-        # Pré-seleciona o item "Instalação"
-        if st.checkbox(f"{item} - R$ {preco:,.2f}", value=True):
-            itens_selecionados.append(item)
-    else:
-        if st.checkbox(f"{item} - R$ {preco:,.2f}"):
-            itens_selecionados.append(item)
+colunas = st.columns(2)  # Dividindo os checkboxes em duas colunas
+
+for idx, (item, preco) in enumerate(precoCusto.items()):
+    col = colunas[idx % 2]  # Alterna entre as colunas
+    if col.checkbox(f"{item} - R$ {preco:,.2f}"):
+        itens_selecionados.append(item)
 
 # Cálculo do valor total
 valor_total_unitario = sum(precoCusto[item] for item in itens_selecionados)
