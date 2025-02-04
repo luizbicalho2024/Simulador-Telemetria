@@ -44,7 +44,7 @@ for item, preco in precoCusto.items():
 
 # Cálculo do valor total
 valor_total_unitario = sum(precoCusto[item] for item in itens_selecionados)
-un_contrato = valor_total_unitario / contrato
+un_contrato = valor_total_unitario / 12
 un_margem = un_contrato + (un_contrato * margem)
 valor_total = un_margem * qtd * contrato
 
