@@ -11,7 +11,7 @@ precoCusto = {
     "Rastreador GPRS/GSM 4G": 400,
     "Rastreador Satelital": 620,
     "Telemetria/CAN": 600,
-    "RFID ID Motorista": 154,
+    "RFID - ID Motorista": 153,
 }
 
 # Entrada de dados
