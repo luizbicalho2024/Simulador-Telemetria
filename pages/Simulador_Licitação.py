@@ -23,7 +23,7 @@ margem_input = st.text_input("Margem de Lucro Desejado: ", value="0.3", key="mar
 try:
     qtd = int(qtd_input) if qtd_input.isdigit() else 1  # Converte para inteiro ou usa 1 como padrão
     contrato = int(contrato_input) if contrato_input.isdigit() else 12  # Converte para inteiro ou usa 12 como padrão
-    margem = int(margem_input) if margem_input.isdigit() else 0.3
+    margem = float(margem_input) if margem_input.isdigit() else 0.3
 except ValueError:
     st.error("Por favor, insira valores numéricos válidos para quantidade e contrato.")
     qtd, contrato = 1, 12, 0.3  # Valores padrão em caso de erro
