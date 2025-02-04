@@ -18,7 +18,7 @@ precoCusto = {
 qtd_input = st.text_input("Quantos Veículos deseja realizar cotação: ", value="1", key="qtd")
 contrato_input = st.text_input("Tempo de Contrato (meses): ", value="12", key="contrato")
 
-# Substituindo a margem de lucro por um slider
+# Substituindo a margem de lucro por um slide
 margem = st.slider(
     "Margem de Lucro Desejada (%)",
     min_value=0.0,
