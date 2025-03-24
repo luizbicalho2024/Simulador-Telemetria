@@ -34,55 +34,21 @@ else:
     with right_column:
         if mod_rastreador == 'ST310U':
             st.subheader("📜 Escolha o Comando")
-            comandos = st.radio(
-                'Comandos disponíveis:',
-                ("IP e APN Suntech e-Trac", "Disable ZIP", "Protocolo TCP/IP", 'Tempo de Comunicação', 'Eventos', 'NPTs')
-            )
-
-            if comandos == "IP e APN Suntech e-Trac":
-                apns = st.radio(
-                    '🌐 Escolha a APN:',
-                    ("Allcom", "M2data", "Virtueyes")
-                )
-
-                apn_dict = {
-                    "Allcom": "allcom.claro.com.br;allcom;allcom",
-                    "M2data": "m2data.claro.com.br;claro;claro",
-                    "Virtueyes": "virtueyes.claro.com.br;veye;veye"
-                }
-
-                st.success("✅ Comando gerado:")
-                st.code(f"ST300NTW;{serial};02;1;{apn_dict[apns]};54.94.190.167;9601;35.198.41.183;9601;;")
-
-            elif comandos == "Disable ZIP":
-                st.success("✅ Comando gerado:")
-                st.code(f'ST300SVC;{serial};02;1;180;0;0;0;1;1;0;1;0;0;1;0')
-
-            elif comandos == 'Protocolo TCP/IP':
-                st.success("✅ Comando gerado:")
-                st.code(f'ST300ADP;{serial};02;T;T;1;;0;0;0;0;0;0')
-
-            elif comandos == 'Tempo de Comunicação':
-                veiculo = st.radio(
-                    '🚗 Tipo de Veículo:',
-                    ("Carro", "Moto")
-                )
-
-                comando_tempo = {
-                    "Carro": f'ST300RPT;{serial};02;3600;120;3600;1;0;600;0;0;0',
-                    "Moto": f'ST300RPT;{serial};02;0;60;3600;1;0;0;0;0;0'
-                }
-
-                st.success("✅ Comando gerado:")
-                st.code(comando_tempo[veiculo])
-
-            elif comandos == "Eventos":
-                st.success("✅ Comando gerado:")
-                st.code(f'ST300EVT;{serial};02;0;10;0;12;3;9;30;20;0;1;7;1;1;0;0;0;0;0;0;9;9;0;0;0')
-
-            elif comandos == "NPTs":
-                st.success("✅ Comando gerado:")
-                st.code(f'ST300NPT;{serial};02;20.0;1;30;0;1;500;300;5;10;100;10;180;100;1')
+            st.success("✅ Comando gerado:")
+            st.text("IP, PORT e APN e-Trac Allcom Claro")
+            st.code(f"ST300NTW;{serial};02;1;allcom.claro.com.br;allcom;allcom;54.94.190.167;9601;35.198.41.183;9601;;")
+            st.text("Disable ZIP")
+            st.code(f'ST300SVC;{serial};02;1;180;0;0;0;1;1;0;1;0;0;1;0')
+            st.text("Protocolo TCP/IP")
+            st.code(f'ST300ADP;{serial};02;T;T;1;;0;0;0;0;0;0')
+            st.text("Intervalos de Envio Carro")
+            st.code(f'ST300RPT;{serial};02;3600;120;3600;1;0;600;0;0;0')
+            st.text("Intervalos de Envio Moto")
+            st.code(f'ST300RPT;{serial};02;0;60;0;1;0;0;0;0;0')
+            st.text("Eventos")
+            st.code(f'ST300EVT;{serial};02;0;10;0;12;3;9;30;20;0;1;7;1;1;0;0;0;0;0;0;9;9;0;0;0')
+            st.text("NPTs")
+            st.code(f'ST300NPT;{serial};02;20.0;1;30;0;1;500;300;5;10;100;10;180;100;1')
 
         elif mod_rastreador == 'ST4315':
             st.subheader("📜 Comandos disponíveis")
