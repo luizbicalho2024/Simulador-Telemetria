@@ -101,7 +101,7 @@ else:
             st.code(f'PRG;{serial};17;00#03')
             st.text("Limite de velocidade em km/h")
             velocidade = st.number_input("Digite a velocidade máxima: ")
-            st.code(f'PRG;XXXX;16;21#{velocidade}')
+            st.code(f'PRG;{serial};16;21#{velocidade}')
 
 
 # 🔄 Botão para reiniciar
