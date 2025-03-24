@@ -87,8 +87,19 @@ else:
         elif mod_rastreador == 'ST4315':
             st.subheader("📜 Comandos disponíveis")
             st.success("✅ Comando gerado:")
-            st.code(f'RPR;{serial};OK;10;00#00;01#allcomiot.vivo.com.br;02#allcom;03#allcom;04#;05#54.94.190.167;06#9601;07#00;08#54.94.190.167;09#9601;10#00;11#0;12#0;13#00;60#600;70#01;71#600;61#00;62#500;63#300')
-            st.code(f'RPR;{serial};OK;10;55#00;58#03;64#00;50#30;51#0;72#00;73#')
+            st.text("APN Allcom Vivo")
+            st.code(f'PRG;{serial};10;00#01;01#allcomiot.vivo.com.br;02#allcom;03#allcom')
+            st.text("IP e PORT e-Trac")
+            st.code(f'PRG;{serial};10;05#54.94.190.167;06#9601;08#54.94.190.167;09#9601')
+            st.text("Protocolo TCP")
+            st.code(f'PRG;{serial};10;07#00;10#00')
+            st.text("ZIP Desabilittado")
+            st.code(f'PRG;{serial};10;55#00')
+            st.text("Ignição Física")
+            st.code(f'PRG;{serial};17;00#01')
+            st.text("Ignição Virtual Acelerometro")
+            st.code(f'PRG;{serial};17;00#03')
+
 
 # 🔄 Botão para reiniciar
 if st.button("🔄 Reiniciar"):
