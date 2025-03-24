@@ -1,7 +1,7 @@
 import streamlit as st
 
-# Ativar modo wide
-st.set_page_config(layout="wide")
+# Ativar modo wide e definir título/ícone da página
+st.set_page_config(layout="wide", page_title="Simulador de Venda", page_icon="🛒", initial_sidebar_state="expanded")
 
 logo = ("imgs/logo.png")
 st.logo(logo)
