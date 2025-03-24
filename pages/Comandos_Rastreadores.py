@@ -35,8 +35,11 @@ else:
         if mod_rastreador == 'ST310U':
             st.subheader("📜 Escolha o Comando")
             st.success("✅ Comando gerado:")
-            st.text("IP, PORT e APN e-Trac Allcom Claro")
-            st.code(f"ST300NTW;{serial};02;1;allcom.claro.com.br;allcom;allcom;54.94.190.167;9601;35.198.41.183;9601;;")
+            st.text("IP, PORT e APN e-Trac")
+            apn = st.text_input("Digite a APN personalizada:", value="allcom.claro.com.br", key="apn")
+            user = st.text_input("Digite o Usuário:", value="allcom", key="user")
+            password = st.text_input("Digite a Senha:", value="allcom", key="password")
+            st.code(f"ST300NTW;{serial};02;1;{apn};{user};{password};54.94.190.167;9601;35.198.41.183;9601;;")
             st.text("Disable ZIP")
             st.code(f'ST300SVC;{serial};02;1;180;0;0;0;1;1;0;1;0;0;1;0')
             st.text("Protocolo TCP/IP")
