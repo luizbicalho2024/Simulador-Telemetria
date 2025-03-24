@@ -40,6 +40,7 @@ else:
             left_column, right_column = st.columns(2)
             user = st.text_input("Digite o Usuário:", value="allcom", key="user")
             password = st.text_input("Digite a Senha:", value="allcom", key="password")
+            
             st.code(f"ST300NTW;{serial};02;1;{apn};{user};{password};54.94.190.167;9601;35.198.41.183;9601;;")
             st.text("Disable ZIP")
             st.code(f'ST300SVC;{serial};02;1;180;0;0;0;1;1;0;1;0;0;1;0')
