@@ -41,7 +41,7 @@ else:
 
 # 🔽 Opção de parcelamento
 st.markdown("### 💳 Parcelamento:")
-parcelamento = st.checkbox("Ativar", value=False)
+parcelamento = st.checkbox("Ativar", value=False, key="parcelamento_pf")
 
 if parcelamento:
     num_parcelas = st.selectbox("Quantidade de Parcelas:", [i for i in range(2, 13)])
