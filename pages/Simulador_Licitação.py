@@ -3,7 +3,7 @@ import streamlit as st
 # 🛠️ Configuração da página
 st.set_page_config(
     layout="wide",
-    page_title="Simulador de Licitações e Editais",
+    page_title="Licitações e Editais",
     page_icon="📜",
     initial_sidebar_state="expanded"
 )

@@ -3,7 +3,7 @@ import streamlit as st
 # 🛠️ Configuração da página
 st.set_page_config(
     layout="wide",
-    page_title="Simulador de Venda - Pessoa Física",
+    page_title="Simulador PF",
     page_icon="🛒",
     initial_sidebar_state="expanded"
 )
