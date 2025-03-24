@@ -1,5 +1,8 @@
 import streamlit as st
 
+# Ativar modo wide
+st.set_page_config(layout="wide")
+
 logo = ("imgs/logo.png")
 st.logo(logo)
 st.image("imgs/logo.png", width=200, output_format="auto", caption="")
