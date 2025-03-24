@@ -5,72 +5,61 @@ st.logo(logo)
 st.image("imgs/logo.png", width=200, output_format="auto", caption="")
 st.markdown("## Simulador de Venda Verdio Pessoa Jurídica")
 
-gprs12 = 80.88
-satelite12 = 193.80
-rfid = 19.25
-redecan = 75.25
-mdvr = 409.11
-
-gprs24 = 53.92
-satelite24 = 129.20
-rfid24 = 12.83
-redecan24 = 50.17
-mdvr24 = 272.74
-
-gprs36 = 44.93
-satelite36 = 107.67
-rfid36 = 10.69
-redecan36 = 41.81
-mdvr36 = 227.28
+# Definição dos preços
+gprs12, satelite12, rfid, redecan, mdvr = 80.88, 193.80, 19.25, 75.25, 409.11
+gprs24, satelite24, rfid24, redecan24, mdvr24 = 53.92, 129.20, 12.83, 50.17, 272.74
+gprs36, satelite36, rfid36, redecan36, mdvr36 = 44.93, 107.67, 10.69, 41.81, 227.28
 
 st.text_input("Quantos Veículos deseja realizar cotação: ", value='1', key="qtd")
 
-temp = st.selectbox(
-    "Tempo de Contrato: ",
-    ("12 Meses", "24 Meses", "36 Meses"),
-    placeholder="Selecione o Tempo de Contrato",
-)
+temp = st.selectbox("Tempo de Contrato: ", ("12 Meses", "24 Meses", "36 Meses"), placeholder="Selecione o Tempo de Contrato")
 st.write(f"Contrato: {temp}")
 
+# Define os valores conforme a escolha do contrato
 if temp == "12 Meses":
     contrat = 12
-    checkboxes = {
-        "GPRS / Gsm": gprs12,
-        "Satélite": satelite12,
-        "Identificador de Motorista / RFID": rfid,
-        "Leitor de Rede CAN / Telemetria": redecan,
-        "Videomonitoramento + DMS + ADAS": mdvr,
-    }
+    produtos = [
+        (f"GPRS / Gsm R$ {gprs12:,.2f}", gprs12),
+        (f"Satélite R$ {satelite12:,.2f}", satelite12),
+        (f"Identificador de Motorista / RFID R$ {rfid:,.2f}", rfid),
+        (f"Leitor de Rede CAN / Telemetria R$ {redecan:,.2f}", redecan),
+        (f"Videomonitoramento + DMS + ADAS R$ {mdvr:,.2f}", mdvr),
+    ]
 elif temp == "24 Meses":
     contrat = 24
-    checkboxes = {
-        "GPRS / Gsm": gprs24,
-        "Satélite": satelite24,
-        "Identificador de Motorista / RFID": rfid24,
-        "Leitor de Rede CAN / Telemetria": redecan24,
-        "Videomonitoramento + DMS + ADAS": mdvr24,
-    }
+    produtos = [
+        (f"GPRS / Gsm R$ {gprs24:,.2f}", gprs24),
+        (f"Satélite R$ {satelite24:,.2f}", satelite24),
+        (f"Identificador de Motorista / RFID R$ {rfid24:,.2f}", rfid24),
+        (f"Leitor de Rede CAN / Telemetria R$ {redecan24:,.2f}", redecan24),
+        (f"Videomonitoramento + DMS + ADAS R$ {mdvr24:,.2f}", mdvr24),
+    ]
 else:
     contrat = 36
-    checkboxes = {
-        "GPRS / Gsm": gprs36,
-        "Satélite": satelite36,
-        "Identificador de Motorista / RFID": rfid36,
-        "Leitor de Rede CAN / Telemetria": redecan36,
-        "Videomonitoramento + DMS + ADAS": mdvr36,
-    }
+    produtos = [
+        (f"GPRS / Gsm R$ {gprs36:,.2f}", gprs36),
+        (f"Satélite R$ {satelite36:,.2f}", satelite36),
+        (f"Identificador de Motorista / RFID R$ {rfid36:,.2f}", rfid36),
+        (f"Leitor de Rede CAN / Telemetria R$ {redecan36:,.2f}", redecan36),
+        (f"Videomonitoramento + DMS + ADAS R$ {mdvr36:,.2f}", mdvr36),
+    ]
 
-# Criando colunas para organizar os checkboxes horizontalmente
-cols = st.columns(len(checkboxes))
+# Criando duas colunas
+col1, col2 = st.columns(2)
+
 soma_total = 0
 valor_total = 0
 
-for col, (item, valor) in zip(cols, checkboxes.items()):
-    if col.checkbox(f"{item} R$ {valor:,.2f}"):
+# Distribui os checkboxes entre as duas colunas
+for i, (item, valor) in enumerate(produtos):
+    col = col1 if i % 2 == 0 else col2
+    if col.checkbox(item):
         soma_total += valor
 
+# Calcula o valor total
 valor_total = soma_total * int(st.session_state.qtd)
 contrato_total = valor_total * contrat
 
+# Exibe os valores finais
 st.write(f"## Valor total Unitário: R$ {valor_total:,.2f}")
 st.write(f"## Valor total do Contrato: R$ {contrato_total:,.2f}")
