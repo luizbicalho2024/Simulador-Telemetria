@@ -114,6 +114,19 @@ else:
             ang = st.text_input("Ângulo:")
             st.code(f'PRG;{serial};16;70#{igoff};71#0;72#0;73#{igon};74#0;75#0;76#0;77#0;78#0;79#120;80#0;81#{ang};82#120;83#0;84#{ang};85#120;86#0;87#{ang}')
 
+        elif mod_rastreador == 'ST300HD':
+            st.subheader("📜 Comandos disponíveis")
+            st.success("✅ Comando gerado:")
+
+            st.text("Adicionar motorista")
+            idM = st.text_input("Digite o Número do Motorista: ")
+            ibutton = st.text_input("Digite o Serial do Ibutton: ")
+            st.code(f'ST300HAD;{serial};02;{idM};{ibutton}')
+
+            st.text("Remover motorista")
+            st.code(f'ST300HRD;{serial};02;{idM}')
+
+
 
 # 🔄 Botão para reiniciar
 if st.button("🔄 Reiniciar"):
