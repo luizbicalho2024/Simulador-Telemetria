@@ -99,9 +99,20 @@ else:
             st.code(f'PRG;{serial};17;00#01')
             st.text("Ignição Virtual Acelerometro")
             st.code(f'PRG;{serial};17;00#03')
+            st.text("Reboot > Reiniciar")
+            st.code(f'CMD;{serial};03;03')
+            st.text("StatusReq > Solicitar posição")
+            st.code(f'CMD;{serial};03;01')
+
             st.text("Limite de velocidade em km/h")
             velocidade = st.text_input("Digite a velocidade máxima: ")
             st.code(f'PRG;{serial};16;21#{velocidade}')
+
+            st.text("Intervalos e ângulo")
+            igon = st.text_input("Intervalo Ligado (em Segundos):")
+            igoff = st.text_input("Intervalo Desligado (em Segundos):")
+            ang = st.text_input("Ângulo:")
+            st.code(f'PRG;{serial};16;70#{igoff};71#0;72#0;73#{igon};74#0;75#0;76#0;77#0;78#0;79#120;80#0;81#{ang};82#120;83#0;84#{ang};85#120;86#0;87#{ang}')
 
 
 # 🔄 Botão para reiniciar
