@@ -63,7 +63,13 @@ else:
             st.subheader("📜 Comandos disponíveis")
             st.success("✅ Comando gerado:")
             st.text("APN Allcom Vivo")
-            st.code(f'PRG;{serial};10;00#01;01#allcomiot.vivo.com.br;02#allcom;03#allcom')
+            apn = st.text_input("Digite a APN personalizada:", value="allcomiot.vivo.com.br", key="apn")
+            left_column, right_column = st.columns(2)
+            with left_column:
+                user = st.text_input("Digite o Usuário:", value="allcom", key="user")
+            with right_column:
+                password = st.text_input("Digite a Senha:", value="allcom", key="password", type="password")
+            st.code(f'PRG;{serial};10;00#01;01#{apn};02#{user};03#{password}')
             st.text("IP e PORT e-Trac")
             st.code(f'PRG;{serial};10;05#54.94.190.167;06#9601;08#54.94.190.167;09#9601')
             st.text("Protocolo TCP")
