@@ -39,9 +39,9 @@ itens_selecionados = []
 for idx, (item, preco) in enumerate(precoCusto.items()):
     col = col1 if idx % 2 == 0 else col2
     with col:
-        st.markdown(f"<span style='color: green; font-weight: bold;'>R$ {preco:,.2f}</span>", unsafe_allow_html=True)
         if st.checkbox(item):
             itens_selecionados.append(item)
+        st.markdown(f"<span style='color: success; font-weight: bold;'>R$ {preco:,.2f}</span>", unsafe_allow_html=True)
 
 # 📌 Cálculo do valor total
 if itens_selecionados:
