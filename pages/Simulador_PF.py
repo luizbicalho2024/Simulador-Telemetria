@@ -10,7 +10,7 @@ st.set_page_config(
 
 # 🔵 Logotipo e cabeçalho estilizado
 st.image("imgs/logo.png", width=250)
-st.markdown("<h1 style='text-align: center; color: #004aad;'>🔹 Simulador de Venda - Pessoa Física</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; color: #004aad;'>Simulador de Venda - Pessoa Física</h1>", unsafe_allow_html=True)
 st.markdown("---")
 
 # 📌 Definição dos preços

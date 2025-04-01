@@ -4,13 +4,13 @@ import streamlit as st
 st.set_page_config(
     layout="wide",
     page_title="Simulador de Comandos Suntech e-Trac",
-    page_icon="🛰️",
+    page_icon="imgs/v-c.png",
     initial_sidebar_state="expanded"
 )
 
 # 🔵 Logotipo e cabeçalho estilizado
 st.image("imgs/logo.png", width=250)
-st.markdown("<h1 style='text-align: center; color: #004aad;'>🛰️ Simulador de Comandos Suntech e-Trac</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; color: #004aad;'>Simulador de Comandos Suntech e-Trac</h1>", unsafe_allow_html=True)
 st.markdown("---")
 
 # 🎯 Sidebar para entrada de dados
