@@ -10,7 +10,7 @@ st.set_page_config(
 
 # 🔵 Logotipo e cabeçalho estilizado
 st.image("imgs/logo.png", width=250)
-st.markdown("<h1 style='text-align: center; color: #004aad;'>Simulador de Comandos Suntech e-Trac</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador de Comandos Suntech e-Trac</h1>", unsafe_allow_html=True)
 st.markdown("---")
 
 # 🎯 Sidebar para entrada de dados
