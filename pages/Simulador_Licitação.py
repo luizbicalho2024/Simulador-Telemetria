@@ -5,7 +5,7 @@ from decimal import Decimal, ROUND_DOWN
 st.set_page_config(
     layout="wide",
     page_title="Licitações e Editais",
-    page_icon="📜",
+    page_icon="imgs/v-c.png",
     initial_sidebar_state="expanded"
 )
 
