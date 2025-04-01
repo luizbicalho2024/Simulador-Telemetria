@@ -28,5 +28,5 @@ st.markdown(
 
 # Criar uma div com a classe "image-container" e usar st.image() dentro dela
 st.markdown('<div class="image-container">', unsafe_allow_html=True)
-st.image("imgs/bannerverdio.png", width=900, output_format="auto", caption="")
+st.image("imgs/bannerverdio.png", width=1200, output_format="auto", caption="")
 st.markdown('</div>', unsafe_allow_html=True)
