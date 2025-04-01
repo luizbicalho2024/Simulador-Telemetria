@@ -1,6 +1,14 @@
 import streamlit as st
 import time
 
+# 🛠️ Configuração da página
+st.set_page_config(
+    layout="wide",
+    page_title="Simulador Comercial Verdio",
+    page_icon="imgs/logo.png",
+    initial_sidebar_state="expanded"
+)
+
 logo = ("imgs/logo.png")
 st.logo(logo)
 st.image("imgs/logo.png", width=200, output_format="auto",  caption="")
