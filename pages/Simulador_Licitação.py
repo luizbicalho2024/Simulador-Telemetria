@@ -34,63 +34,14 @@ margem = Decimal(str(st.sidebar.slider("Margem de Lucro (%) 📈", min_value=0.0
 # 🔽 Seleção de itens (distribuídos em 2 colunas)
 st.markdown("### 📦 Selecione os Itens:")
 col1, col2 = st.columns(2)
-
-# Criar dicionário para armazenar seleção de cada item
-selecionados = {item: False for item in precoCusto.keys()}
-
-# Estilos CSS para os botões
-st.markdown("""
-    <style>
-        .item-box {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px;
-            border: 2px solid #004aad;
-            border-radius: 10px;
-            background-color: #f8f9fa;
-            cursor: pointer;
-            margin-bottom: 10px;
-            transition: all 0.3s ease-in-out;
-            font-weight: bold;
-        }
-        .item-box:hover {
-            background-color: #e0f2ff;
-        }
-        .item-box.selected {
-            background-color: #28a745 !important; /* Verde quando selecionado */
-            color: white !important;
-            border-color: #1e7e34;
-        }
-        .item-price {
-            font-weight: bold;
-            color: green;
-        }
-    </style>
-""", unsafe_allow_html=True)
-
-# Lista de itens selecionados
-itens_selecionados = st.session_state.get("itens_selecionados", set())
+itens_selecionados = []
 
 for idx, (item, preco) in enumerate(precoCusto.items()):
     col = col1 if idx % 2 == 0 else col2
     with col:
-        # Controla se o item foi selecionado
-        is_selected = item in itens_selecionados
-        button_style = "selected" if is_selected else ""
-
-        # Criando um botão clicável
-        if st.button(
-            f"{item} - R$ {preco:,.2f}",
-            key=item,
-            help="Clique para selecionar ou desselecionar",
-        ):
-            if is_selected:
-                itens_selecionados.remove(item)  # Remove se já estiver selecionado
-            else:
-                itens_selecionados.add(item)  # Adiciona se não estiver selecionado
-            st.session_state.itens_selecionados = itens_selecionados
-            st.rerun()  # Atualiza a página para refletir mudanças
+        st.markdown(f"<span style='color: green; font-weight: bold;'>R$ {preco:,.2f}</span>", unsafe_allow_html=True)
+        if st.checkbox(item):
+            itens_selecionados.append(item)
 
 # 📌 Cálculo do valor total
 if itens_selecionados:
@@ -109,5 +60,4 @@ else:
 
 # 🎯 Botão para limpar seleção
 if st.button("🔄 Limpar Seleção"):
-    st.session_state.itens_selecionados = set()
     st.rerun()
