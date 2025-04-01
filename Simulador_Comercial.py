@@ -5,7 +5,7 @@ import time
 st.set_page_config(
     layout="wide",
     page_title="Simulador Comercial Verdio",
-    page_icon="imgs/logo.png",
+    page_icon="imgs/v.png",
     initial_sidebar_state="expanded"
 )
 
