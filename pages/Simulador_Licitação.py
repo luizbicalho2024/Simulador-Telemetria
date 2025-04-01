@@ -36,8 +36,11 @@ st.markdown("### 📦 Selecione os Itens:")
 col1, col2 = st.columns(2)
 itens_selecionados = []
 
-# Estilos CSS para a caixa de item
-box_style = """
+# Criar dicionário para armazenar seleção de cada item
+selecionados = {item: False for item in precoCusto.keys()}
+
+# Estilos CSS para os botões
+st.markdown("""
     <style>
         .item-box {
             display: flex;
@@ -54,27 +57,30 @@ box_style = """
         .item-box:hover {
             background-color: #e0f2ff;
         }
+        .item-box.selected {
+            background-color: #28a745 !important; /* Verde */
+            color: white !important;
+            border-color: #1e7e34;
+        }
         .item-price {
             color: green;
             font-weight: bold;
         }
     </style>
-"""
-st.markdown(box_style, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
+# Criando os botões interativos
 for idx, (item, preco) in enumerate(precoCusto.items()):
     col = col1 if idx % 2 == 0 else col2
     with col:
-        # Criando a caixa com flexbox para alinhar os elementos
-        html = f"""
-            <div class='item-box'>
-                <span>{item}</span>
-                <span class='item-price'>R$ {preco:,.2f}</span>
-            </div>
-        """
-        if st.checkbox(item):
+        # Criando um botão usando um expander para simular a seleção
+        selecionados[item] = st.button(
+            f"{item} - R$ {preco:,.2f}", 
+            key=item, 
+            help="Clique para selecionar",
+        )
+        if selecionados[item]:
             itens_selecionados.append(item)
-        st.markdown(html, unsafe_allow_html=True)
 
 # 📌 Cálculo do valor total
 if itens_selecionados:
