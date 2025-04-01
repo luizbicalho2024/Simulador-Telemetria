@@ -36,12 +36,45 @@ st.markdown("### 📦 Selecione os Itens:")
 col1, col2 = st.columns(2)
 itens_selecionados = []
 
+# Estilos CSS para a caixa de item
+box_style = """
+    <style>
+        .item-box {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            border: 2px solid #004aad;
+            border-radius: 10px;
+            background-color: #f8f9fa;
+            cursor: pointer;
+            margin-bottom: 10px;
+            transition: all 0.3s ease-in-out;
+        }
+        .item-box:hover {
+            background-color: #e0f2ff;
+        }
+        .item-price {
+            color: green;
+            font-weight: bold;
+        }
+    </style>
+"""
+st.markdown(box_style, unsafe_allow_html=True)
+
 for idx, (item, preco) in enumerate(precoCusto.items()):
     col = col1 if idx % 2 == 0 else col2
     with col:
-        st.markdown(f"<span style='color: green; font-weight: bold;'>R$ {preco:,.2f}</span>", unsafe_allow_html=True)
+        # Criando a caixa com flexbox para alinhar os elementos
+        html = f"""
+            <div class='item-box'>
+                <span>{item}</span>
+                <span class='item-price'>R$ {preco:,.2f}</span>
+            </div>
+        """
         if st.checkbox(item):
             itens_selecionados.append(item)
+        st.markdown(html, unsafe_allow_html=True)
 
 # 📌 Cálculo do valor total
 if itens_selecionados:
