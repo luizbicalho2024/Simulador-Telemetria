@@ -89,7 +89,7 @@ if selecionados:
 
     if gerar:
         # Carregar o template
-        doc = Document("/mnt/data/Proposta Comercial e Intenção - Verdio.docx")
+        doc = Document("Proposta Comercial e Intenção - Verdio.docx")
 
         # Atualizar campos no documento
         for p in doc.paragraphs:
