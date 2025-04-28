@@ -2,6 +2,8 @@ import streamlit as st
 from fpdf import FPDF
 from datetime import datetime
 import decimal
+from io import BytesIO
+
 
 # 🛠️ Configuração da página
 st.set_page_config(
