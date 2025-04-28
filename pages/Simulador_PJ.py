@@ -2,7 +2,6 @@ import streamlit as st
 from io import BytesIO
 from docx import Document
 from docx.shared import Pt
-import pypandoc
 from datetime import datetime
 
 # 🛠️ Configuração da página
@@ -129,27 +128,19 @@ if selecionados:
                                 run.font.name = 'Arial'
                                 run.font.size = Pt(10)
 
-        # Salvar .docx em memória
+       # Salvar .docx em memória
         buffer_docx = BytesIO()
         doc.save(buffer_docx)
         buffer_docx.seek(0)
 
-        # Converter para PDF
-        with open("/tmp/temp_proposta.docx", "wb") as f:
-            f.write(buffer_docx.getbuffer())
-        output_pdf = pypandoc.convert_file("/tmp/temp_proposta.docx", 'pdf', outputfile="/tmp/temp_proposta.pdf")
-
-        # Ler PDF gerado
-        with open("/tmp/temp_proposta.pdf", "rb") as f:
-            pdf_bytes = f.read()
-
-        # Download PDF
+        # Baixar o DOCX (mantendo layout, fonte, tabela)
         st.download_button(
-            label="📥 Baixar Proposta em PDF",
-            data=pdf_bytes,
-            file_name=f"Proposta_{nome_empresa}.pdf",
-            mime="application/pdf"
+            label="📥 Baixar Proposta (.docx)",
+            data=buffer_docx,
+            file_name=f"Proposta_{nome_empresa}.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
+
 
 else:
     st.warning("⚠️ Selecione pelo menos um item para gerar a proposta.")
