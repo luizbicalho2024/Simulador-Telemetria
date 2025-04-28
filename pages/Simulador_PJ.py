@@ -1,4 +1,8 @@
 import streamlit as st
+from io import BytesIO
+from docx import Document
+from datetime import datetime
+import decimal
 
 # 🛠️ Configuração da página
 st.set_page_config(
@@ -8,7 +12,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 🔵 Logotipo e cabeçalho estilizado
+# 🔵 Logotipo e cabeçalho
 st.image("imgs/logo.png", width=250)
 st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador de Venda - Pessoa Jurídica</h1>", unsafe_allow_html=True)
 st.markdown("---")
@@ -43,7 +47,7 @@ st.sidebar.header("📝 Configurações")
 qtd_veiculos = st.sidebar.number_input("Quantidade de Veículos 🚗", min_value=1, value=1, step=1)
 temp = st.sidebar.selectbox("Tempo de Contrato ⏳", list(planos.keys()))
 
-# 🔽 Exibir botões de produtos
+# 🔽 Seção de seleção de produtos
 st.markdown("### 🛠️ Selecione os Produtos:")
 col1, col2 = st.columns(2)
 
@@ -61,7 +65,7 @@ soma_total = sum(selecionados)
 valor_total = soma_total * qtd_veiculos
 contrato_total = valor_total * int(temp.split()[0])
 
-# 🏆 Exibir os resultados
+# 🏆 Exibir o resumo da cotação
 st.markdown("---")
 st.markdown("### 💰 **Resumo da Cotação:**")
 st.success(f"✅ **Valor Unitário:** R$ {valor_total:,.2f}")
@@ -70,3 +74,48 @@ st.info(f"📄 **Valor Total do Contrato ({temp}):** R$ {contrato_total:,.2f}")
 # 🎯 Botão para limpar seleção
 if st.button("🔄 Limpar Seleção"):
     st.rerun()
+
+# 🚀 Se produtos foram selecionados, permitir gerar PDF
+if selecionados:
+    st.markdown("---")
+    st.subheader("📄 Gerar Proposta em PDF")
+
+    with st.form("formulario_proposta"):
+        nome_empresa = st.text_input("Nome da Empresa")
+        nome_responsavel = st.text_input("Nome do Responsável")
+        validade_proposta = st.date_input("Validade da Proposta", value=datetime.today())
+
+        gerar = st.form_submit_button("Gerar Proposta")
+
+    if gerar:
+        # Carregar o template
+        doc = Document("/mnt/data/Proposta Comercial e Intenção - Verdio.docx")
+
+        # Atualizar campos no documento
+        for p in doc.paragraphs:
+            if "Nome da empresa" in p.text:
+                p.text = p.text.replace("Nome da empresa", nome_empresa)
+            if "Nome do Responsável" in p.text:
+                p.text = p.text.replace("Nome do Responsável", nome_responsavel)
+            if "00/00/0000" in p.text:
+                p.text = p.text.replace("00/00/0000", validade_proposta.strftime("%d/%m/%Y"))
+
+        # Atualizar tabelas de preço
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    if "R$ 00,00" in cell.text:
+                        cell.text = cell.text.replace("R$ 00,00", f"R$ {valor_total:,.2f}")
+
+        # Salvar o arquivo em memória
+        buffer = BytesIO()
+        doc.save(buffer)
+        buffer.seek(0)
+
+        # Oferecer download
+        st.download_button(
+            label="📥 Baixar Proposta",
+            data=buffer,
+            file_name=f"Proposta_{nome_empresa}.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
