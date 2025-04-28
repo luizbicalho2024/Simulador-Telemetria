@@ -1,9 +1,4 @@
 import streamlit as st
-from fpdf import FPDF
-from datetime import datetime
-import decimal
-from io import BytesIO
-
 
 # 🛠️ Configuração da página
 st.set_page_config(
@@ -13,7 +8,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 🔵 Logotipo e cabeçalho
+# 🔵 Logotipo e cabeçalho estilizado
 st.image("imgs/logo.png", width=250)
 st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador de Venda - Pessoa Jurídica</h1>", unsafe_allow_html=True)
 st.markdown("---")
@@ -48,7 +43,7 @@ st.sidebar.header("📝 Configurações")
 qtd_veiculos = st.sidebar.number_input("Quantidade de Veículos 🚗", min_value=1, value=1, step=1)
 temp = st.sidebar.selectbox("Tempo de Contrato ⏳", list(planos.keys()))
 
-# 🔽 Seção de seleção de produtos
+# 🔽 Exibir botões de produtos
 st.markdown("### 🛠️ Selecione os Produtos:")
 col1, col2 = st.columns(2)
 
@@ -57,16 +52,16 @@ valores = planos[temp]
 
 for i, (produto, preco) in enumerate(valores.items()):
     col = col1 if i % 2 == 0 else col2
-    toggle = col.checkbox(f"{produto} - R$ {preco:,.2f}")
+    toggle = col.toggle(f"{produto} - R$ {preco:,.2f}")
     if toggle:
-        selecionados.append((produto, preco))
+        selecionados.append(preco)
 
 # 🔢 Cálculo dos valores
-soma_total = sum([preco for _, preco in selecionados])
+soma_total = sum(selecionados)
 valor_total = soma_total * qtd_veiculos
 contrato_total = valor_total * int(temp.split()[0])
 
-# 🏆 Exibir o resumo da cotação
+# 🏆 Exibir os resultados
 st.markdown("---")
 st.markdown("### 💰 **Resumo da Cotação:**")
 st.success(f"✅ **Valor Unitário:** R$ {valor_total:,.2f}")
@@ -75,70 +70,3 @@ st.info(f"📄 **Valor Total do Contrato ({temp}):** R$ {contrato_total:,.2f}")
 # 🎯 Botão para limpar seleção
 if st.button("🔄 Limpar Seleção"):
     st.rerun()
-
-# 🚀 Se produtos foram selecionados, permitir gerar PDF
-if selecionados:
-    st.markdown("---")
-    st.subheader("📄 Gerar Proposta em PDF")
-
-    with st.form("formulario_proposta"):
-        nome_empresa = st.text_input("Nome da Empresa")
-        nome_responsavel = st.text_input("Nome do Responsável")
-        validade_proposta = st.date_input("Validade da Proposta", value=datetime.today())
-        nome_comercial = st.text_input("Nome do Comercial")
-
-        gerar = st.form_submit_button("Gerar Proposta")
-
-    if gerar:
-        # Criar o PDF
-        pdf = FPDF()
-        pdf.set_auto_page_break(auto=True, margin=15)
-
-        # Adicionar a primeira página
-        pdf.add_page()
-        pdf.set_font("Arial", "B", 16)
-        pdf.cell(200, 10, "Simulador de Venda - Pessoa Jurídica", ln=True, align="C")
-        pdf.ln(10)
-
-        # Dados da proposta
-        pdf.set_font("Arial", size=12)
-        pdf.cell(100, 10, f"Nome da Empresa: {nome_empresa}")
-        pdf.ln(10)
-        pdf.cell(100, 10, f"Responsável: {nome_responsavel}")
-        pdf.ln(10)
-        pdf.cell(100, 10, f"Validade da Proposta: {validade_proposta.strftime('%d/%m/%Y')}")
-        pdf.ln(10)
-
-        # Tabela de produtos selecionados
-        pdf.cell(100, 10, "Produtos Selecionados:", ln=True)
-        pdf.ln(5)
-        pdf.set_font("Arial", size=10)
-        for produto, preco in selecionados:
-            pdf.cell(100, 10, f"{produto}: R$ {preco:,.2f}")
-            pdf.ln(5)
-
-        pdf.ln(10)
-        pdf.set_font("Arial", "B", 12)
-        pdf.cell(100, 10, f"Valor Total: R$ {valor_total:,.2f}")
-        pdf.ln(10)
-        pdf.cell(100, 10, f"Valor Total do Contrato: R$ {contrato_total:,.2f}")
-        pdf.ln(10)
-
-        # Adicionar nome do comercial na última página
-        pdf.add_page()
-        pdf.set_font("Arial", size=12)
-        pdf.cell(100, 10, f"Nome do Comercial: {nome_comercial}")
-
-        # Salvar o PDF no buffer usando 'S' para obter o conteúdo como bytes
-        buffer = BytesIO()
-        pdf_output = pdf.output(dest='S').encode('latin1')  # Converte para bytes
-        buffer.write(pdf_output)
-        buffer.seek(0)
-
-        # Oferecer download
-        st.download_button(
-            label="📥 Baixar Proposta",
-            data=buffer,
-            file_name=f"Proposta_{nome_empresa}.pdf",
-            mime="application/pdf"
-        )
