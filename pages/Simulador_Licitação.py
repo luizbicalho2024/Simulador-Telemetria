@@ -14,7 +14,7 @@ st.image("imgs/logo.png", width=250)
 st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador para Licitações e Editais</h1>", unsafe_allow_html=True)
 st.markdown("---")
 
-# 📌 Preços dos produtos
+# 📌 Tabela de preços convertida para Decimal
 precoCusto = {
     "Rastreador GPRS/GSM 2G": Decimal("300"),
     "Rastreador GPRS/GSM 4G": Decimal("400"),
@@ -28,10 +28,10 @@ st.sidebar.header("📝 Configurações")
 qtd = Decimal(st.sidebar.number_input("Quantidade de Veículos 🚗", min_value=1, value=1, step=1))
 contrato = Decimal(st.sidebar.number_input("Tempo de Contrato (meses) 📆", min_value=1, value=12, step=1))
 
-# 📈 Margem de lucro
+# 📌 Margem de lucro
 margem = Decimal(str(st.sidebar.slider("Margem de Lucro (%) 📈", min_value=0.0, max_value=1.0, value=0.3, step=0.01, format="%.2f")))
 
-# 🔽 Seleção de itens
+# 🔽 Seleção de itens (distribuídos em 2 colunas)
 st.markdown("### 📦 Selecione os Itens:")
 col1, col2 = st.columns(2)
 itens_selecionados = []
@@ -39,33 +39,22 @@ itens_selecionados = []
 for idx, (item, preco) in enumerate(precoCusto.items()):
     col = col1 if idx % 2 == 0 else col2
     with col:
-        toggle = st.toggle(f"{item} - R$ {preco:,.2f}")
+        toggle = st.toggle(f"{item} - R$ {preco:,.2f}")  # ✅ Nome e preço juntos
         if toggle:
             itens_selecionados.append(item)
 
-# 📊 Cálculo do valor
+# 📌 Cálculo do valor total
 if itens_selecionados:
-    # Soma dos valores selecionados
-    valor_total_sem_margem = sum(precoCusto[item] for item in itens_selecionados).quantize(Decimal('0.01'), rounding=ROUND_DOWN)
+    valor_total_unitario = sum(precoCusto[item] for item in itens_selecionados)
+    un_contrato = (valor_total_unitario / Decimal(12)).quantize(Decimal('0.01'), rounding=ROUND_DOWN)
+    un_margem = (un_contrato + (un_contrato * margem)).quantize(Decimal('0.01'), rounding=ROUND_DOWN)
+    valor_total = (un_margem * qtd * contrato).quantize(Decimal('0.01'), rounding=ROUND_DOWN)
 
-    # Cálculo da margem em reais
-    valor_margem = (valor_total_sem_margem * margem).quantize(Decimal('0.01'), rounding=ROUND_DOWN)
-
-    # Valor com margem aplicada
-    valor_unitario_margem = (valor_total_sem_margem + valor_margem).quantize(Decimal('0.01'), rounding=ROUND_DOWN)
-
-    # Valor total considerando veículos e tempo de contrato
-    valor_total = (valor_unitario_margem * qtd * contrato).quantize(Decimal('0.01'), rounding=ROUND_DOWN)
-
-    # 🔹 Exibição dos resultados detalhados
+    # 🔹 Exibição dos resultados
     st.success("✅ Cálculo realizado com sucesso!")
-    st.markdown("### 📋 **Detalhamento dos Valores:**")
-    st.info(f"🔹 **Valor Unitário (Sem Margem):** R$ {valor_total_sem_margem}")
-    st.info(f"🔹 **Valor da Margem Aplicada:** R$ {valor_margem}")
-    st.info(f"💰 **Valor Unitário com Margem:** R$ {valor_unitario_margem}")
+    st.info(f"💰 **Valor Unitário:** R$ {un_margem}")
     st.info(f"📄 **Valor Total do Contrato:** R$ {valor_total}")
     st.write(f"##### (considerando {qtd} veículos e {contrato} meses)")
-
 else:
     st.warning("⚠️ Selecione pelo menos um item para calcular o valor total.")
 
