@@ -39,10 +39,9 @@ itens_selecionados = []
 for idx, (item, preco) in enumerate(precoCusto.items()):
     col = col1 if idx % 2 == 0 else col2
     with col:
-        toggle = st.toggle(item)
+        toggle = st.toggle(f"{item} - R$ {preco:,.2f}")  # ✅ Nome e preço juntos
         if toggle:
             itens_selecionados.append(item)
-        st.markdown(f"<span style='color: #367A52; font-weight: bold;'>R$ {preco:,.2f}</span>", unsafe_allow_html=True)
 
 # 📌 Cálculo do valor total
 if itens_selecionados:
