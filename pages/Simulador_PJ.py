@@ -93,7 +93,7 @@ if selecionados:
         # Criar o PDF
         pdf = FPDF()
         pdf.set_auto_page_break(auto=True, margin=15)
-        
+
         # Adicionar a primeira página
         pdf.add_page()
         pdf.set_font("Arial", "B", 16)
@@ -128,10 +128,11 @@ if selecionados:
         pdf.add_page()
         pdf.set_font("Arial", size=12)
         pdf.cell(100, 10, f"Nome do Comercial: {nome_comercial}")
-        
-        # Salvar o arquivo em memória
+
+        # Salvar o PDF no buffer usando 'S' para obter o conteúdo como bytes
         buffer = BytesIO()
-        pdf.output(buffer)
+        pdf_output = pdf.output(dest='S').encode('latin1')  # Converte para bytes
+        buffer.write(pdf_output)
         buffer.seek(0)
 
         # Oferecer download
