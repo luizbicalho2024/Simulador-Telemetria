@@ -43,23 +43,25 @@ st.sidebar.header("📝 Configurações")
 qtd_veiculos = st.sidebar.number_input("Quantidade de Veículos 🚗", min_value=1, value=1, step=1)
 temp = st.sidebar.selectbox("Tempo de Contrato ⏳", list(planos.keys()))
 
-# 🔽 Exibir checkboxes dos produtos em duas colunas
+# 🔽 Exibir botões de produtos
 st.markdown("### 🛠️ Selecione os Produtos:")
 col1, col2 = st.columns(2)
 
 selecionados = []
 valores = planos[temp]
+
 for i, (produto, preco) in enumerate(valores.items()):
-    col = col1 if i % 2 == 0 else col2  # Alterna entre as colunas
-    if col.checkbox(f"{produto} - R$ {preco:,.2f}"):
+    col = col1 if i % 2 == 0 else col2
+    toggle = col.toggle(f"{produto} - R$ {preco:,.2f}")
+    if toggle:
         selecionados.append(preco)
 
 # 🔢 Cálculo dos valores
 soma_total = sum(selecionados)
 valor_total = soma_total * qtd_veiculos
-contrato_total = valor_total * int(temp.split()[0])  # Multiplica pelo tempo do contrato
+contrato_total = valor_total * int(temp.split()[0])
 
-# 🏆 Exibir os resultados com estilo
+# 🏆 Exibir os resultados
 st.markdown("---")
 st.markdown("### 💰 **Resumo da Cotação:**")
 st.success(f"✅ **Valor Unitário:** R$ {valor_total:,.2f}")
