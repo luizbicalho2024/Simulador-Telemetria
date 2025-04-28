@@ -1,6 +1,5 @@
 import streamlit as st
-from io import BytesIO
-from docx import Document
+from fpdf import FPDF
 from datetime import datetime
 import decimal
 
@@ -56,12 +55,12 @@ valores = planos[temp]
 
 for i, (produto, preco) in enumerate(valores.items()):
     col = col1 if i % 2 == 0 else col2
-    toggle = col.toggle(f"{produto} - R$ {preco:,.2f}")
+    toggle = col.checkbox(f"{produto} - R$ {preco:,.2f}")
     if toggle:
-        selecionados.append(preco)
+        selecionados.append((produto, preco))
 
 # 🔢 Cálculo dos valores
-soma_total = sum(selecionados)
+soma_total = sum([preco for _, preco in selecionados])
 valor_total = soma_total * qtd_veiculos
 contrato_total = valor_total * int(temp.split()[0])
 
@@ -84,38 +83,59 @@ if selecionados:
         nome_empresa = st.text_input("Nome da Empresa")
         nome_responsavel = st.text_input("Nome do Responsável")
         validade_proposta = st.date_input("Validade da Proposta", value=datetime.today())
+        nome_comercial = st.text_input("Nome do Comercial")
 
         gerar = st.form_submit_button("Gerar Proposta")
 
     if gerar:
-        # Carregar o template
-        doc = Document("Proposta Comercial e Intenção - Verdio.docx")
+        # Criar o PDF
+        pdf = FPDF()
+        pdf.set_auto_page_break(auto=True, margin=15)
+        
+        # Adicionar a primeira página
+        pdf.add_page()
+        pdf.set_font("Arial", "B", 16)
+        pdf.cell(200, 10, "Simulador de Venda - Pessoa Jurídica", ln=True, align="C")
+        pdf.ln(10)
 
-        # Atualizar campos no documento
-        for p in doc.paragraphs:
-            if "Nome da empresa" in p.text:
-                p.text = p.text.replace("Nome da empresa", nome_empresa)
-            if "Nome do Responsável" in p.text:
-                p.text = p.text.replace("Nome do Responsável", nome_responsavel)
-            if "00/00/0000" in p.text:
-                p.text = p.text.replace("00/00/0000", validade_proposta.strftime("%d/%m/%Y"))
+        # Dados da proposta
+        pdf.set_font("Arial", size=12)
+        pdf.cell(100, 10, f"Nome da Empresa: {nome_empresa}")
+        pdf.ln(10)
+        pdf.cell(100, 10, f"Responsável: {nome_responsavel}")
+        pdf.ln(10)
+        pdf.cell(100, 10, f"Validade da Proposta: {validade_proposta.strftime('%d/%m/%Y')}")
+        pdf.ln(10)
 
-        # Atualizar tabelas de preço
-        for table in doc.tables:
-            for row in table.rows:
-                for cell in row.cells:
-                    if "R$ 00,00" in cell.text:
-                        cell.text = cell.text.replace("R$ 00,00", f"R$ {valor_total:,.2f}")
+        # Tabela de produtos selecionados
+        pdf.cell(100, 10, "Produtos Selecionados:", ln=True)
+        pdf.ln(5)
+        pdf.set_font("Arial", size=10)
+        for produto, preco in selecionados:
+            pdf.cell(100, 10, f"{produto}: R$ {preco:,.2f}")
+            pdf.ln(5)
 
+        pdf.ln(10)
+        pdf.set_font("Arial", "B", 12)
+        pdf.cell(100, 10, f"Valor Total: R$ {valor_total:,.2f}")
+        pdf.ln(10)
+        pdf.cell(100, 10, f"Valor Total do Contrato: R$ {contrato_total:,.2f}")
+        pdf.ln(10)
+
+        # Adicionar nome do comercial na última página
+        pdf.add_page()
+        pdf.set_font("Arial", size=12)
+        pdf.cell(100, 10, f"Nome do Comercial: {nome_comercial}")
+        
         # Salvar o arquivo em memória
         buffer = BytesIO()
-        doc.save(buffer)
+        pdf.output(buffer)
         buffer.seek(0)
 
         # Oferecer download
         st.download_button(
             label="📥 Baixar Proposta",
             data=buffer,
-            file_name=f"Proposta_{nome_empresa}.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            file_name=f"Proposta_{nome_empresa}.pdf",
+            mime="application/pdf"
         )
