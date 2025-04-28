@@ -2,7 +2,11 @@ import streamlit as st
 from io import BytesIO
 from docx import Document
 from docx.shared import Pt
+import requests
 from datetime import datetime
+
+# Seu API Key do CloudConvert
+API_KEY = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiIxIiwianRpIjoiZmNhNjY2Y2E5NzEyMGYzNTgxM2IwNDVkMjA4OTYxODM1NGQxNjU0NjBkZjE1M2QwYzBiZjM4MjA5NGMxZDdjODUxMTg2Mzc1OTUxMDRhZDkiLCJpYXQiOjE3NDU4NzYwNTEuMjUwNjg1LCJuYmYiOjE3NDU4NzYwNTEuMjUwNjg2LCJleHAiOjQ5MDE1NDk2NTEuMjQ0MjU3LCJzdWIiOiI3MTc3MDMzMSIsInNjb3BlcyI6WyJ3ZWJob29rLndyaXRlIiwid2ViaG9vay5yZWFkIiwidGFzay53cml0ZSIsInRhc2sucmVhZCJdfQ.chEPyU6axXxsQTOqAvRg9qzKZP_gOgaKC4OyWuCPZDrwctEW63d-4hRt-4W9FL-aSqTcaXreBn2nax94T4zl_APuZj4bcRJefga8-uOhqWrUX6cAHjumev-BXILmtxi0XbgXkz4wZ-rsVP3-ETCfYq-GPYTnU-va6MgclBtVMOMM6I9-Yh-sCHiYBawPR_zzoHxk6j880I1CVHg42yGHfcIw83gq6Jfle7PrZaScPh3PzBl97STdRUeuaw6pwaTC8CPCTHV3YA3XU3JQd7i1o2t2PerMXuD79dk45NZxvJX8KJCcPtvnNCGFrI677X3nLfo86eUgnqtLbrRO1COhtU5spZUTNWqms2pGLfJFgotRUAc9T3NLHjVWF3841v0MjcIr1dLXFgf0KMbmI0pBmmotFw7t29Juid1pv5evRIRpYSbEvCNrpg9uIXlxPVPM863aZbBvqSalQAsYwkdv0Wvw16Z7cm2dgqHY-Xpv0I8Yubv61OJ4yirZPQNkXVoV-4DIFY-IHkRyX3C7fYwnAWXyK8wnskrDfHm5yegTVPduVmp8RzeH8WMSBmPlDLsU7KXc_4FhR212A5fzlfKhgVqIUlHKzoq-S-kyigNUUrSQt4ugYKX_2kEZKZMs6UMqt7MHTU7mLT1QWZOmMFBSDReHV0QwwLsKkaP4jkMNKoQ"  # <-- coloque aqui
 
 # 🛠️ Configuração da página
 st.set_page_config(
@@ -80,7 +84,7 @@ st.info(f"📄 **Valor Total do Contrato ({temp}):** R$ {contrato_total:,.2f}")
 if st.button("🔄 Limpar Seleção"):
     st.rerun()
 
-# 🚀 Formulário para gerar proposta
+# 🚀 Formulário
 if selecionados:
     st.markdown("---")
     st.subheader("📄 Gerar Proposta em PDF")
@@ -93,9 +97,8 @@ if selecionados:
         gerar = st.form_submit_button("Gerar Proposta")
 
     if gerar:
+        # Preencher o docx
         doc = Document("Proposta Comercial e Intenção - Verdio.docx")
-
-        # Atualizar campos
         for p in doc.paragraphs:
             if "Nome da empresa" in p.text:
                 p.text = p.text.replace("Nome da empresa", nome_empresa)
@@ -106,7 +109,6 @@ if selecionados:
             if "Nome do comercial" in p.text:
                 p.text = p.text.replace("Nome do comercial", nome_consultor)
 
-        # Atualizar tabela
         for table in doc.tables:
             if any("Item" in cell.text for cell in table.rows[0].cells):
                 while len(table.rows) > 1:
@@ -120,7 +122,7 @@ if selecionados:
                 total_row[0].text = "TOTAL"
                 total_row[1].text = ""
                 total_row[2].text = f"R$ {soma_total:,.2f}"
-                
+
                 for row in table.rows:
                     for cell in row.cells:
                         for paragraph in cell.paragraphs:
@@ -128,19 +130,56 @@ if selecionados:
                                 run.font.name = 'Arial'
                                 run.font.size = Pt(10)
 
-       # Salvar .docx em memória
+        # Salvar DOCX
         buffer_docx = BytesIO()
         doc.save(buffer_docx)
         buffer_docx.seek(0)
 
-        # Baixar o DOCX (mantendo layout, fonte, tabela)
-        st.download_button(
-            label="📥 Baixar Proposta (.docx)",
-            data=buffer_docx,
-            file_name=f"Proposta_{nome_empresa}.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        )
+        # Enviar para CloudConvert
+        files = {'file': ('proposta.docx', buffer_docx, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')}
+        headers = {'Authorization': f'Bearer {API_KEY}'}
+        response = requests.post('https://api.cloudconvert.com/v2/import/upload', headers=headers)
+        upload_url = response.json()['data']['upload_url']
 
+        # Upload
+        upload_response = requests.put(upload_url, files=files)
+
+        # Nova tarefa de conversão
+        job = {
+            "tasks": {
+                "import-my-file": {
+                    "operation": "import/upload"
+                },
+                "convert-my-file": {
+                    "operation": "convert",
+                    "input": "import-my-file",
+                    "input_format": "docx",
+                    "output_format": "pdf",
+                    "engine": "libreoffice"
+                },
+                "export-my-file": {
+                    "operation": "export/url",
+                    "input": "convert-my-file"
+                }
+            }
+        }
+        job_response = requests.post('https://api.cloudconvert.com/v2/jobs', json=job, headers=headers)
+        job_id = job_response.json()['data']['id']
+
+        # Esperar e pegar resultado final
+        result = requests.get(f'https://api.cloudconvert.com/v2/jobs/{job_id}', headers=headers).json()
+        file_url = result['data']['tasks'][-1]['result']['files'][0]['url']
+
+        # Baixar PDF pronto
+        pdf_data = requests.get(file_url).content
+
+        # Download botão
+        st.download_button(
+            label="📥 Baixar Proposta em PDF",
+            data=pdf_data,
+            file_name=f"Proposta_{nome_empresa}.pdf",
+            mime="application/pdf"
+        )
 
 else:
     st.warning("⚠️ Selecione pelo menos um item para gerar a proposta.")
