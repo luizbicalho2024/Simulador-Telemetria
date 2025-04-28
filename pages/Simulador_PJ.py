@@ -2,8 +2,8 @@ import streamlit as st
 from io import BytesIO
 from docx import Document
 from docx.shared import Pt
+import pypandoc
 from datetime import datetime
-import decimal
 
 # 🛠️ Configuração da página
 st.set_page_config(
@@ -13,12 +13,12 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 🔵 Logotipo e cabeçalho
+# 🔵 Logotipo
 st.image("imgs/logo.png", width=250)
 st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador de Venda - Pessoa Jurídica</h1>", unsafe_allow_html=True)
 st.markdown("---")
 
-# 📌 Definição dos preços para cada plano
+# 📌 Produtos e preços
 planos = {
     "12 Meses": {
         "GPRS / Gsm": 80.88,
@@ -43,40 +43,45 @@ planos = {
     }
 }
 
-# 📊 Entrada de dados
+produtos_descricao = {
+    "GPRS / Gsm": "Equipamento de rastreamento para monitoramento em tempo real via GSM/GPRS 2G ou 4G",
+    "Satélite": "Equipamento de rastreamento com cobertura via satélite",
+    "Identificador de Motorista / RFID": "Identificação do motorista com cartão magnético",
+    "Leitor de Rede CAN / Telemetria": "Monitoramento de combustível, temperatura e RPM",
+    "Videomonitoramento + DMS + ADAS": "Videomonitoramento, análise de fadiga e assistência avançada de direção"
+}
+
+# 📊 Entrada
 st.sidebar.header("📝 Configurações")
 qtd_veiculos = st.sidebar.number_input("Quantidade de Veículos 🚗", min_value=1, value=1, step=1)
 temp = st.sidebar.selectbox("Tempo de Contrato ⏳", list(planos.keys()))
 
-# 🔽 Seção de seleção de produtos
+# 🔽 Seção produtos
 st.markdown("### 🛠️ Selecione os Produtos:")
 col1, col2 = st.columns(2)
-
 selecionados = {}
-valores = planos[temp]
 
+valores = planos[temp]
 for i, (produto, preco) in enumerate(valores.items()):
     col = col1 if i % 2 == 0 else col2
     toggle = col.toggle(f"{produto} - R$ {preco:,.2f}")
     if toggle:
         selecionados[produto] = preco
 
-# 🔢 Cálculo dos valores
+# 🔢 Cálculo
 soma_total = sum(selecionados.values())
 valor_total = soma_total * qtd_veiculos
 contrato_total = valor_total * int(temp.split()[0])
 
-# 🏆 Exibir resumo da cotação
 st.markdown("---")
 st.markdown("### 💰 **Resumo da Cotação:**")
 st.success(f"✅ **Valor Unitário:** R$ {valor_total:,.2f}")
 st.info(f"📄 **Valor Total do Contrato ({temp}):** R$ {contrato_total:,.2f}")
 
-# 🎯 Botão para limpar seleção
 if st.button("🔄 Limpar Seleção"):
     st.rerun()
 
-# 🚀 Se produtos foram selecionados, permitir gerar proposta
+# 🚀 Formulário para gerar proposta
 if selecionados:
     st.markdown("---")
     st.subheader("📄 Gerar Proposta em PDF")
@@ -89,10 +94,9 @@ if selecionados:
         gerar = st.form_submit_button("Gerar Proposta")
 
     if gerar:
-        # Carrega o template
         doc = Document("Proposta Comercial e Intenção - Verdio.docx")
 
-        # Atualiza os campos principais
+        # Atualizar campos
         for p in doc.paragraphs:
             if "Nome da empresa" in p.text:
                 p.text = p.text.replace("Nome da empresa", nome_empresa)
@@ -103,25 +107,21 @@ if selecionados:
             if "Nome do comercial" in p.text:
                 p.text = p.text.replace("Nome do comercial", nome_consultor)
 
-        # Atualiza a tabela da página 3
+        # Atualizar tabela
         for table in doc.tables:
             if any("Item" in cell.text for cell in table.rows[0].cells):
-                # Limpar todas as linhas exceto o header
                 while len(table.rows) > 1:
                     table._tbl.remove(table.rows[1]._tr)
-
-                # Inserir os itens selecionados
                 for produto, preco in selecionados.items():
                     row = table.add_row().cells
                     row[0].text = produto
-                    row[1].text = f"R$ {preco:,.2f}"
-
-                # Adicionar linha do Total
+                    row[1].text = produtos_descricao[produto]
+                    row[2].text = f"R$ {preco:,.2f}"
                 total_row = table.add_row().cells
                 total_row[0].text = "TOTAL"
-                total_row[1].text = f"R$ {soma_total:,.2f}"
-
-                # Ajustar estilo da fonte
+                total_row[1].text = ""
+                total_row[2].text = f"R$ {soma_total:,.2f}"
+                
                 for row in table.rows:
                     for cell in row.cells:
                         for paragraph in cell.paragraphs:
@@ -129,17 +129,27 @@ if selecionados:
                                 run.font.name = 'Arial'
                                 run.font.size = Pt(10)
 
-        # Salvar o arquivo
-        buffer = BytesIO()
-        doc.save(buffer)
-        buffer.seek(0)
+        # Salvar .docx em memória
+        buffer_docx = BytesIO()
+        doc.save(buffer_docx)
+        buffer_docx.seek(0)
 
-        # Baixar proposta
+        # Converter para PDF
+        with open("/tmp/temp_proposta.docx", "wb") as f:
+            f.write(buffer_docx.getbuffer())
+        output_pdf = pypandoc.convert_file("/tmp/temp_proposta.docx", 'pdf', outputfile="/tmp/temp_proposta.pdf")
+
+        # Ler PDF gerado
+        with open("/tmp/temp_proposta.pdf", "rb") as f:
+            pdf_bytes = f.read()
+
+        # Download PDF
         st.download_button(
-            label="📥 Baixar Proposta",
-            data=buffer,
-            file_name=f"Proposta_{nome_empresa}.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            label="📥 Baixar Proposta em PDF",
+            data=pdf_bytes,
+            file_name=f"Proposta_{nome_empresa}.pdf",
+            mime="application/pdf"
         )
+
 else:
     st.warning("⚠️ Selecione pelo menos um item para gerar a proposta.")
