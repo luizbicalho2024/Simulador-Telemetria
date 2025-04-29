@@ -1,17 +1,14 @@
 import streamlit as st
-from io import BytesIO
-from docx import Document
-from docx.shared import Pt
 import requests
 from datetime import datetime
 
-# Configuração Streamlit
+# Configuração da página
 st.set_page_config(layout="wide", page_title="Simulador PJ")
 st.image("imgs/logo.png", width=250)
 st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador de Venda - Pessoa Jurídica</h1>", unsafe_allow_html=True)
 st.markdown("---")
 
-# Produtos
+# Produtos e planos
 planos = {
     "12 Meses": {
         "GPRS / Gsm": 80.88,
@@ -36,20 +33,12 @@ planos = {
     }
 }
 
-produtos_descricao = {
-    "GPRS / Gsm": "Equipamento de rastreamento GSM/GPRS 2G ou 4G",
-    "Satélite": "Equipamento de rastreamento via satélite",
-    "Identificador de Motorista / RFID": "Identificação automática de motoristas via RFID",
-    "Leitor de Rede CAN / Telemetria": "Leitura de dados de telemetria via rede CAN",
-    "Videomonitoramento + DMS + ADAS": "Sistema de videomonitoramento com assistência ao motorista"
-}
-
-# Sidebar
+# Entradas na sidebar
 st.sidebar.header("📝 Configurações")
 qtd_veiculos = st.sidebar.number_input("Quantidade de Veículos 🚗", min_value=1, value=1)
 temp = st.sidebar.selectbox("Tempo de Contrato ⏳", list(planos.keys()))
 
-# Produtos
+# Seção principal
 st.markdown("### 🛠️ Selecione os Produtos:")
 col1, col2 = st.columns(2)
 selecionados = {}
@@ -83,56 +72,24 @@ if selecionados:
         gerar = st.form_submit_button("Gerar Proposta")
 
     if gerar:
-        doc = Document("Proposta Comercial e Intenção - Verdio.docx")
+        # 🔗 URL do HTML no GitHub
+        html_url = "https://raw.githubusercontent.com/luizbicalho2024/Simulador-Telemetria/main/pages/Proposta-Comercial-e-Inten%C3%A7%C3%A3o-Verdio.html"
 
-        # Substituições simples
-        for p in doc.paragraphs:
-            if "Nome da empresa" in p.text:
-                p.text = p.text.replace("Nome da empresa", nome_empresa)
-            if "Nome do Responsável" in p.text:
-                p.text = p.text.replace("Nome do Responsável", nome_responsavel)
-            if "00/00/0000" in p.text:
-                p.text = p.text.replace("00/00/0000", validade_proposta.strftime("%d/%m/%Y"))
-            if "Nome do comercial" in p.text:
-                p.text = p.text.replace("Nome do comercial", nome_consultor)
-
-        # Inserir quantidade e tempo de contrato antes do "Parcelamento"
-        for i, p in enumerate(doc.paragraphs):
-            if "Parcelamento" in p.text:
-                insert_info = f"Quantidade de veículos: {qtd_veiculos} • Tempo de contrato: {temp}"
-                doc.paragraphs[i].insert_paragraph_before(insert_info)
-                break
-
-        # Atualizar tabela
-        for table in doc.tables:
-            if any("Item" in cell.text for cell in table.rows[0].cells):
-                while len(table.rows) > 1:
-                    table._tbl.remove(table.rows[1]._tr)
-                for produto, preco in selecionados.items():
-                    row = table.add_row().cells
-                    row[0].text = produto
-                    row[1].text = produtos_descricao[produto]
-                    row[2].text = f"R$ {preco:,.2f}"
-                total_row = table.add_row().cells
-                total_row[0].text = "TOTAL"
-                total_row[1].text = ""
-                total_row[2].text = f"R$ {soma_total:,.2f}"
-
-        # Salvar como .docx temporário
-        buffer_docx = BytesIO()
-        doc.save(buffer_docx)
-        buffer_docx.seek(0)
-
-        # Enviar para a PDFLayer
-        files = {'document': ('proposta.docx', buffer_docx)}
+        # Montar chamada para PDFLayer
+        pdf_url = "http://api.pdflayer.com/api/convert"
         params = {
             "access_key": "6c90a644ad3599e8ce44c40b57940a8f",
+            "document_url": html_url,
             "page_size": "A4",
+            "margin_top": "10",
+            "margin_bottom": "10",
+            "margin_left": "15",
+            "margin_right": "15"
         }
 
-        response = requests.post("http://api.pdflayer.com/api/convert", files=files, data=params)
+        response = requests.get(pdf_url, params=params)
 
-        if response.status_code == 200:
+        if response.status_code == 200 and response.headers["Content-Type"] == "application/pdf":
             st.download_button(
                 label="📥 Baixar Proposta em PDF",
                 data=response.content,
@@ -140,6 +97,6 @@ if selecionados:
                 mime="application/pdf"
             )
         else:
-            st.error("Erro ao converter o arquivo para PDF.")
+            st.error("❌ Erro ao gerar o PDF com a PDFLayer.")
 else:
     st.warning("⚠️ Selecione pelo menos um item para gerar a proposta.")
