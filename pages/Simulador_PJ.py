@@ -54,7 +54,7 @@ if selecionados:
 
     if gerar:
         try:
-            with open("Proposta-Comercial-e-Intenção-Verdio.html", "r", encoding="utf-8") as f:
+            with open("template.html", "r", encoding="utf-8") as f:
                 html_template = f.read()
         except FileNotFoundError:
             st.error("Arquivo HTML 'Proposta-Comercial-e-Intenção-Verdio.html' não encontrado.")
