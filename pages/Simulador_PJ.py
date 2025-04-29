@@ -71,6 +71,5 @@ st.markdown("### 💰 **Resumo da Cotação:**")
 st.success(f"✅ **Valor Unitário:** R$ {valor_total:,.2f}")
 st.info(f"📄 **Valor Total do Contrato ({temp}):** R$ {contrato_total:,.2f}")
 
-# 🎯 Botão para limpar seleção
-if st.button("🔄 Limpar Seleção"):
-    st.rerun()
+if st.button("🔄 Gerar Proposta"):
+    
