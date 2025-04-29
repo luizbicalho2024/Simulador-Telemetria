@@ -95,10 +95,10 @@ if selecionados:
 
         story.append(Paragraph(f"<b>Proposta Comercial</b>", styles['h1']))
         story.append(Spacer(1, 0.2*inch))
-        story.append(Paragraph(f"<b>Empresa:</b> {nome_empresa}", styles['normal']))
-        story.append(Paragraph(f"<b>Responsável:</b> {nome_responsavel}", styles['normal']))
-        story.append(Paragraph(f"<b>Consultor Comercial:</b> {nome_consultor}", styles['normal']))
-        story.append(Paragraph(f"<b>Validade da Proposta:</b> {validade_proposta.strftime('%d/%m/%Y')}", styles['normal']))
+        story.append(Paragraph(f"<b>Empresa:</b> {nome_empresa}", styles['BodyText']))
+        story.append(Paragraph(f"<b>Responsável:</b> {nome_responsavel}", styles['BodyText']))
+        story.append(Paragraph(f"<b>Consultor Comercial:</b> {nome_consultor}", styles['BodyText']))
+        story.append(Paragraph(f"<b>Validade da Proposta:</b> {validade_proposta.strftime('%d/%m/%Y')}", styles['BodyText']))
         story.append(Spacer(1, 0.4*inch))
 
         story.append(Paragraph("<b>Itens Selecionados:</b>", styles['h2']))
@@ -122,8 +122,8 @@ if selecionados:
         ]))
         story.append(table)
         story.append(Spacer(1, 0.4*inch))
-        story.append(Paragraph(f"<b>Quantidade de Veículos:</b> {qtd_veiculos}", styles['normal']))
-        story.append(Paragraph(f"<b>Tempo de Contrato:</b> {temp}", styles['normal']))
+        story.append(Paragraph(f"<b>Quantidade de Veículos:</b> {qtd_veiculos}", styles['BodyText']))
+        story.append(Paragraph(f"<b>Tempo de Contrato:</b> {temp}", styles['BodyText']))
         story.append(Paragraph(f"<b>Valor Total Unitário:</b> R$ {valor_total:,.2f}", styles['h3']))
         story.append(Paragraph(f"<b>Valor Total do Contrato ({temp}):</b> R$ {contrato_total:,.2f}", styles['h3']))
 
