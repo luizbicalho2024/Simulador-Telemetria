@@ -67,11 +67,7 @@ if selecionados:
 
     if gerar:
         # Abrir documento
-        uploaded_file = st.file_uploader("📄 Faça upload do modelo DOCX", type="docx")
-
-        if uploaded_file is not None:
-            doc = Document(uploaded_file)
-
+        doc = Document("Proposta Comercial e Intenção - Verdio.docx")
 
         # Substituir parágrafos
         for p in doc.paragraphs:
