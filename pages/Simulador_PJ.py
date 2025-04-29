@@ -1,9 +1,9 @@
 import streamlit as st
 from datetime import datetime
 from io import BytesIO
-from weasyprint import HTML
+from xhtml2pdf import pisa
 
-# Dados dos planos e produtos
+# Planos e descrições
 planos = {
     "12 Meses": {
         "GPRS / Gsm": 80.88,
@@ -36,18 +36,18 @@ produtos_descricao = {
     "Videomonitoramento + DMS + ADAS": "Videomonitoramento e assistência ao motorista"
 }
 
-# Configuração da página
+# Layout
 st.set_page_config(layout="wide", page_title="Simulador PJ")
 st.image("imgs/logo.png", width=250)
 st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador de Venda - Pessoa Jurídica</h1>", unsafe_allow_html=True)
 st.markdown("---")
 
-# Entradas
+# Inputs
 st.sidebar.header("📝 Configurações")
 qtd_veiculos = st.sidebar.number_input("Quantidade de Veículos 🚗", min_value=1, value=1)
 temp = st.sidebar.selectbox("Tempo de Contrato ⏳", list(planos.keys()), index=0)
 
-# Seleção de produtos
+# Produtos
 st.markdown("### 🛠️ Selecione os Produtos:")
 col1, col2 = st.columns(2)
 selecionados = {}
@@ -56,7 +56,7 @@ for i, (produto, preco) in enumerate(planos[temp].items()):
     if col.toggle(f"{produto} - R$ {preco:,.2f}"):
         selecionados[produto] = preco
 
-# Cálculo
+# Cálculos
 valor_unitario = sum(selecionados.values()) * qtd_veiculos
 valor_total_contrato = valor_unitario * int(temp.split()[0])
 
@@ -67,7 +67,7 @@ st.info(f"📄 Valor Total do Contrato ({temp}): R$ {valor_total_contrato:,.2f}"
 if st.button("🔄 Limpar Seleção"):
     st.rerun()
 
-# Geração de proposta
+# Geração de PDF
 if selecionados:
     st.markdown("---")
     st.subheader("📄 Gerar Proposta em PDF")
@@ -80,42 +80,67 @@ if selecionados:
         gerar = st.form_submit_button("Gerar PDF")
 
     if gerar:
-        # Lê o HTML base
-        with open("/mnt/data/modelo_proposta.html", "r", encoding="utf-8") as f:
-            html_template = f.read()
-
-        # Gera tabela com os itens
+        # Tabela HTML
         tabela_html = ""
         for produto, preco in selecionados.items():
             tabela_html += f"""
                 <tr>
                     <td>{produto}</td>
-                    <td>{produtos_descricao.get(produto, '')}</td>
+                    <td>{produtos_descricao.get(produto, "")}</td>
                     <td>R$ {preco:,.2f}</td>
                 </tr>
             """
 
-        # Substitui os placeholders
-        html_final = html_template \
-            .replace("{{empresa}}", empresa) \
-            .replace("{{responsavel}}", responsavel) \
-            .replace("{{consultor}}", consultor) \
-            .replace("{{validade}}", validade.strftime("%d/%m/%Y")) \
-            .replace("{{qtd}}", str(qtd_veiculos)) \
-            .replace("{{contrato}}", temp) \
-            .replace("{{total_contrato}}", f"{valor_total_contrato:,.2f}") \
-            .replace("{{tabela_itens}}", tabela_html)
+        # Template HTML inline
+        html_content = f"""
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; margin: 40px; }}
+                table {{ width: 100%; border-collapse: collapse; }}
+                th, td {{ border: 1px solid #ccc; padding: 8px; }}
+                th {{ background-color: #f2f2f2; }}
+            </style>
+        </head>
+        <body>
+            <h1>Proposta Comercial</h1>
+            <p><strong>Empresa:</strong> {empresa}</p>
+            <p><strong>Responsável:</strong> {responsavel}</p>
+            <p><strong>Consultor:</strong> {consultor}</p>
+            <p><strong>Validade:</strong> {validade.strftime("%d/%m/%Y")}</p>
+            <p><strong>Quantidade de veículos:</strong> {qtd_veiculos}</p>
+            <p><strong>Tempo de contrato:</strong> {temp}</p>
+            <h2>Itens Selecionados</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Produto</th>
+                        <th>Descrição</th>
+                        <th>Preço</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {tabela_html}
+                </tbody>
+            </table>
+            <p><strong>Total do Contrato:</strong> R$ {valor_total_contrato:,.2f}</p>
+        </body>
+        </html>
+        """
 
-        # Gera PDF
-        pdf_bytes = BytesIO()
-        HTML(string=html_final).write_pdf(pdf_bytes)
-        pdf_bytes.seek(0)
+        # Gerar PDF com xhtml2pdf
+        pdf_buffer = BytesIO()
+        pisa_status = pisa.CreatePDF(src=html_content, dest=pdf_buffer)
+        pdf_buffer.seek(0)
 
-        st.download_button(
-            label="📥 Baixar Proposta em PDF",
-            data=pdf_bytes,
-            file_name=f"Proposta_{empresa}.pdf",
-            mime="application/pdf"
-        )
+        if not pisa_status.err:
+            st.download_button(
+                label="📥 Baixar Proposta em PDF",
+                data=pdf_buffer,
+                file_name=f"Proposta_{empresa}.pdf",
+                mime="application/pdf"
+            )
+        else:
+            st.error("Erro ao gerar o PDF.")
 else:
     st.warning("⚠️ Selecione ao menos um item para gerar a proposta.")
