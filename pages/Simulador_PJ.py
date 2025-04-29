@@ -100,27 +100,24 @@ if selecionados:
             if "Tempo médio de operação diária:" in p.text:
                 p.text = f"Tempo médio de operação diária: {temp}"
 
+        
         # Salvar DOCX modificado
         buffer = BytesIO()
         doc.save(buffer)
         buffer.seek(0)
 
-        # Enviar para PDFLayer
-        pdf_api = "http://api.pdflayer.com/api/convert"
+        # Enviar para PDFLayer via upload
+        pdf_api = "https://api.pdflayer.com/api/convert"
+        files = {
+            'document_file': ('proposta.docx', buffer, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+        }
         params = {
             "access_key": "6c90a644ad3599e8ce44c40b57940a8f",
-            "document_url": "",
             "page_size": "A4"
         }
 
-        # Para enviar um DOCX via POST, é necessário usar o endpoint com upload
-        files = {
-            'document_html': ('doc.docx', buffer, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
-        }
-
         try:
-            # Envio do arquivo usando POST multipart
-            response = requests.post(pdf_api, params={"access_key": params["access_key"], "page_size": "A4"}, files=files)
+            response = requests.post(pdf_api, params=params, files=files)
             if response.status_code == 200:
                 st.download_button(
                     label="📥 Baixar Proposta em PDF",
@@ -130,6 +127,7 @@ if selecionados:
                 )
             else:
                 st.error("❌ Erro ao gerar o PDF com a PDFLayer.")
+                st.code(response.text)
         except Exception as e:
             st.error(f"❌ Erro: {str(e)}")
 
