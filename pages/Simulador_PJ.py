@@ -42,6 +42,10 @@ planos = {
 st.sidebar.header("📝 Configurações")
 qtd_veiculos = st.sidebar.number_input("Quantidade de Veículos 🚗", min_value=1, value=1, step=1)
 temp = st.sidebar.selectbox("Tempo de Contrato ⏳", list(planos.keys()))
+razao= st.sidebar.text_input("Razão Social: ")
+resp= st.sidebar.text_input("Solicitante: ")
+comercial= st.sidebar.text_input("Comercial Responsável: ")
+prazo= st.sidebar.date_input("Prazo da Proposta: ")
 
 # 🔽 Exibir botões de produtos
 st.markdown("### 🛠️ Selecione os Produtos:")
