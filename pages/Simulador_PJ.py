@@ -1,8 +1,4 @@
 import streamlit as st
-from jinja2 import Environment, FileSystemLoader
-import tempfile
-import os
-import streamlit.components.v1 as components
 
 # 🛠️ Configuração da página
 st.set_page_config(
@@ -12,12 +8,12 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 🔵 Logotipo e cabeçalho
+# 🔵 Logotipo e cabeçalho estilizado
 st.image("imgs/logo.png", width=250)
 st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador de Venda - Pessoa Jurídica</h1>", unsafe_allow_html=True)
 st.markdown("---")
 
-# 📌 Planos
+# 📌 Definição dos preços para cada plano
 planos = {
     "12 Meses": {
         "GPRS / Gsm": 80.88,
@@ -42,66 +38,38 @@ planos = {
     }
 }
 
-# 📊 Entradas
+# 📊 Seção de entrada de dados
 st.sidebar.header("📝 Configurações")
 qtd_veiculos = st.sidebar.number_input("Quantidade de Veículos 🚗", min_value=1, value=1, step=1)
 temp = st.sidebar.selectbox("Tempo de Contrato ⏳", list(planos.keys()))
-razao = st.sidebar.text_input("Razão Social: ")
-resp = st.sidebar.text_input("Solicitante: ")
-comercial = st.sidebar.text_input("Comercial Responsável: ")
-prazo = st.sidebar.date_input("Prazo da Proposta: ")
+#razao= st.sidebar.text_input("Razão Social: ")
+#resp= st.sidebar.text_input("Solicitante: ")
+#comercial= st.sidebar.text_input("Comercial Responsável: ")
+#prazo= st.sidebar.date_input("Prazo da Proposta: ")
 
-# 🔽 Seleção de produtos
+# 🔽 Exibir botões de produtos
 st.markdown("### 🛠️ Selecione os Produtos:")
 col1, col2 = st.columns(2)
 
 selecionados = []
 valores = planos[temp]
-produtos_escolhidos = []
 
 for i, (produto, preco) in enumerate(valores.items()):
     col = col1 if i % 2 == 0 else col2
     toggle = col.toggle(f"{produto} - R$ {preco:,.2f}")
     if toggle:
         selecionados.append(preco)
-        produtos_escolhidos.append({"nome": produto, "preco": preco})
 
-# 🔢 Cálculo
+# 🔢 Cálculo dos valores
 soma_total = sum(selecionados)
 valor_total = soma_total * qtd_veiculos
 contrato_total = valor_total * int(temp.split()[0])
 
-# 🏆 Resumo
+# 🏆 Exibir os resultados
 st.markdown("---")
 st.markdown("### 💰 **Resumo da Cotação:**")
 st.success(f"✅ **Valor Unitário:** R$ {valor_total:,.2f}")
 st.info(f"📄 **Valor Total do Contrato ({temp}):** R$ {contrato_total:,.2f}")
 
-# 📄 Botão de geração
-if st.button("🔄 Gerar Proposta"):
-
-    # Renderizar template HTML
-    env = Environment(loader=FileSystemLoader("."))
-    template = env.get_template("template.html")
-    html_renderizado = template.render(
-        empresa=razao,
-        responsavel=resp,
-        consultor=comercial,
-        validade=prazo.strftime("%d/%m/%Y"),
-        qtd_veiculos=qtd_veiculos,
-        tempo_contrato=temp,
-        valor_unitario=f"R$ {valor_total:,.2f}",
-        itens_tabela=produtos_escolhidos
-    )
-
-    # Salvar HTML em arquivo temporário
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".html", mode="w", encoding="utf-8") as f:
-        f.write(html_renderizado)
-        caminho_html = f.name
-
-    # Exibir iframe de visualização
-    st.markdown("### 📄 Proposta Gerada:")
-    with open(caminho_html, "r", encoding="utf-8") as f:
-        html_content = f.read()
-
-    components.html(html_content, height=1000, scrolling=True)
+#if st.button("🔄 Gerar Proposta"):
+    
