@@ -63,7 +63,7 @@ if selecionados:
 
     if gerar:
         # Ler template HTML
-        with open("modelo_proposta.html", "r", encoding="utf-8") as file:
+        with open("template.html", "r", encoding="utf-8") as file:
             template = file.read()
 
         # Montar itens
