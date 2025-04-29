@@ -3,11 +3,7 @@ from io import BytesIO
 from docx import Document
 from docx.shared import Pt
 import requests
-import time
 from datetime import datetime
-
-# 🛡️ Token CloudConvert fornecido
-API_KEY = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiIxIiwianRpIjoiZmNhNjY2Y2E5NzEyMGYzNTgxM2IwNDVkMjA4OTYxODM1NGQxNjU0NjBkZjE1M2QwYzBiZjM4MjA5NGMxZDdjODUxMTg2Mzc1OTUxMDRhZDkiLCJpYXQiOjE3NDU4NzYwNTEuMjUwNjg1LCJuYmYiOjE3NDU4NzYwNTEuMjUwNjg2LCJleHAiOjQ5MDE1NDk2NTEuMjQ0MjU3LCJzdWIiOiI3MTc3MDMzMSIsInNjb3BlcyI6WyJ3ZWJob29rLndyaXRlIiwid2ViaG9vay5yZWFkIiwidGFzay53cml0ZSIsInRhc2sucmVhZCJdfQ.chEPyU6axXxsQTOqAvRg9qzKZP_gOgaKC4OyWuCPZDrwctEW63d-4hRt-4W9FL-aSqTcaXreBn2nax94T4zl_APuZj4bcRJefga8-uOhqWrUX6cAHjumev-BXILmtxi0XbgXkz4wZ-rsVP3-ETCfYq-GPYTnU-va6MgclBtVMOMM6I9-Yh-sCHiYBawPR_zzoHxk6j880I1CVHg42yGHfcIw83gq6Jfle7PrZaScPh3PzBl97STdRUeuaw6pwaTC8CPCTHV3YA3XU3JQd7i1o2t2PerMXuD79dk45NZxvJX8KJCcPtvnNCGFrI677X3nLfo86eUgnqtLbrRO1COhtU5spZUTNWqms2pGLfJFgotRUAc9T3NLHjVWF3841v0MjcIr1dLXFgf0KMbmI0pBmmotFw7t29Juid1pv5evRIRpYSbEvCNrpg9uIXlxPVPM863aZbBvqSalQAsYwkdv0Wvw16Z7cm2dgqHY-Xpv0I8Yubv61OJ4yirZPQNkXVoV-4DIFY-IHkRyX3C7fYwnAWXyK8wnskrDfHm5yegTVPduVmp8RzeH8WMSBmPlDLsU7KXc_4FhR212A5fzlfKhgVqIUlHKzoq-S-kyigNUUrSQt4ugYKX_2kEZKZMs6UMqt7MHTU7mLT1QWZOmMFBSDReHV0QwwLsKkaP4jkMNKoQ"
 
 # Configuração Streamlit
 st.set_page_config(layout="wide", page_title="Simulador PJ")
@@ -53,7 +49,7 @@ st.sidebar.header("📝 Configurações")
 qtd_veiculos = st.sidebar.number_input("Quantidade de Veículos 🚗", min_value=1, value=1)
 temp = st.sidebar.selectbox("Tempo de Contrato ⏳", list(planos.keys()))
 
-# Seção principal
+# Produtos
 st.markdown("### 🛠️ Selecione os Produtos:")
 col1, col2 = st.columns(2)
 selecionados = {}
@@ -88,6 +84,8 @@ if selecionados:
 
     if gerar:
         doc = Document("Proposta Comercial e Intenção - Verdio.docx")
+
+        # Substituições simples
         for p in doc.paragraphs:
             if "Nome da empresa" in p.text:
                 p.text = p.text.replace("Nome da empresa", nome_empresa)
@@ -98,6 +96,14 @@ if selecionados:
             if "Nome do comercial" in p.text:
                 p.text = p.text.replace("Nome do comercial", nome_consultor)
 
+        # Inserir quantidade e tempo de contrato antes do "Parcelamento"
+        for i, p in enumerate(doc.paragraphs):
+            if "Parcelamento" in p.text:
+                insert_info = f"Quantidade de veículos: {qtd_veiculos} • Tempo de contrato: {temp}"
+                doc.paragraphs[i].insert_paragraph_before(insert_info)
+                break
+
+        # Atualizar tabela
         for table in doc.tables:
             if any("Item" in cell.text for cell in table.rows[0].cells):
                 while len(table.rows) > 1:
@@ -112,51 +118,28 @@ if selecionados:
                 total_row[1].text = ""
                 total_row[2].text = f"R$ {soma_total:,.2f}"
 
+        # Salvar como .docx temporário
         buffer_docx = BytesIO()
         doc.save(buffer_docx)
         buffer_docx.seek(0)
 
-        # Criar o job de conversão
-        headers = {"Authorization": f"Bearer {API_KEY}"}
-        job_payload = {
-            "tasks": {
-                "import-1": {"operation": "import/upload"},
-                "convert-1": {"operation": "convert", "input": "import-1", "input_format": "docx", "output_format": "pdf"},
-                "export-1": {"operation": "export/url", "input": "convert-1"}
-            }
+        # Enviar para a PDFLayer
+        files = {'document': ('proposta.docx', buffer_docx)}
+        params = {
+            "access_key": "6c90a644ad3599e8ce44c40b57940a8f",
+            "page_size": "A4",
         }
-        job = requests.post('https://api.cloudconvert.com/v2/jobs', json=job_payload, headers=headers).json()
-        upload_url = job['data']['tasks'][0]['result']['form']['url']
-        parameters = job['data']['tasks'][0]['result']['form']['parameters']
 
-        # Upload DOCX
-        files = {'file': ('proposta.docx', buffer_docx, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')}
-        upload = requests.post(upload_url, data=parameters, files=files)
+        response = requests.post("http://api.pdflayer.com/api/convert", files=files, data=params)
 
-        # Esperar o processamento
-        job_id = job['data']['id']
-        while True:
-            check = requests.get(f'https://api.cloudconvert.com/v2/jobs/{job_id}', headers=headers).json()
-            if check['data']['status'] == 'finished':
-                break
-            time.sleep(2)
-
-        # Pegar link do PDF
-        pdf_url = None
-        for task in check['data']['tasks']:
-            if task['operation'] == 'export/url' and 'result' in task and 'files' in task['result']:
-                pdf_url = task['result']['files'][0]['url']
-                break
-
-        if pdf_url:
-            pdf_response = requests.get(pdf_url)
+        if response.status_code == 200:
             st.download_button(
                 label="📥 Baixar Proposta em PDF",
-                data=pdf_response.content,
+                data=response.content,
                 file_name=f"Proposta_{nome_empresa}.pdf",
                 mime="application/pdf"
             )
         else:
-            st.error("Erro ao localizar o arquivo PDF exportado.")
+            st.error("Erro ao converter o arquivo para PDF.")
 else:
     st.warning("⚠️ Selecione pelo menos um item para gerar a proposta.")
