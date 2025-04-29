@@ -9,6 +9,34 @@ from datetime import datetime
 
 # ... (Seu código Streamlit para seleção de produtos, cálculo de valores, etc.)
 
+# Inicialize 'selecionados' com um dicionário vazio
+selecionados = {}
+
+# Sidebar (mantido igual)
+st.sidebar.header("📝 Configurações")
+qtd_veiculos = st.sidebar.number_input("Quantidade de Veículos 🚗", min_value=1, value=1)
+temp = st.sidebar.selectbox("Tempo de Contrato ⏳", list(planos.keys()))
+
+# Seção principal
+st.markdown("### 🛠️ Selecione os Produtos:")
+col1, col2 = st.columns(2)
+for i, (produto, preco) in enumerate(planos[temp].items()):
+    col = col1 if i % 2 == 0 else col2
+    if col.toggle(f"{produto} - R$ {preco:,.2f}"):
+        selecionados[produto] = preco
+
+# Cálculos (mantido igual)
+soma_total = sum(selecionados.values())
+valor_total = soma_total * qtd_veiculos
+contrato_total = valor_total * int(temp.split()[0])
+
+st.markdown("---")
+st.success(f"✅ Valor Unitário: R$ {valor_total:,.2f}")
+st.info(f"📄 Valor Total do Contrato ({temp}): R$ {contrato_total:,.2f}")
+
+if st.button("🔄 Limpar Seleção"):
+    st.rerun()
+
 if selecionados:
     st.markdown("---")
     st.subheader("📄 Gerar Proposta em PDF")
