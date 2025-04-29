@@ -2,39 +2,173 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Proposta Comercial</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Preencher Proposta Comercial - Verdio</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; }
-        .header { text-align: center; }
-        .total { font-weight: bold; }
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>Proposta Comercial</h1>
-        <p>Empresa: <strong>{{empresa}}</strong></p>
-        <p>Responsável: <strong>{{responsavel}}</strong></p>
-        <p>Consultor Comercial: <strong>{{consultor}}</strong></p>
-        <p>Validade da Proposta: <strong>{{validade}}</strong></p>
+    <div class="container">
+        <h1>Preencher Proposta Comercial - Verdio</h1>
+        <form id="proposalForm">
+            <div class="form-group">
+                <label for="companyName">Nome da Empresa:</label>
+                <input type="text" id="companyName" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="responsibleName">Nome do Responsável:</label>
+                <input type="text" id="responsibleName" required>
+            </div>
+            
+            <h3>Informações-base:</h3>
+            <div class="form-group">
+                <label for="vehicleCount">Número de veículos a serem monitorados:</label>
+                <input type="number" id="vehicleCount" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="driverCount">Número de motoristas:</label>
+                <input type="number" id="driverCount" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="dailyOperation">Tempo médio de operação diária:</label>
+                <input type="text" id="dailyOperation" required>
+            </div>
+            
+            <h3>Valores dos Serviços:</h3>
+            <div class="form-group">
+                <label for="setupPrice">Setup (Instalação, treinamento e suporte inicial):</label>
+                <input type="text" id="setupPrice" placeholder="R$ 00,00" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="gprsPrice">Rastreadores GPRS:</label>
+                <input type="text" id="gprsPrice" placeholder="R$ 00,00" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="satellitePrice">Rastreadores Satelitais:</label>
+                <input type="text" id="satellitePrice" placeholder="R$ 00,00" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="rfidPrice">Identificador de Motorista/RFID:</label>
+                <input type="text" id="rfidPrice" placeholder="R$ 00,00" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="fatiguePrice">MDVR e Sensor de Fadiga:</label>
+                <input type="text" id="fatiguePrice" placeholder="R$ 00,00" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="cameraPrice">Câmeras Adicionais (02):</label>
+                <input type="text" id="cameraPrice" placeholder="R$ 00,00" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="telemetryPrice">Telemetria CAN:</label>
+                <input type="text" id="telemetryPrice" placeholder="R$ 00,00" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="totalPrice">Total:</label>
+                <input type="text" id="totalPrice" placeholder="R$ 00,00" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="validDate">Proposta válida até:</label>
+                <input type="date" id="validDate" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="salesName">Nome do comercial:</label>
+                <input type="text" id="salesName" required>
+            </div>
+            
+            <button type="submit">Gerar Proposta</button>
+        </form>
+        
+        <div id="downloadSection" class="hidden">
+            <p>Sua proposta foi gerada com sucesso!</p>
+            <button id="downloadBtn">Baixar Proposta</button>
+        </div>
     </div>
-    <hr>
-    <h2>Produtos Selecionados</h2>
-    <table>
-        <tr>
-            <th>Item</th>
-            <th>Descrição</th>
-            <th>Valor Unitário</th>
-        </tr>
-        {{itens}}
-        <tr>
-            <td class="total">TOTAL</td>
-            <td></td>
-            <td class="total">{{total}}</td>
-        </tr>
-    </table>
-    <p><strong>Valor Total do Contrato ({{tempo}}):</strong> {{contrato_total}}</p>
+
+    <script>
+        document.getElementById('proposalForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Mostrar seção de download
+            document.getElementById('downloadSection').classList.remove('hidden');
+            
+            // Rolagem para a seção de download
+            document.getElementById('downloadSection').scrollIntoView({ behavior: 'smooth' });
+        });
+        
+        document.getElementById('downloadBtn').addEventListener('click', function() {
+            // Aqui você implementaria a lógica para gerar o DOCX
+            // Como exemplo, vamos apenas simular o download
+            
+            // Criar um link de download
+            const link = document.createElement('a');
+            link.href = 'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,' + btoa('Seu documento gerado aqui');
+            link.download = 'Proposta_Comercial_Verdio.docx';
+            link.click();
+            
+            alert('Download da proposta iniciado!');
+        });
+    </script>
 </body>
 </html>
