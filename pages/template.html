@@ -3,172 +3,376 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Preencher Proposta Comercial - Verdio</title>
+    <title>Proposta Comercial - {{ razao_social }}</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
+        
+        * {
             margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Roboto', Arial, sans-serif;
         }
+        
+        body {
+            background-color: white;
+            color: #333;
+            line-height: 1.6;
+        }
+        
         .container {
             max-width: 800px;
-            margin: 0 auto;
-            background-color: #fff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            margin: 20px auto;
+            background: white;
+            padding: 40px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            position: relative;
         }
-        h1 {
-            color: #2c3e50;
+        
+        .header {
+            margin-bottom: 30px;
             text-align: center;
         }
-        .form-group {
-            margin-bottom: 15px;
+        
+        .logo img {
+            max-width: 200px;
+            margin-bottom: 20px;
         }
-        label {
-            display: block;
+        
+        .title {
+            margin-bottom: 30px;
+        }
+        
+        .title h1 {
+            color: #54A033;
+            font-size: 26px;
+            font-weight: 700;
             margin-bottom: 5px;
-            font-weight: bold;
+            text-align: center;
         }
-        input, textarea {
+        
+        .client-info {
+            margin-bottom: 30px;
+        }
+        
+        .client-info p {
+            margin-bottom: 10px;
+        }
+        
+        .section-title {
+            color: #54A033;
+            margin: 30px 0 15px;
+            font-size: 20px;
+            font-weight: 700;
+        }
+        
+        .proposta-info {
+            margin-bottom: 30px;
+        }
+        
+        .desafios ul, .vantagens ul, .funcionalidades ul {
+            margin-left: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .desafios li, .vantagens li, .funcionalidades li {
+            margin-bottom: 10px;
+        }
+        
+        .produtos-table {
             width: 100%;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            box-sizing: border-box;
+            border-collapse: collapse;
+            margin: 20px 0 30px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.05);
         }
-        button {
-            background-color: #3498db;
+        
+        .produtos-table th, .produtos-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border: 1px solid #ddd;
+        }
+        
+        .produtos-table th {
+            background-color: #54A033;
+            color: white;
+            font-weight: 500;
+        }
+        
+        .produtos-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        
+        .summary {
+            background: #f5f5f5;
+            padding: 20px;
+            margin: 30px 0;
+            border-radius: 5px;
+            border-left: 5px solid #54A033;
+        }
+        
+        .summary p {
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        
+        .summary .highlight {
+            color: #54A033;
+            font-weight: 700;
+            font-size: 18px;
+        }
+        
+        .terms {
+            margin: 30px 0;
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .signatures {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 80px;
+        }
+        
+        .signature {
+            width: 45%;
+            text-align: center;
+        }
+        
+        .signature hr {
+            border: none;
+            border-top: 1px solid #000;
+            margin-bottom: 5px;
+        }
+        
+        .signature p {
+            font-size: 14px;
+        }
+        
+        .footer {
+            margin-top: 50px;
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            padding-top: 20px;
+        }
+        
+        .greeting {
+            margin-bottom: 30px;
+        }
+        
+        .confidential {
+            font-style: italic;
+            margin: 30px 0;
+        }
+        
+        .validade {
+            font-weight: bold;
+            margin: 20px 0;
+        }
+        
+        @media print {
+            body {
+                background: white;
+            }
+            
+            .container {
+                box-shadow: none;
+                margin: 0;
+                padding: 20px;
+                max-width: 100%;
+            }
+            
+            .print-button {
+                display: none;
+            }
+        }
+        
+        .print-button {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: #54A033;
             color: white;
             border: none;
             padding: 10px 15px;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 16px;
+            font-weight: 500;
+            transition: background 0.3s;
         }
-        button:hover {
-            background-color: #2980b9;
-        }
-        .hidden {
-            display: none;
+        
+        .print-button:hover {
+            background: #458729;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Preencher Proposta Comercial - Verdio</h1>
-        <form id="proposalForm">
-            <div class="form-group">
-                <label for="companyName">Nome da Empresa:</label>
-                <input type="text" id="companyName" required>
-            </div>
-            
-            <div class="form-group">
-                <label for="responsibleName">Nome do Responsável:</label>
-                <input type="text" id="responsibleName" required>
-            </div>
-            
-            <h3>Informações-base:</h3>
-            <div class="form-group">
-                <label for="vehicleCount">Número de veículos a serem monitorados:</label>
-                <input type="number" id="vehicleCount" required>
-            </div>
-            
-            <div class="form-group">
-                <label for="driverCount">Número de motoristas:</label>
-                <input type="number" id="driverCount" required>
-            </div>
-            
-            <div class="form-group">
-                <label for="dailyOperation">Tempo médio de operação diária:</label>
-                <input type="text" id="dailyOperation" required>
-            </div>
-            
-            <h3>Valores dos Serviços:</h3>
-            <div class="form-group">
-                <label for="setupPrice">Setup (Instalação, treinamento e suporte inicial):</label>
-                <input type="text" id="setupPrice" placeholder="R$ 00,00" required>
-            </div>
-            
-            <div class="form-group">
-                <label for="gprsPrice">Rastreadores GPRS:</label>
-                <input type="text" id="gprsPrice" placeholder="R$ 00,00" required>
-            </div>
-            
-            <div class="form-group">
-                <label for="satellitePrice">Rastreadores Satelitais:</label>
-                <input type="text" id="satellitePrice" placeholder="R$ 00,00" required>
-            </div>
-            
-            <div class="form-group">
-                <label for="rfidPrice">Identificador de Motorista/RFID:</label>
-                <input type="text" id="rfidPrice" placeholder="R$ 00,00" required>
-            </div>
-            
-            <div class="form-group">
-                <label for="fatiguePrice">MDVR e Sensor de Fadiga:</label>
-                <input type="text" id="fatiguePrice" placeholder="R$ 00,00" required>
-            </div>
-            
-            <div class="form-group">
-                <label for="cameraPrice">Câmeras Adicionais (02):</label>
-                <input type="text" id="cameraPrice" placeholder="R$ 00,00" required>
-            </div>
-            
-            <div class="form-group">
-                <label for="telemetryPrice">Telemetria CAN:</label>
-                <input type="text" id="telemetryPrice" placeholder="R$ 00,00" required>
-            </div>
-            
-            <div class="form-group">
-                <label for="totalPrice">Total:</label>
-                <input type="text" id="totalPrice" placeholder="R$ 00,00" required>
-            </div>
-            
-            <div class="form-group">
-                <label for="validDate">Proposta válida até:</label>
-                <input type="date" id="validDate" required>
-            </div>
-            
-            <div class="form-group">
-                <label for="salesName">Nome do comercial:</label>
-                <input type="text" id="salesName" required>
-            </div>
-            
-            <button type="submit">Gerar Proposta</button>
-        </form>
+        <button class="print-button" onclick="window.print()">Imprimir Proposta</button>
         
-        <div id="downloadSection" class="hidden">
-            <p>Sua proposta foi gerada com sucesso!</p>
-            <button id="downloadBtn">Baixar Proposta</button>
+        <div class="header">
+            <div class="logo">
+                <img src="imgs/logo.png" alt="Logo da Empresa">
+            </div>
+        </div>
+        
+        <div class="title">
+            <h1>PROPOSTA COMERCIAL</h1>
+        </div>
+        
+        <div class="client-info">
+            <p>A</p>
+            <p><strong>{{ razao_social }}</strong></p>
+            <p>Aos cuidados de</p>
+            <p><strong>{{ responsavel }}</strong></p>
+        </div>
+        
+        <div class="greeting">
+            <p>Prezados,</p>
+            <p>Apresentamos a vocês uma proposta de <strong>parceria para oferecer maior segurança, eficiência e inteligência na gestão de frotas e maquinários com o Verdio.</strong> Nosso sistema permite controle total sobre veículos e motoristas, aumentando a produtividade, reduzindo custos e garantindo a segurança operacional.</p>
+            <p>Desde já agradecemos a oportunidade e nos colocamos à disposição para quaisquer esclarecimentos.</p>
+            <p>Atenciosamente,</p>
+        </div>
+        
+        <div class="proposta-info">
+            <h2 class="section-title">1. Desafios da sua empresa</h2>
+            <p>Sabemos que um dos maiores desafios na gestão de frotas e operações logísticas é garantir a eficiência, segurança e redução de custos. Entre os principais problemas enfrentados, destacamos:</p>
+            <div class="desafios">
+                <ul>
+                    <li>Falta de monitoramento em tempo real dos veículos e maquinários;</li>
+                    <li>Alto consumo de combustível devido a rotas ineficientes;</li>
+                    <li>Acidentes causados por fadiga ou imprudência dos motoristas;</li>
+                    <li>Dificuldade no controle de jornadas e conformidade com a legislação trabalhista;</li>
+                    <li>Falta de dados para análise e tomada de decisões estratégicas.</li>
+                </ul>
+            </div>
+            <p>Com o Verdio, sua empresa terá um sistema completo de monitoramento e gestão de frota que ajudará a enfrentar esses desafios.</p>
+            
+            <h2 class="section-title">2. Vantagem competitiva</h2>
+            <p>Empresas que adotam tecnologias de telemetria e monitoramento inteligente reduzem significativamente seus custos operacionais e aumentam a segurança da frota. Com o Verdio, sua empresa terá:</p>
+            <div class="vantagens">
+                <ul>
+                    <li><strong>Monitoramento em tempo real:</strong> Acompanhe a localização dos veículos, comportamento dos motoristas e condições operacionais.</li>
+                    <li><strong>Controle de jornada e escalas:</strong> Evite excesso de horas de trabalho, garantindo conformidade com a legislação.</li>
+                    <li><strong>Análise de desempenho:</strong> Identifique padrões de consumo, comportamento dos condutores e oportunidades de otimização.</li>
+                    <li><strong>Redução de riscos:</strong> Sensores de fadiga e videomonitoramento garantem maior segurança para os motoristas.</li>
+                    <li><strong>Maior eficiência operacional:</strong> Planejamento inteligente de rotas, controle de custos e gestão eficiente de recursos.</li>
+                </ul>
+            </div>
+            
+            <h2 class="section-title">3. Funcionalidades do Verdio</h2>
+            <p>Nosso sistema oferece um conjunto completo de soluções para a gestão de frotas e operações logísticas:</p>
+            <div class="funcionalidades">
+                <ul>
+                    <li><strong>Rastreamento GPRS e Satelital:</strong> Monitoramento 24/7 com cobertura global.</li>
+                    <li><strong>Identificação de Motorista RFID:</strong> Controle de acesso e jornada dos condutores.</li>
+                    <li><strong>Videomonitoramento MDVR:</strong> Gravação e transmissão de imagens para aumentar a segurança da frota.</li>
+                    <li><strong>Sensores de Fadiga:</strong> Alertas inteligentes para evitar acidentes.</li>
+                    <li><strong>Telemetria CAN:</strong> Monitoramento de consumo de combustível, temperatura do motor e outros parâmetros críticos.</li>
+                    <li><strong>Controle de Áreas Restritas:</strong> Gestão de acessos e otimização de segurança operacional.</li>
+                    <li><strong>Monitoramento de Jornada:</strong> Controle de horários e cumprimento da legislação trabalhista.</li>
+                    <li><strong>Gestão de Custos:</strong> Análise detalhada de despesas com combustível, manutenção e infrações.</li>
+                </ul>
+            </div>
+            
+            <h2 class="section-title">4. Vantagens exclusivas</h2>
+            <div class="vantagens">
+                <ol>
+                    <li>Redução de custos operacionais e de manutenção;</li>
+                    <li>Otimização da produtividade e do tempo de trabalho;</li>
+                    <li>Maior segurança para motoristas e bens transportados;</li>
+                    <li>Controle detalhado de cada veículo da frota;</li>
+                    <li>Relatórios gerenciais e dashboards intuitivos;</li>
+                    <li>Conformidade com normas de segurança e legislação trabalhista.</li>
+                </ol>
+            </div>
+            
+            <h2 class="section-title">5. Valor dos Serviços</h2>
+            <p>Já falamos sobre o valor que o Verdio pode agregar à sua empresa. Agora, falaremos sobre os custos da solução.</p>
+            <p><strong>Informações-base:</strong></p>
+            <ul>
+                <li>Número de veículos a serem monitorados: {{ qtd_veiculos }}</li>
+                <li>Tempo de contrato: {{ temp }}</li>
+            </ul>
+            
+            <p><strong>Proposta:</strong></p>
+            <table class="produtos-table">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th>Descrição</th>
+                        <th>Preço | Mês</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for produto in produtos %}
+                    <tr>
+                        <td>{{ produto.nome }}</td>
+                        <td>
+                            {% if produto.nome == "GPRS / Gsm" %}
+                                Equipamento de rastreamento para monitoramento em tempo real via GSM/GPRS 2G ou 4G
+                            {% elif produto.nome == "Satélite" %}
+                                Equipamento de rastreamento com cobertura via satélite
+                            {% elif produto.nome == "Identificador de Motorista / RFID" %}
+                                Equipamento que permite realizar liberação do veículo e identificar o motorista individualmente por cartão magnético
+                            {% elif produto.nome == "Leitor de Rede CAN / Telemetria" %}
+                                Monitoramento de combustível, temperatura e RPM
+                            {% elif produto.nome == "Videomonitoramento + DMS + ADAS" %}
+                                Monitoramento de atenção do motorista e alertas preventivos além de videomonitoramento
+                            {% else %}
+                                Serviço de monitoramento
+                            {% endif %}
+                        </td>
+                        <td>R$ {{ "%.2f"|format(produto.valor_unitario) }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr>
+                        <td colspan="2"><strong>Total por veículo</strong></td>
+                        <td><strong>R$ {{ "%.2f"|format(soma_total) }}</strong></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="summary">
+            <p><strong>Quantidade de Veículos:</strong> {{ qtd_veiculos }}</p>
+            <p><strong>Tempo de Contrato:</strong> {{ temp }}</p>
+            <p><strong>Valor Mensal Total:</strong> R$ {{ "%.2f"|format(valor_unitario) }}</p>
+            <p class="highlight"><strong>Valor Total do Contrato:</strong> R$ {{ "%.2f"|format(contrato_total) }}</p>
+        </div>
+        
+        <div class="confidential">
+            <h2 class="section-title">6. Termo de confidencialidade</h2>
+            <p>Esta é uma proposta comercial exclusiva e confidencial. Seu uso e divulgação são restritos às partes envolvidas na negociação.</p>
+        </div>
+        
+        <p class="validade">Proposta válida até {{ (data_proposta.replace(month=data_proposta.month+1)).strftime('%d/%m/%Y') }}</p>
+        
+        <div class="signatures">
+            <div class="signature">
+                <hr>
+                <p>Assinatura do Cliente</p>
+                <p>{{ razao_social }}</p>
+            </div>
+            <div class="signature">
+                <hr>
+                <p>De Acordo Comercial</p>
+                <p>{{ responsavel_comercial }}</p>
+                <p>Consultor de Negócios Verdio</p>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>© 2025 - Todos os direitos reservados | Verdio</p>
+            <p>Esta proposta é confidencial e de uso exclusivo do destinatário.</p>
         </div>
     </div>
-
+    
     <script>
-        document.getElementById('proposalForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            // Mostrar seção de download
-            document.getElementById('downloadSection').classList.remove('hidden');
-            
-            // Rolagem para a seção de download
-            document.getElementById('downloadSection').scrollIntoView({ behavior: 'smooth' });
-        });
-        
-        document.getElementById('downloadBtn').addEventListener('click', function() {
-            // Aqui você implementaria a lógica para gerar o DOCX
-            // Como exemplo, vamos apenas simular o download
-            
-            // Criar um link de download
-            const link = document.createElement('a');
-            link.href = 'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,' + btoa('Seu documento gerado aqui');
-            link.download = 'Proposta_Comercial_Verdio.docx';
-            link.click();
-            
-            alert('Download da proposta iniciado!');
-        });
+        // Script para abrir automaticamente a janela de impressão quando solicitado
+        function printDocument() {
+            window.print();
+        }
     </script>
 </body>
 </html>
