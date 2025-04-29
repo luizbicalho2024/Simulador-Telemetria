@@ -54,11 +54,12 @@ if selecionados:
 
     if gerar:
         try:
-            with open("/pages/template.html", "r", encoding="utf-8") as f:
+            with open("/mnt/data/Proposta-Comercial-e-Intenção-Verdio.html", "r", encoding="utf-8") as f:
                 html_template = f.read()
         except FileNotFoundError:
             st.error("Arquivo HTML 'Proposta-Comercial-e-Intenção-Verdio.html' não encontrado.")
             st.stop()
+
 
         itens_html = ""
         for produto, preco in selecionados.items():
