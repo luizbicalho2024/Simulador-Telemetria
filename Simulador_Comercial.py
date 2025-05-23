@@ -1,16 +1,5 @@
 # Simulador_Comercial.py (ou seu arquivo principal)
 import streamlit as st
-
-# --- LINHA DE TESTE (REMOVER DEPOIS) ---
-try:
-    mongo_uri_test = st.secrets["MONGO_CONNECTION_STRING"]
-    st.sidebar.success(f"Segredo MONGO_CONNECTION_STRING encontrado!") # Remova ou comente esta linha em produção
-    # st.sidebar.text(mongo_uri_test) # CUIDADO: Não mostre a string completa em produção
-except KeyError:
-    st.sidebar.error("ERRO CRÍTICO: Segredo MONGO_CONNECTION_STRING NÃO encontrado em st.secrets!")
-    st.stop() # Para a execução se o segredo não for encontrado
-# --- FIM DA LINHA DE TESTE ---
-
 import streamlit_authenticator as stauth
 import user_management_db as umdb # Nosso módulo de gerenciamento de usuários
 import pandas as pd # Exemplo, se você usa pandas
