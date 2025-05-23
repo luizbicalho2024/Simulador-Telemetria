@@ -1,6 +1,10 @@
-streamlit==1.33.0
+streamlit>=1.33.0
+pymongo[srv]>=4.6.0 # Usei uma versão um pouco anterior à 4.7.3, mas ambas devem funcionar
+streamlit-authenticator>=0.3.0 # Versão que não usa 'preauthorized' por padrão
+certifi>=2023.7.22
+pandas # Se usado para exibir dados, como no painel admin
+# ... suas outras dependências ...
 numpy==1.26.4
-pandas==2.2.1
 plotly==5.22.0
 requests==2.31.0
 streamlit_option_menu==0.3.12
@@ -9,8 +13,3 @@ Pillow==10.2.0
 python-docx==1.1.0
 XlsxWriter==3.2.0
 streamlit_folium==0.16.0
-pymongo[srv]==4.7.3  # Para MongoDB
-streamlit-authenticator==0.3.2 # Para autenticação
-# bcrypt é geralmente uma dependência do streamlit-authenticator
-# certifi é bom ter explícito para o tlsCAFile
-certifi>=2023.7.22
