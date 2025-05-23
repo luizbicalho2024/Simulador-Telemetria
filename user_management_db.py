@@ -1,7 +1,7 @@
 # user_management_db.py
 import streamlit as st
 from pymongo import MongoClient, errors as pymongo_errors
-import streamlit_authenticator as stauth # Para stauth.Hasher
+from streamlit_authenticator.utilities.hasher import Hasher # CORREÇÃO: Importação direta do Hasher
 import certifi # Para tlsCAFile
 
 # --- Configurações do Banco de Dados ---
@@ -18,9 +18,9 @@ def get_mongo_client():
         client = MongoClient(
             CONNECTION_STRING,
             tlsCAFile=certifi.where(), # Tenta usar certificados do pacote certifi
-            serverSelectionTimeoutMS=20000,
-            socketTimeoutMS=20000,
-            connectTimeoutMS=20000
+            serverSelectionTimeoutMS=20000, # Timeout para seleção do servidor em ms
+            socketTimeoutMS=20000,          # Timeout para operações de socket
+            connectTimeoutMS=20000          # Timeout para estabelecer a conexão inicial
             # --- OPÇÃO DE TESTE PARA PROBLEMAS DE SSL (INSEGURO!) ---
             # Descomente a linha abaixo APENAS para teste se suspeitar de problemas de validação de certificado.
             # Lembre-se de comentar novamente depois. NÃO USE EM PRODUÇÃO.
@@ -50,8 +50,9 @@ def get_users_collection():
         # Erro já deve ter sido logado por get_mongo_client()
         return None
     try:
-        db_name = st.secrets.get("MONGO_DB_NAME", "simulador_db") # Pega do secrets ou usa default
-        collection_name = st.secrets.get("MONGO_USERS_COLLECTION", "users") # Pega do secrets ou usa default
+        # Permite configurar nome do DB e coleção via secrets.toml, com defaults
+        db_name = st.secrets.get("MONGO_DB_NAME", "simulador_db") 
+        collection_name = st.secrets.get("MONGO_USERS_COLLECTION", "users")
         
         db = client[db_name]
         return db[collection_name]
@@ -64,7 +65,7 @@ def get_users_collection():
 def fetch_all_users_for_auth():
     """Busca todos os usuários e formata para o streamlit-authenticator."""
     users_collection = get_users_collection()
-    default_credentials = {"usernames": {}} # Retorno padrão em caso de falha
+    default_credentials = {"usernames": {}} 
 
     if users_collection is None:
         print("WARN (user_management_db.py - fetch_all_users): Coleção de usuários não disponível.")
@@ -80,13 +81,12 @@ def fetch_all_users_for_auth():
         
     credentials = {"usernames": {}}
     for user in users_from_db:
-        # Validação básica dos campos obrigatórios
         if not all(key in user for key in ["username", "name", "hashed_password", "role"]):
             st.warning(f"WARN (user_management_db.py): Usuário com dados incompletos encontrado (ID: {user.get('_id', 'N/A')}). Ignorando.")
             continue
         credentials["usernames"][user["username"]] = {
             "name": user["name"],
-            "email": user.get("email", ""), # Email é opcional
+            "email": user.get("email", ""),
             "password": user["hashed_password"],
             "role": user["role"]
         }
@@ -113,7 +113,8 @@ def add_user(username: str, name: str, email: str, plain_password: str, role: st
             st.warning(f"Usuário '{username}' já existe.")
             return False
 
-        hashed_password = stauth.Hasher([plain_password]).generate()[0]
+        # CORREÇÃO: Usando Hasher importado diretamente
+        hashed_password = Hasher([plain_password]).generate()[0]
         user_doc = {
             "username": username, "name": name, "email": email,
             "hashed_password": hashed_password, "role": role
@@ -138,9 +139,9 @@ def update_user_details(username: str, name: str, email: str, role: str):
         if result.modified_count > 0:
             st.success(f"Detalhes do usuário '{username}' atualizados.")
             return True
-        elif users_collection.count_documents({"username": username}) > 0:
+        elif users_collection.count_documents({"username": username}) > 0: # Verifica se o usuário existe
             st.info(f"Nenhuma alteração nos dados do usuário '{username}' (dados podem ser os mesmos).")
-            return True # Considera sucesso se o usuário existe e a operação foi tentada
+            return True 
         else:
             st.warning(f"Usuário '{username}' não encontrado para atualização.")
             return False
@@ -154,9 +155,9 @@ def delete_user(username: str):
         st.error("FALHA (delete_user): Coleção de usuários indisponível.")
         return False
     try:
-        # Segurança: Não permitir excluir o próprio admin se for o único
         is_current_user_admin = st.session_state.get("role") == "admin"
         current_logged_in_username = st.session_state.get("username")
+
         if is_current_user_admin and current_logged_in_username == username:
             if users_collection.count_documents({"role": "admin"}) <= 1:
                 st.error("Não é possível excluir o único administrador.")
@@ -179,7 +180,8 @@ def update_user_password_by_admin(username: str, plain_password: str):
         st.error("FALHA (update_user_password_by_admin): Coleção de usuários indisponível.")
         return False
     try:
-        hashed_password = stauth.Hasher([plain_password]).generate()[0]
+        # CORREÇÃO: Usando Hasher importado diretamente
+        hashed_password = Hasher([plain_password]).generate()[0]
         result = users_collection.update_one(
             {"username": username},
             {"$set": {"hashed_password": hashed_password}}
@@ -187,7 +189,7 @@ def update_user_password_by_admin(username: str, plain_password: str):
         if result.modified_count > 0:
             st.success(f"Senha do usuário '{username}' redefinida com sucesso.")
             return True
-        else: # Usuário não encontrado ou senha igual
+        else: 
             st.warning(f"Senha do usuário '{username}' não alterada (usuário não encontrado ou senha igual à anterior).")
             return False
     except Exception as e:
@@ -204,7 +206,7 @@ def update_user_password_self(username: str, new_hashed_password: str):
             {"username": username},
             {"$set": {"hashed_password": new_hashed_password}}
         )
-        return True # Assume sucesso (mesmo que a senha seja a mesma)
+        return True 
     except Exception as e:
         st.error(f"ERRO ao salvar sua nova senha no banco: {e}")
         return False
@@ -214,7 +216,6 @@ def get_all_users_for_admin_display():
     if users_collection is None:
         return []
     try:
-        # Exclui campos sensíveis da exibição
         return list(users_collection.find({}, {"_id": 0, "hashed_password": 0}))
     except Exception as e:
         st.error(f"ERRO ao buscar lista de usuários para admin: {e}")
