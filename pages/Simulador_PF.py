@@ -1,4 +1,22 @@
+# Exemplo para: pages/Simulador_PF.py (e outros arquivos em pages/)
 import streamlit as st
+
+# --- Verificação de Autenticação ---
+if "authentication_status" not in st.session_state or st.session_state["authentication_status"] is not True:
+    st.error("🔒 Acesso negado. Por favor, faça login na página principal.")
+    st.stop() # Impede a execução do restante da página
+
+# --- Restante do código da sua página ---
+st.title(f"Simulador Pessoa Física (Acessado por: {st.session_state.get('name', 'Usuário')})")
+# ... seu código específico para esta página ...
+
+# Exemplo de verificação de papel (role) se necessário dentro de uma página específica:
+# if st.session_state.get("role") == "admin":
+#     st.write("Conteúdo específico para Admin nesta página.")
+# elif st.session_state.get("role") == "user":
+#     st.write("Conteúdo específico para Usuário Comum nesta página.")
+# else:
+#     st.warning("Papel do usuário não definido.")
 
 # 🛠️ Configuração da página
 st.set_page_config(
