@@ -1,22 +1,37 @@
-# Exemplo para: pages/Simulador_PF.py (e outros arquivos em pages/)
-import streamlit as st
+# pages/Comandos_Rastreadores.py
+import streamlit as st # Import principal
 
-# --- Verificação de Autenticação ---
-if "authentication_status" not in st.session_state or st.session_state["authentication_status"] is not True:
-    st.error("🔒 Acesso negado. Por favor, faça login na página principal.")
-    st.stop() # Impede a execução do restante da página
+# 1. st.set_page_config() DEVE SER O PRIMEIRO COMANDO STREAMLIT
+# Mova qualquer configuração de página para o topo.
+# É importante notar que st.set_page_config() só pode ser chamado uma vez por página.
+# Se você já tem um no seu Simulador_Comercial.py para a página principal,
+# você PODE ou NÃO PODE precisar dele em cada subpágina, dependendo
+# se você quer configurações diferentes para cada página do menu.
+# Se você quer um layout global, defina apenas no script principal.
+# Se cada página tiver um título de aba diferente, você precisará dele aqui.
 
-# --- Restante do código da sua página ---
-st.title(f"Simulador Pessoa Física (Acessado por: {st.session_state.get('name', 'Usuário')})")
-# ... seu código específico para esta página ...
+# Tente remover o st.set_page_config das subpáginas se você já configurou globalmente
+# no Simulador_Comercial.py e não precisa de títulos de aba ou layouts diferentes.
+# Se precisar de títulos de aba diferentes para cada página, mantenha-o, mas garanta que é o primeiro.
 
-# Exemplo de verificação de papel (role) se necessário dentro de uma página específica:
-# if st.session_state.get("role") == "admin":
-#     st.write("Conteúdo específico para Admin nesta página.")
-# elif st.session_state.get("role") == "user":
-#     st.write("Conteúdo específico para Usuário Comum nesta página.")
-# else:
-#     st.warning("Papel do usuário não definido.")
+# ASSUMINDO QUE VOCÊ QUER UM TÍTULO DE ABA DIFERENTE PARA ESTA PÁGINA:
+
+# 2. AGORA o bloco de Verificação de Autenticação
+if st.session_state.get("authentication_status", False) is not True:
+    st.error("🔒 Acesso Negado! Por favor, faça login na página principal para continuar.")
+    # st.page_link("Simulador_Comercial.py", label="Ir para Login", icon="🏠") # Use st.page_link para navegação
+    st.stop()
+
+# 3. Restante dos imports específicos da página (se houver) e o código da página
+# import pandas as pd # Exemplo
+# from utils_rastreadores import ... # Exemplo
+
+st.title("Comandos para Rastreadores")
+st.write(f"Usuário: {st.session_state.get('name', 'N/A')} ({st.session_state.get('username', 'N/A')})")
+st.write(f"Nível de Acesso: {st.session_state.get('role', 'Indefinido')}")
+st.markdown("---")
+
+# ... resto do código da página Comandos_Rastreadores.py ...
 
 
 # 🛠️ Configuração da página
