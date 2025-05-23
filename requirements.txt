@@ -11,4 +11,6 @@ XlsxWriter==3.2.0
 streamlit_folium==0.16.0
 pymongo[srv]==4.7.3  # Para MongoDB
 streamlit-authenticator==0.3.2 # Para autenticação
-bcrypt==4.1.3 # Dependência para hashing de senha, pode ser gerenciada pelo streamlit-authenticator
+# bcrypt é geralmente uma dependência do streamlit-authenticator
+# certifi é bom ter explícito para o tlsCAFile
+certifi>=2023.7.22
