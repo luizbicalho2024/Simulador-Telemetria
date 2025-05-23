@@ -14,13 +14,11 @@ def get_mongo_client():
             return None
         CONNECTION_STRING = st.secrets["MONGO_CONNECTION_STRING"]
         
-        # Tenta conectar usando tlsCAFile do certifi
         client = MongoClient(
             CONNECTION_STRING,
             tlsCAFile=certifi.where(),
-            serverSelectionTimeoutMS=10000  # Timeout para seleção do servidor em ms
+            serverSelectionTimeoutMS=10000
         )
-        # Test connection
         client.admin.command('ping')
         print("INFO: Conectado ao MongoDB com sucesso! (user_management_db.py)")
         return client
@@ -42,21 +40,20 @@ def get_mongo_client():
 def get_users_collection():
     """Retorna a coleção de usuários do MongoDB."""
     client = get_mongo_client()
-    if client:
-        # Verifique se o nome do banco de dados 'simulador_db' e coleção 'users' estão corretos
-        db_name_str = st.secrets.get("MONGO_DB_NAME", "simulador_db") # Permite configurar via secrets também
-        collection_name_str = st.secrets.get("MONGO_USERS_COLLECTION", "users")
-        db = client[db_name_str]
-        return db[collection_name_str]
-    # Mensagem de erro já deve ter sido dada por get_mongo_client
-    return None
+    if client is None: # CORRIGIDO AQUI TAMBÉM POR PRECAUÇÃO
+        return None 
+    db_name_str = st.secrets.get("MONGO_DB_NAME", "simulador_db")
+    collection_name_str = st.secrets.get("MONGO_USERS_COLLECTION", "users")
+    db = client[db_name_str]
+    return db[collection_name_str]
 
 # --- Funções CRUD de Usuários ---
 
 def fetch_all_users_for_auth():
     """Busca todos os usuários e formata para o streamlit-authenticator."""
     users_collection = get_users_collection()
-    if not users_collection:
+    # CORREÇÃO APLICADA ABAIXO:
+    if users_collection is None:
         # get_users_collection ou get_mongo_client já deve ter mostrado um erro
         return {"usernames": {}}
 
@@ -73,8 +70,8 @@ def fetch_all_users_for_auth():
             continue
         credentials["usernames"][user["username"]] = {
             "name": user["name"],
-            "email": user.get("email", ""), # Email é opcional
-            "password": user["hashed_password"], # Senha já deve estar hasheada
+            "email": user.get("email", ""),
+            "password": user["hashed_password"],
             "role": user["role"]
         }
     return credentials
@@ -82,7 +79,8 @@ def fetch_all_users_for_auth():
 def get_user_role(username: str):
     """Busca o papel (role) de um usuário específico."""
     users_collection = get_users_collection()
-    if not users_collection or not username:
+    # CORREÇÃO APLICADA ABAIXO:
+    if users_collection is None or not username:
         return None
     try:
         user_data = users_collection.find_one({"username": username})
@@ -95,12 +93,13 @@ def get_user_role(username: str):
 def add_user(username: str, name: str, email: str, plain_password: str, role: str):
     """Adiciona um novo usuário ao banco de dados."""
     users_collection = get_users_collection()
-    if not users_collection:
+    # CORREÇÃO APLICADA ABAIXO:
+    if users_collection is None:
         st.error("Não foi possível acessar a coleção de usuários para adicionar.")
         return False
 
     try:
-        if users_collection.find_one({"username": username}):
+        if users_collection.find_one({"username": username}): # find_one retorna None se não achar, o que é ok para if
             st.warning(f"Usuário '{username}' já existe.")
             return False
 
@@ -122,7 +121,8 @@ def add_user(username: str, name: str, email: str, plain_password: str, role: st
 def update_user_details(username: str, name: str, email: str, role: str):
     """Atualiza os detalhes de um usuário (nome, email, role)."""
     users_collection = get_users_collection()
-    if not users_collection:
+    # CORREÇÃO APLICADA ABAIXO:
+    if users_collection is None:
         st.error("Não foi possível acessar a coleção de usuários para atualizar.")
         return False
     try:
@@ -135,7 +135,7 @@ def update_user_details(username: str, name: str, email: str, role: str):
             return True
         else:
             st.info(f"Nenhuma alteração detectada para o usuário '{username}' ou usuário não encontrado.")
-            return False
+            return False # Mudado para False para consistência se não houve modificação
     except Exception as e:
         st.error(f"Erro ao atualizar usuário '{username}': {e}")
         return False
@@ -143,12 +143,15 @@ def update_user_details(username: str, name: str, email: str, role: str):
 def delete_user(username: str):
     """Exclui um usuário do banco de dados."""
     users_collection = get_users_collection()
-    if not users_collection:
+    # CORREÇÃO APLICADA ABAIXO:
+    if users_collection is None:
         st.error("Não foi possível acessar a coleção de usuários para excluir.")
         return False
     try:
-        # Segurança: Não permitir excluir o último admin se for o próprio
-        if st.session_state.get("role") == "admin" and st.session_state.get("username") == username:
+        current_user_is_admin = st.session_state.get("role") == "admin"
+        current_username = st.session_state.get("username")
+
+        if current_user_is_admin and current_username == username:
             admin_users_count = users_collection.count_documents({"role": "admin"})
             if admin_users_count <= 1:
                 st.error("Não é possível excluir o único administrador.")
@@ -168,7 +171,8 @@ def delete_user(username: str):
 def update_user_password_by_admin(username: str, plain_password: str):
     """Admin redefine a senha de um usuário."""
     users_collection = get_users_collection()
-    if not users_collection:
+    # CORREÇÃO APLICADA ABAIXO:
+    if users_collection is None:
         st.error("Não foi possível acessar a coleção de usuários para redefinir senha.")
         return False
     try:
@@ -190,7 +194,8 @@ def update_user_password_by_admin(username: str, plain_password: str):
 def update_user_password_self(username: str, new_hashed_password: str):
     """Usuário altera a própria senha (recebe hash já processado pelo authenticator)."""
     users_collection = get_users_collection()
-    if not users_collection:
+    # CORREÇÃO APLICADA ABAIXO:
+    if users_collection is None:
         st.error("Não foi possível acessar a coleção de usuários para alterar sua senha.")
         return False
     try:
@@ -198,13 +203,8 @@ def update_user_password_self(username: str, new_hashed_password: str):
             {"username": username},
             {"$set": {"hashed_password": new_hashed_password}}
         )
-        if result.modified_count > 0:
-            # st.success("Sua senha foi alterada com sucesso!") # Mensagem dada pelo authenticator
-            return True
-        # else:
-            # st.info("Nenhuma alteração na senha (pode ser igual à anterior).") # Pode ser confuso
-            # return False
-        return True # Mesmo se a senha for igual, o processo foi concluído.
+        # Mesmo que a senha seja igual (modified_count == 0), a operação em si foi um "sucesso"
+        return True 
     except Exception as e:
         st.error(f"Erro ao salvar sua nova senha no banco: {e}")
         return False
@@ -212,10 +212,10 @@ def update_user_password_self(username: str, new_hashed_password: str):
 def get_all_users_for_admin_display():
     """Retorna uma lista de dicts de usuários para exibição no painel admin."""
     users_collection = get_users_collection()
-    if not users_collection:
+    # CORREÇÃO APLICADA ABAIXO:
+    if users_collection is None:
         return []
     try:
-        # Exclui o campo _id e hashed_password para não exibi-los
         users_from_db = list(users_collection.find({}, {"_id": 0, "hashed_password": 0}))
         return users_from_db
     except Exception as e:
