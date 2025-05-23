@@ -1,8 +1,37 @@
-# Simulador_Comercial.py (ou seu arquivo principal)
+# Simulador_Comercial.py
 import streamlit as st
-import streamlit_authenticator as stauth
-import user_management_db as umdb # Nosso módulo de gerenciamento de usuários
-import pandas as pd # Exemplo, se você usa pandas
+
+# --- INÍCIO DO BLOCO DE TESTE DE SEGREDOS ---
+st.set_page_config(layout="wide") # Ou qualquer configuração de página que você já tenha
+
+st.sidebar.title("Teste de Segredos")
+try:
+    mongo_uri_test = st.secrets["MONGO_CONNECTION_STRING"]
+    st.sidebar.success("SUCESSO: MONGO_CONNECTION_STRING encontrada!")
+    # Descomente a linha abaixo CUIDADOSAMENTE para ver os primeiros caracteres da URI (NÃO MOSTRE A SENHA)
+    # st.sidebar.caption(f"Início da URI: {mongo_uri_test[:30]}...") # Mostra apenas o começo
+
+    auth_cookie_name_test = st.secrets["AUTH_COOKIE_NAME"]
+    st.sidebar.success("SUCESSO: AUTH_COOKIE_NAME encontrada!")
+
+    auth_cookie_key_test = st.secrets["AUTH_COOKIE_KEY"]
+    st.sidebar.success("SUCESSO: AUTH_COOKIE_KEY encontrada!")
+
+    auth_cookie_expiry_test = st.secrets["AUTH_COOKIE_EXPIRY_DAYS"]
+    st.sidebar.success(f"SUCESSO: AUTH_COOKIE_EXPIRY_DAYS encontrada! Valor: {auth_cookie_expiry_test}")
+
+except KeyError as e:
+    st.sidebar.error(f"FALHA AO LER SEGREDOS: Chave não encontrada: {e}")
+    st.sidebar.error("Verifique o arquivo .streamlit/secrets.toml (localização, nome e conteúdo).")
+    st.sidebar.error("Certifique-se de que o arquivo foi SALVO e que você REINICIOU o Streamlit.")
+    st.stop() # Para a execução se um segredo crucial não for encontrado
+st.sidebar.markdown("---")
+# --- FIM DO BLOCO DE TESTE DE SEGREDOS ---
+
+import streamlit_authenticator as stauth # Mova os imports para depois do teste
+import user_management_db as umdb
+import pandas as pd
+# ... resto do seu código ...
 
 
 # --- Configuração Inicial e Carregamento de Usuários ---
