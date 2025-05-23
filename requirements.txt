@@ -1,9 +1,8 @@
 streamlit>=1.33.0
-pymongo[srv]>=4.6.0 # Usei uma versão um pouco anterior à 4.7.3, mas ambas devem funcionar
-streamlit-authenticator>=0.3.0 # Versão que não usa 'preauthorized' por padrão
+pymongo[srv]>=4.6.0
+streamlit-authenticator>=0.3.0
 certifi>=2023.7.22
-pandas # Se usado para exibir dados, como no painel admin
-# ... suas outras dependências ...
+pandas
 numpy==1.26.4
 plotly==5.22.0
 requests==2.31.0
