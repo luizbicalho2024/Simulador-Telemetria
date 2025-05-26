@@ -12,7 +12,7 @@ import streamlit as st
 st.set_page_config(
     layout="wide",
     page_title="Simulador Pessoa Jurídica",
-    page_icon="imgs/v-c.png",
+    page_icon="imgs/v-c.png", # Verifique o caminho
     initial_sidebar_state="expanded"
 )
 print("INFO_LOG (Simulador_PJ.py): st.set_page_config executado.")
@@ -66,8 +66,8 @@ produtos_descricao = {
 }
 
 st.sidebar.header("📝 Configurações PJ")
-qtd_veiculos_key = "pj_qtd_veiculos_sb_v21"
-temp_contrato_key = "pj_temp_contrato_sb_v21"
+qtd_veiculos_key = "pj_qtd_veiculos_sb_v22"
+temp_contrato_key = "pj_temp_contrato_sb_v22"
 qtd_veiculos_input = st.sidebar.number_input("Quantidade de Veículos 🚗", min_value=1, value=1, step=1, key=qtd_veiculos_key)
 temp_contrato_selecionado_str = st.sidebar.selectbox("Tempo de Contrato ⏳", list(planos.keys()), key=temp_contrato_key)
 print("INFO_LOG (Simulador_PJ.py): Widgets da sidebar renderizados.")
@@ -77,7 +77,7 @@ col1_pj, col2_pj = st.columns(2)
 produtos_selecionados_pj = {}
 for i, (produto, preco_decimal) in enumerate(planos[temp_contrato_selecionado_str].items()):
     col_target = col1_pj if i % 2 == 0 else col2_pj
-    produto_toggle_key = f"pj_toggle_{temp_contrato_selecionado_str.replace(' ','_')}_{produto.replace(' ', '_').replace('/', '_').replace('+', '')}_v21"
+    produto_toggle_key = f"pj_toggle_{temp_contrato_selecionado_str.replace(' ','_')}_{produto.replace(' ', '_').replace('/', '_').replace('+', '')}_v22"
     if col_target.toggle(f"{produto} - R$ {preco_decimal:,.2f}", key=produto_toggle_key):
         produtos_selecionados_pj[produto] = preco_decimal
 print(f"DEBUG_LOG (Simulador_PJ.py): Produtos selecionados para proposta: {produtos_selecionados_pj}")
@@ -97,58 +97,49 @@ else:
     st.info("Selecione produtos para ver o cálculo.")
 print("INFO_LOG (Simulador_PJ.py): Seção de cálculo de totais renderizada.")
 
-if st.button("🔄 Limpar Seleção e Recalcular", key="pj_btn_limpar_recalcular_v21"):
+if st.button("🔄 Limpar Seleção e Recalcular", key="pj_btn_limpar_recalcular_v22"):
     print("INFO_LOG (Simulador_PJ.py): Botão 'Limpar Seleção' clicado.")
     st.rerun()
 
 # --- FUNÇÃO AUXILIAR PARA PREENCHER O DOCX ---
-def docx_replace_text(doc_obj, replacements_map):
-    """Itera sobre parágrafos e tabelas para substituir placeholders."""
-    print(f"DEBUG_LOG (docx_replace_text): Iniciando substituição com o mapa: {replacements_map}")
-    
-    # Substituir em parágrafos principais
-    for p in doc_obj.paragraphs:
+def docx_replace_text_in_element(element, replacements_map):
+    """Substitui placeholders em todos os 'runs' de um elemento (parágrafo ou célula)."""
+    for paragraph in element.paragraphs:
         for placeholder, value in replacements_map.items():
-            if placeholder in p.text:
-                inline = p.runs
-                # Loop para lidar com placeholders divididos em múltiplos runs
-                for i in range(len(inline)):
-                    if placeholder in inline[i].text:
-                        text = inline[i].text.replace(placeholder, str(value))
-                        inline[i].text = text
-                print(f"DEBUG_LOG (docx_replace_text): Placeholder '{placeholder}' processado no parágrafo.")
-
-    # Substituir em tabelas
-    for table in doc_obj.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for p_in_cell in cell.paragraphs:
-                    for placeholder, value in replacements_map.items():
-                        if placeholder in p_in_cell.text:
-                            inline = p_in_cell.runs
-                            for i in range(len(inline)):
-                                if placeholder in inline[i].text:
-                                    text = inline[i].text.replace(placeholder, str(value))
-                                    inline[i].text = text
-                            print(f"DEBUG_LOG (docx_replace_text): Placeholder '{placeholder}' processado na célula da tabela.")
-    print("DEBUG_LOG (docx_replace_text): Substituição de placeholders gerais concluída.")
+            if placeholder in paragraph.text:
+                # print(f"DEBUG_LOG (docx_replace_text_in_element): Tentando substituir '{placeholder}' em '{paragraph.text[:50]}...'")
+                full_text = paragraph.text
+                if placeholder in full_text:
+                    # Esta substituição simples pode afetar a formatação se o placeholder estiver dividido
+                    # entre múltiplos 'runs' ou se a formatação for complexa.
+                    # Para uma substituição que tenta preservar a formatação dos 'runs':
+                    new_text = full_text.replace(placeholder, str(value))
+                    if new_text != full_text: # Apenas modifica se houve mudança
+                        # Limpa os runs existentes e adiciona o novo texto
+                        # Isso é uma simplificação. Uma substituição run a run seria mais complexa.
+                        p_runs = paragraph.runs
+                        for r in p_runs:
+                            r.text = "" # Limpa o texto dos runs existentes
+                        if paragraph.runs: # Adiciona ao primeiro run existente (ou cria um novo)
+                             paragraph.runs[0].text = new_text
+                        else:
+                             paragraph.add_run(new_text) # Adiciona um novo run
+                        print(f"DEBUG_LOG (docx_replace_text_in_element): Substituído '{placeholder}' por '{value}'")
 
 
-def preencher_proposta_docx(doc, nome_empresa_val, nome_responsavel_val, nome_consultor_val, 
-                            validade_proposta_dt_val, 
-                            produtos_selecionados_dict, 
-                            produtos_descricao_dict,   
+def preencher_proposta_docx(doc, nome_empresa_val, nome_responsavel_val, nome_consultor_val,
+                            validade_proposta_dt_val,
+                            produtos_selecionados_dict,
+                            produtos_descricao_dict,
                             soma_total_mensal_por_veiculo_decimal,
-                            qtd_veiculos_val, 
-                            tempo_contrato_str_val, 
+                            qtd_veiculos_val,
+                            tempo_contrato_str_val,
                             valor_mensal_total_frota_val,
-                            valor_total_do_contrato_val 
+                            valor_total_do_contrato_val
                            ):
     print(f"DEBUG_LOG (preencher_proposta_docx): Iniciando preenchimento para '{nome_empresa_val}'.")
-    
-    # Define os placeholders e seus valores
-    # USE ESTES PLACEHOLDERS EXATAMENTE NO SEU ARQUIVO .DOCX
-    placeholders_a_substituir = {
+
+    placeholders_gerais = {
         "{{NOME_EMPRESA}}": nome_empresa_val,
         "{{NOME_RESPONSAVEL}}": nome_responsavel_val,
         "{{DATA_VALIDADE}}": validade_proposta_dt_val.strftime("%d/%m/%Y"),
@@ -158,11 +149,21 @@ def preencher_proposta_docx(doc, nome_empresa_val, nome_responsavel_val, nome_co
         "{{VALOR_MENSAL_FROTA}}": f"R$ {valor_mensal_total_frota_val:,.2f}",
         "{{VALOR_TOTAL_CONTRATO}}": f"R$ {valor_total_do_contrato_val:,.2f}"
     }
-    
-    docx_replace_text(doc, placeholders_a_substituir)
+    print(f"DEBUG_LOG (preencher_proposta_docx): Placeholders a serem substituídos: {placeholders_gerais}")
+
+    print("DEBUG_LOG (preencher_proposta_docx): Substituindo placeholders em parágrafos do corpo...")
+    for paragraph in doc.paragraphs:
+        docx_replace_text_in_element(paragraph, placeholders_gerais)
+
+    print("DEBUG_LOG (preencher_proposta_docx): Substituindo placeholders em tabelas do corpo...")
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                docx_replace_text_in_element(cell, placeholders_gerais) # Passa a célula como elemento
+    print("DEBUG_LOG (preencher_proposta_docx): Substituição de placeholders gerais concluída.")
 
     table_to_fill = None
-    expected_headers = ["Item", "Descrição", "Preço | Mês"] 
+    expected_headers = ["Item", "Descrição", "Preço | Mês"]
     print(f"DEBUG_LOG (preencher_proposta_docx): Cabeçalhos esperados na tabela de itens: {expected_headers}")
     table_found_and_filled_correctly = False
 
@@ -171,6 +172,8 @@ def preencher_proposta_docx(doc, nome_empresa_val, nome_responsavel_val, nome_co
         if len(table.rows) > 0 and len(table.columns) >= len(expected_headers):
             header_cells_text_from_doc = [cell.text.strip().lower() for cell in table.rows[0].cells[:len(expected_headers)]]
             expected_headers_lower = [h.lower() for h in expected_headers]
+            print(f"DEBUG_LOG (preencher_proposta_docx): Tabela {table_idx} Cabeçalhos (lower): {header_cells_text_from_doc}, Esperados (lower): {expected_headers_lower}")
+            
             if header_cells_text_from_doc == expected_headers_lower:
                 table_to_fill = table
                 print(f"INFO_LOG (preencher_proposta_docx): Tabela de itens encontrada (Índice: {table_idx}).")
@@ -206,7 +209,7 @@ def preencher_proposta_docx(doc, nome_empresa_val, nome_responsavel_val, nome_co
 
 
 # --- Formulário para Gerar Proposta ---
-if produtos_selecionados_pj: 
+if produtos_selecionados_pj:
     st.markdown("---")
     st.subheader("📄 Gerar Proposta")
 
@@ -214,11 +217,11 @@ if produtos_selecionados_pj:
         st.warning("⚠️ Geração de PDF (CloudConvert) desativada: Chave API não configurada.")
         print("WARN_LOG (Simulador_PJ.py): Geração de PDF desativada.")
 
-    with st.form(f"formulario_proposta_pj_v21_final", clear_on_submit=False): 
-        form_nome_empresa = st.text_input("Nome da Empresa", key="pj_form_nome_empresa_v21_final")
-        form_nome_responsavel = st.text_input("Nome do Responsável", key="pj_form_nome_responsavel_v21_final")
-        form_nome_consultor = st.text_input("Nome do Consultor Comercial", value=current_name, key="pj_form_nome_consultor_v21_final")
-        form_validade_proposta_dt = st.date_input("Validade da Proposta", value=datetime.today(), key="pj_form_validade_proposta_v21_final")
+    with st.form(f"formulario_proposta_pj_v22_final", clear_on_submit=False):
+        form_nome_empresa = st.text_input("Nome da Empresa", key="pj_form_nome_empresa_v22_final")
+        form_nome_responsavel = st.text_input("Nome do Responsável", key="pj_form_nome_responsavel_v22_final")
+        form_nome_consultor = st.text_input("Nome do Consultor Comercial", value=current_name, key="pj_form_nome_consultor_v22_final")
+        form_validade_proposta_dt = st.date_input("Validade da Proposta", value=datetime.today(), key="pj_form_validade_proposta_v22_final")
         
         col_btn_form1, col_btn_form2 = st.columns(2)
         with col_btn_form1:
@@ -235,13 +238,13 @@ if produtos_selecionados_pj:
         else:
             try:
                 doc_template_path = "Proposta Comercial e Intenção - Verdio.docx" #
-                doc = Document(doc_template_path) 
+                doc = Document(doc_template_path)
                 
                 tabela_foi_preenchida = preencher_proposta_docx(
-                    doc, form_nome_empresa, form_nome_responsavel, form_nome_consultor, 
-                    form_validade_proposta_dt, produtos_selecionados_pj, 
+                    doc, form_nome_empresa, form_nome_responsavel, form_nome_consultor,
+                    form_validade_proposta_dt, produtos_selecionados_pj,
                     produtos_descricao, soma_mensal_produtos_selecionados_calculada,
-                    qtd_veiculos_input, temp_contrato_selecionado_str, 
+                    qtd_veiculos_input, temp_contrato_selecionado_str,
                     valor_mensal_total_frota_calculado, valor_total_contrato_calculado
                 )
                 
@@ -257,7 +260,7 @@ if produtos_selecionados_pj:
                     data=buffer_docx,
                     file_name=f"Proposta_Verdio_{form_nome_empresa.replace(' ', '_')}_{form_validade_proposta_dt.strftime('%Y%m%d')}.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    key="pj_download_docx_btn_v21_final" 
+                    key="pj_download_docx_btn_v22_final"
                 )
                 st.success("Proposta em DOCX pronta para download!")
 
@@ -268,7 +271,7 @@ if produtos_selecionados_pj:
                 st.error(f"Erro inesperado ao gerar proposta DOCX: {e_gerar_docx}")
                 print(f"ERROR_LOG (Simulador_PJ.py): Erro na geração DOCX: {type(e_gerar_docx).__name__} - {e_gerar_docx}")
 
-    if gerar_pdf_cloudconvert_btn and api_key_presente: 
+    if gerar_pdf_cloudconvert_btn and api_key_presente:
         print(f"INFO_LOG (Simulador_PJ.py): Botão 'Gerar PDF (CloudConvert)' clicado. Empresa: {form_nome_empresa}")
         if not all([form_nome_empresa, form_nome_responsavel, form_nome_consultor]):
             st.warning("Preencha os dados da proposta (Empresa, Responsável, Consultor).")
@@ -280,8 +283,8 @@ if produtos_selecionados_pj:
                 doc = Document(doc_template_path)
                 
                 tabela_foi_preenchida_pdf = preencher_proposta_docx(
-                    doc, form_nome_empresa, form_nome_responsavel, form_nome_consultor, 
-                    form_validade_proposta_dt, produtos_selecionados_pj, 
+                    doc, form_nome_empresa, form_nome_responsavel, form_nome_consultor,
+                    form_validade_proposta_dt, produtos_selecionados_pj,
                     produtos_descricao, soma_mensal_produtos_selecionados_calculada,
                     qtd_veiculos_input, temp_contrato_selecionado_str,
                     valor_mensal_total_frota_calculado, valor_total_contrato_calculado
@@ -296,18 +299,17 @@ if produtos_selecionados_pj:
                 print("INFO_LOG (Simulador_PJ.py): DOCX gerado para conversão PDF.")
 
                 with st.spinner("Gerando PDF da proposta via CloudConvert, aguarde..."):
-                    headers = {"Authorization": f"Bearer {API_KEY_CLOUDCONVERT}"} 
+                    headers = {"Authorization": f"Bearer {API_KEY_CLOUDCONVERT}"}
                     job_payload = {
                         "tasks": {
-                            "import-docx": {"operation": "import/upload", "filename": f"proposta_{form_nome_empresa.replace(' ', '_')}.docx"}, # Usa nome do formulário
+                            "import-docx": {"operation": "import/upload", "filename": f"proposta_{form_nome_empresa.replace(' ', '_')}.docx"},
                             "convert-to-pdf": {"operation": "convert", "input": "import-docx", "input_format": "docx", "output_format": "pdf", "engine": "libreoffice"},
                             "export-pdf": {"operation": "export/url", "input": "convert-to-pdf", "inline": False, "archive_multiple_files": False}
                         }
                     }
                     # ... (Resto da lógica do CloudConvert como na versão anterior) ...
-                    # (Certifique-se que API_KEY_CLOUDCONVERT é usada nos headers)
                     job_creation_response = requests.post('https://api.cloudconvert.com/v2/jobs', json=job_payload, headers=headers)
-                    job_creation_response.raise_for_status() 
+                    job_creation_response.raise_for_status()
                     job_data = job_creation_response.json()
                     
                     upload_task_id = None; upload_url = None; upload_parameters = None
@@ -317,11 +319,11 @@ if produtos_selecionados_pj:
                             if task_details.get('result') and task_details['result'].get('form'):
                                 upload_url = task_details['result']['form'].get('url')
                                 upload_parameters = task_details['result']['form'].get('parameters')
-                            break 
+                            break
                     
                     if not upload_url or upload_parameters is None:
                         st.error("Falha ao obter URL/parâmetros de upload do CloudConvert.")
-                        st.stop() 
+                        st.stop()
                     
                     files_payload_for_upload = {'file': (f"proposta_{form_nome_empresa.replace(' ', '_')}.docx", buffer_docx_for_pdf, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')}
                     upload_post_response = requests.post(upload_url, data=upload_parameters, files=files_payload_for_upload)
@@ -330,11 +332,11 @@ if produtos_selecionados_pj:
                     job_id = job_data['data']['id']
                     status_check_url = f'https://api.cloudconvert.com/v2/jobs/{job_id}'
                     
-                    max_wait_time_seconds = 120 
+                    max_wait_time_seconds = 120
                     start_process_time = time.time()
                     pdf_download_url = None
                     final_job_status = None
-                    with st.empty(): 
+                    with st.empty():
                         while time.time() - start_process_time < max_wait_time_seconds:
                             st.write(f"Verificando status da conversão (Job ID: {job_id})...")
                             job_status_response = requests.get(status_check_url, headers=headers)
@@ -346,28 +348,28 @@ if produtos_selecionados_pj:
                             if current_job_status == 'finished':
                                 final_job_status = 'finished'
                                 for task_data_loop in job_status_data['data']['tasks']:
-                                    if task_data_loop.get('operation') == 'export/url' and task_data_loop.get('status') == 'finished': 
+                                    if task_data_loop.get('operation') == 'export/url' and task_data_loop.get('status') == 'finished':
                                         if task_data_loop.get('result') and task_data_loop['result'].get('files') and len(task_data_loop['result']['files']) > 0:
                                             pdf_download_url = task_data_loop['result']['files'][0]['url']
-                                            break 
-                                if pdf_download_url: break 
+                                            break
+                                if pdf_download_url: break
                             elif current_job_status == 'error':
                                 final_job_status = 'error'
                                 # (lógica de extração de erro)
                                 st.error(f"Erro na conversão PDF via CloudConvert.")
-                                break 
-                            time.sleep(4) 
+                                break
+                            time.sleep(4)
                         
                         if pdf_download_url:
-                            pdf_file_content = requests.get(pdf_download_url).content 
+                            pdf_file_content = requests.get(pdf_download_url).content
                             st.download_button(
                                 label="📥 Baixar Proposta em PDF",
                                 data=pdf_file_content,
                                 file_name=f"Proposta_Verdio_{form_nome_empresa.replace(' ', '_')}_{form_validade_proposta_dt.strftime('%Y%m%d')}.pdf",
                                 mime="application/pdf",
-                                key="pj_download_pdf_btn_v21_final_cc" 
+                                key="pj_download_pdf_btn_v22_final_cc"
                             )
-                        elif final_job_status != 'error': 
+                        elif final_job_status != 'error':
                             st.error("Não foi possível obter o PDF ou tempo de espera excedido.")
 
             except FileNotFoundError:
@@ -378,9 +380,9 @@ if produtos_selecionados_pj:
                 st.error(f"Erro inesperado ao gerar proposta PDF: {e_gerar_pdf}")
                 print(f"ERROR_LOG (Simulador_PJ.py): Erro na geração PDF: {type(e_gerar_pdf).__name__} - {e_gerar_pdf}")
     
-elif not api_key_presente and produtos_selecionados_pj: 
-    pass 
-elif not produtos_selecionados_pj: 
+elif not api_key_presente and produtos_selecionados_pj:
+    pass
+elif not produtos_selecionados_pj:
     st.info("Selecione produtos para preencher dados e gerar uma proposta.")
 
 print("INFO_LOG (Simulador_PJ.py): Renderização da página PJ concluída.")
