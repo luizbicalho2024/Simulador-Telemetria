@@ -1,281 +1,287 @@
-# Simulador_Comercial.py
+# user_management_db.py
 import streamlit as st
-import pandas as pd
+from pymongo import MongoClient, errors as pymongo_errors
+from streamlit_authenticator.utilities.hasher import Hasher # Importação correta
+import certifi 
 
-# --- Configuração Inicial da Página ---
-st.set_page_config(page_title="Simulador Telemetria Principal", layout="wide")
-print(f"INFO_LOG (Simulador_Comercial.py): Página configurada. Streamlit version: {st.__version__}")
+# --- Configurações do Banco de Dados ---
+@st.cache_resource(show_spinner="Conectando ao Banco de Dados...")
+def get_mongo_client():
+    print("INFO_LOG (user_management_db.py): get_mongo_client() chamado.")
+    if "MONGO_CONNECTION_STRING" not in st.secrets:
+        st.error("CONFIGURAÇÃO CRÍTICA AUSENTE (user_management_db.py): 'MONGO_CONNECTION_STRING' não definida nos segredos.")
+        print("CRITICAL_ERROR_LOG (user_management_db.py): MONGO_CONNECTION_STRING not found in Streamlit Cloud secrets.")
+        return None
+    
+    CONNECTION_STRING = st.secrets["MONGO_CONNECTION_STRING"]
+    
+    try:
+        print("INFO_LOG (user_management_db.py): Tentando conectar ao MongoDB com PyMongo...")
+        client = MongoClient(
+            CONNECTION_STRING,
+            tlsCAFile=certifi.where(), 
+            serverSelectionTimeoutMS=25000, 
+            socketTimeoutMS=25000,          
+            connectTimeoutMS=25000          
+            # , tlsAllowInvalidCertificates=True # MANTENHA COMENTADO EM PRODUÇÃO
+        )
+        client.admin.command('ping') 
+        print("INFO_LOG (user_management_db.py): Conexão com MongoDB Atlas bem-sucedida.")
+        return client
+    except pymongo_errors.ConfigurationError as ce:
+        st.error(f"ERRO DE CONFIGURAÇÃO DO PYMONGO (user_management_db.py): {ce}")
+        print(f"PYMONGO_CONFIG_ERROR_LOG (user_management_db.py): {ce}")
+        return None
+    except pymongo_errors.ServerSelectionTimeoutError as sste:
+        st.error(f"TIMEOUT AO CONECTAR AO MONGODB (user_management_db.py): {sste}")
+        print(f"MONGODB_TIMEOUT_ERROR_LOG (user_management_db.py): {sste}")
+        return None
+    except Exception as e:
+        st.error(f"ERRO GERAL AO CONECTAR AO MONGODB (user_management_db.py): {e}")
+        print(f"MONGODB_GENERAL_CONNECTION_ERROR_LOG (user_management_db.py): {e}, Type: {type(e)}")
+        return None
 
-# --- Importação Segura de Módulos Essenciais ---
-umdb = None 
-try:
-    import user_management_db as umdb_module
-    umdb = umdb_module 
-    print("INFO_LOG (Simulador_Comercial.py): Módulo user_management_db importado com sucesso.")
-except ModuleNotFoundError:
-    st.error("ERRO CRÍTICO: O arquivo 'user_management_db.py' não foi encontrado.")
-    print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): user_management_db.py não encontrado.")
-    st.stop() 
-except ImportError as ie_umdb:
-    st.error(f"ERRO CRÍTICO AO IMPORTAR user_management_db: {ie_umdb}")
-    print(f"CRITICAL_IMPORT_ERROR_LOG (Simulador_Comercial.py): user_management_db: {ie_umdb}")
-    st.stop()
-except Exception as e_umdb_general: 
-    st.error(f"ERRO INESPERADO AO IMPORTAR user_management_db: {e_umdb_general}")
-    print(f"UNEXPECTED_IMPORT_ERROR_LOG (Simulador_Comercial.py): user_management_db: {e_umdb_general}")
-    st.stop()
-
-stauth = None 
-try:
-    import streamlit_authenticator as stauth_module 
-    stauth = stauth_module 
-    if hasattr(stauth, '__version__'):
-        print(f"INFO_LOG (Simulador_Comercial.py): streamlit_authenticator importado. Versão: {stauth.__version__}")
-    else:
-        print(f"INFO_LOG (Simulador_Comercial.py): streamlit_authenticator importado, mas sem atributo __version__.")
-except ModuleNotFoundError:
-    st.error("ERRO CRÍTICO: A biblioteca 'streamlit-authenticator' não está instalada. Verifique requirements.txt e logs de build.")
-    print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): streamlit-authenticator NÃO ENCONTRADO.")
-    st.stop()
-except ImportError as ie_stauth:
-    st.error(f"ERRO CRÍTICO AO IMPORTAR streamlit_authenticator: {ie_stauth}")
-    print(f"CRITICAL_IMPORT_ERROR_LOG (Simulador_Comercial.py): streamlit_authenticator (ImportError): {ie_stauth}")
-    st.stop()
-except Exception as e_stauth_general: 
-    st.error(f"ERRO INESPERADO AO IMPORTAR streamlit_authenticator: {e_stauth_general}")
-    print(f"UNEXPECTED_IMPORT_ERROR_LOG (Simulador_Comercial.py): streamlit_authenticator (Exception): {e_stauth_general}")
-    st.stop()
-
-if umdb is None or stauth is None:
-    st.error("ERRO CRÍTICO: Falha ao carregar módulos essenciais. App não pode continuar.")
-    print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): umdb ou stauth é None.")
-    st.stop()
-
-# --- Carregamento de Credenciais e Configuração do Autenticador ---
-print("INFO_LOG (Simulador_Comercial.py): Buscando credenciais...")
-credentials = umdb.fetch_all_users_for_auth() 
-client_available = umdb.get_mongo_client() is not None 
-
-print(f"DEBUG_LOG (Simulador_Comercial.py): client_available = {client_available}")
-print(f"DEBUG_LOG (Simulador_Comercial.py): credentials (tipo: {type(credentials)}) = {credentials}")
-
-auth_cookie_name = st.secrets.get("AUTH_COOKIE_NAME")
-auth_cookie_key = st.secrets.get("AUTH_COOKIE_KEY")
-auth_cookie_expiry_days = st.secrets.get("AUTH_COOKIE_EXPIRY_DAYS", 30) 
-
-if not auth_cookie_name or not auth_cookie_key:
-    st.error("ERRO DE CONFIGURAÇÃO CRÍTICO: Chaves de cookie não definidas nos segredos.")
-    print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): Chaves de cookie ausentes.")
-    st.stop()
-
-try:
-    print(f"INFO_LOG (Simulador_Comercial.py): Inicializando Authenticator...")
-    authenticator = stauth.Authenticate(
-        credentials, auth_cookie_name, auth_cookie_key, cookie_expiry_days=auth_cookie_expiry_days
-    )
-    print("INFO_LOG (Simulador_Comercial.py): Autenticador inicializado.")
-except Exception as e_auth_init:
-    st.error(f"ERRO CRÍTICO AO INICIALIZAR O AUTENTICADOR: {e_auth_init}")
-    print(f"AUTHENTICATOR_INIT_ERROR_LOG (Simulador_Comercial.py): {e_auth_init}, Credentials: {credentials}")
-    st.stop()
-
-# --- Lógica Principal ---
-if not client_available:
-    st.title("Simulador Telemetria")
-    st.error("FALHA CRÍTICA NA CONEXÃO COM O BANCO DE DADOS.")
-    print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): client_available é False. Parando.")
-    st.stop()
-
-if not credentials.get("usernames"): 
-    st.title("Bem-vindo ao Simulador Telemetria! 🚀")
-    st.subheader("Configuração Inicial: Criar Conta de Administrador")
-    print("INFO_LOG (Simulador_Comercial.py): Nenhum usuário. Exibindo formulário de criação do primeiro admin.")
-    with st.form("FormCriarPrimeiroAdmin_v12_main"): 
-        admin_name = st.text_input("Nome Completo", key="init_admin_name_v12_main")
-        admin_username = st.text_input("Nome de Usuário (login)", key="init_admin_uname_v12_main")
-        admin_email = st.text_input("Email", key="init_admin_email_v12_main")
-        admin_password = st.text_input("Senha", type="password", key="init_admin_pass_v12_main")
-        submit_admin = st.form_submit_button("Criar Administrador")
-        if submit_admin:
-            if all([admin_name, admin_username, admin_email, admin_password]):
-                if umdb.add_user(admin_username, admin_name, admin_email, admin_password, "admin"):
-                    st.success("Conta de administrador criada! Recarregando...")
-                    print(f"INFO_LOG (Simulador_Comercial.py): Primeiro admin '{admin_username}' criado.")
-                    st.rerun()
-            else: st.warning("Preencha todos os campos.")
-    st.stop() 
-
-# --- Processo de Login ---
-print("INFO_LOG (Simulador_Comercial.py): Chamando authenticator.login()...")
-print(f"DEBUG_LOG (Simulador_Comercial.py): st.session_state ANTES do login: {st.session_state.to_dict()}")
-
-name, authentication_status, username = None, None, None 
-login_attempted_flag = False 
-
-try:
-    login_return_value = authenticator.login(location='main')
-    login_attempted_flag = True 
-    print(f"DEBUG_LOG (Simulador_Comercial.py): authenticator.login() retornou: {login_return_value} (Tipo: {type(login_return_value)})")
-    if login_return_value is not None and isinstance(login_return_value, tuple) and len(login_return_value) == 3:
-        name, authentication_status, username = login_return_value
-    elif login_return_value is None:
-        print("WARN_LOG (Simulador_Comercial.py): authenticator.login() retornou None.")
-        authentication_status = None 
-    else: 
-        st.error(f"ERRO INESPERADO NO LOGIN: Retorno malformado: {login_return_value}")
-        print(f"UNEXPECTED_LOGIN_RETURN_ERROR_LOG (Simulador_Comercial.py): Valor: {login_return_value}")
-        st.stop()
-except Exception as e_login:
-    st.error(f"ERRO CRÍTICO DURANTE authenticator.login(): {e_login}")
-    print(f"CRITICAL_AUTHENTICATOR_LOGIN_ERROR_LOG (Simulador_Comercial.py): Exception: {e_login}")
-    print(f"DEBUG_LOG (Simulador_Comercial.py): st.session_state na exceção: {st.session_state.to_dict()}")
-    st.stop()
-
-print(f"INFO_LOG (Simulador_Comercial.py): Pós login - Status: {authentication_status}, User: {username}")
-
-if authentication_status is False:
-    st.error("Nome de usuário ou senha incorreto(s).")
-elif authentication_status is None:
-    if login_attempted_flag and login_return_value is None:
-        st.warning("Ocorreu um problema ao processar o login. Verifique os logs e tente novamente.")
-    else: 
-        st.info("Por favor, insira seu nome de usuário e senha.")
-elif authentication_status: 
-    st.session_state.name = name
-    st.session_state.username = username
-    st.session_state.authentication_status = authentication_status
-    st.session_state.role = umdb.get_user_role(username)
-    if st.session_state.role is None:
-        st.error("ERRO PÓS-LOGIN: Não foi possível determinar seu nível de acesso.")
-        print(f"ERROR_LOG (Simulador_Comercial.py): Falha ao obter role para '{username}'.")
-        authenticator.logout("Logout (Erro de Role)", "sidebar")
-        st.stop()
-    print(f"INFO_LOG (Simulador_Comercial.py): Usuário '{username}' logado. Role: '{st.session_state.role}'.")
-
-    st.sidebar.title(f"Bem-vindo(a), {name}!")
-    authenticator.logout("Logout", "sidebar")
-
-    # --- SEÇÕES DE USUÁRIO E ADMIN ---
-    if st.session_state.role == "user":
-        st.sidebar.subheader("Minha Conta")
-        print(f"DEBUG_LOG (Simulador_Comercial.py): Usuário '{username}' na seção de usuário.")
-        try:
-            print(f"DEBUG_LOG (Simulador_Comercial.py): Verificando se authenticator tem 'change_password': {hasattr(authenticator, 'change_password')}")
-            # Tenta chamar o método change_password
-            if authenticator.change_password(username, 'Alterar Senha', location='sidebar'): # Este é o método que está causando AttributeError
-                new_hashed_pass = authenticator.credentials['usernames'][username]['password'] 
-                if umdb.update_user_password_self(username, new_hashed_pass):
-                    st.sidebar.success('Senha alterada com sucesso!')
-                    print(f"INFO_LOG (Simulador_Comercial.py): Senha alterada para '{username}' pelo próprio usuário.")
-                else:
-                    st.sidebar.error('Falha ao salvar nova senha no banco.')
-                    print(f"ERROR_LOG (Simulador_Comercial.py): Falha ao chamar umdb.update_user_password_self para '{username}'.")
-        except AttributeError as ae:
-            st.sidebar.error(f"ERRO INTERNO: A funcionalidade 'Alterar Senha' não está disponível. ({ae})")
-            print(f"ATTRIBUTE_ERROR_LOG (Simulador_Comercial.py - change_password): {ae}")
-            st.sidebar.info("Contate o administrador para problemas com sua senha.")
-        except Exception as e_change_pass:
-            st.sidebar.error(f"Erro ao tentar alterar senha: {e_change_pass}")
-            print(f"CHANGE_PASSWORD_ERROR_LOG (Simulador_Comercial.py): User '{username}', {e_change_pass}")
-        st.sidebar.info("Acesso de visualização aos simuladores.")
-
-    elif st.session_state.role == "admin":
-        st.sidebar.subheader("Painel de Administração")
-        admin_action_options = ["Ver Usuários", "Cadastrar Novo Usuário", "Editar Usuário",
-                                "Excluir Usuário", "Redefinir Senha de Usuário"]
-        admin_action = st.sidebar.selectbox("Gerenciar Usuários", admin_action_options, key="admin_action_sb_v12_main")
+@st.cache_resource
+def get_users_collection():
+    print("INFO_LOG (user_management_db.py): get_users_collection() chamado.")
+    client = get_mongo_client()
+    if client is None:
+        print("WARN_LOG (user_management_db.py - get_users_collection): Cliente MongoDB é None.")
+        return None
+    try:
+        db_name = st.secrets.get("MONGO_DB_NAME", "simulador_db") 
+        collection_name = st.secrets.get("MONGO_USERS_COLLECTION", "users")
         
-        current_db_users_dict = umdb.fetch_all_users_for_auth().get("usernames", {})
-        
-        if admin_action == "Ver Usuários":
-            st.subheader("Usuários Cadastrados")
-            # ... (código como antes) ...
-            users_for_display = umdb.get_all_users_for_admin_display()
-            if users_for_display:
-                df_users = pd.DataFrame(users_for_display)
-                st.dataframe(df_users, use_container_width=True, hide_index=True)
-            else:
-                st.info("Nenhum usuário cadastrado.")
+        db = client[db_name]
+        users_collection = db[collection_name]
+        print(f"INFO_LOG (user_management_db.py): Acessando DB: '{db_name}', Coleção: '{collection_name}'")
+        return users_collection
+    except Exception as e:
+        st.error(f"ERRO ao obter coleção '{collection_name}' do DB '{db_name}' (user_management_db.py): {e}")
+        print(f"GET_COLLECTION_ERROR_LOG (user_management_db.py): DB='{db_name}', Collection='{collection_name}', Error: {e}")
+        return None
 
-        elif admin_action == "Cadastrar Novo Usuário":
-            st.subheader("Cadastrar Novo Usuário")
-            # ... (código como antes, com chaves únicas) ...
-            with st.form("form_admin_cadastrar_usuario_v12_main", clear_on_submit=True):
-                reg_name_adm = st.text_input("Nome Completo", key="adm_reg_name_v12_main")
-                reg_uname_adm = st.text_input("Nome de Usuário (login)", key="adm_reg_uname_v12_main")
-                reg_email_adm = st.text_input("Email", key="adm_reg_email_v12_main")
-                reg_pass_adm = st.text_input("Senha", type="password", key="adm_reg_pass_v12_main")
-                reg_role_adm = st.selectbox("Papel", ["user", "admin"], key="adm_reg_role_v12_main")
-                if st.form_submit_button("Cadastrar Usuário"):
-                    if all([reg_name_adm, reg_uname_adm, reg_email_adm, reg_pass_adm, reg_role_adm]):
-                        if umdb.add_user(reg_uname_adm, reg_name_adm, reg_email_adm, reg_pass_adm, reg_role_adm):
-                            st.rerun() 
-                    else:
-                        st.warning("Preencha todos os campos.")
-        
-        elif admin_action == "Editar Usuário":
-            st.subheader("⚙️ Editar Usuário")
-            # ... (código como antes, com chaves únicas e correção no st.form) ...
-            if not current_db_users_dict:
-                st.info("Nenhum usuário disponível para edição.")
-            else:
-                usernames_list_edit = list(current_db_users_dict.keys())
-                user_to_edit_uname = st.selectbox("Usuário a editar:", usernames_list_edit, key="adm_edit_sel_user_v12_main")
-                
-                if user_to_edit_uname:
-                    user_data_for_form = current_db_users_dict.get(user_to_edit_uname)
-                    if user_data_for_form:
-                        with st.form(f"form_edit_user_{user_to_edit_uname}_v12_main", clear_on_submit=False): 
-                            st.write(f"Editando dados para: **{user_to_edit_uname}**")
-                            edit_name = st.text_input("Nome Completo:", value=user_data_for_form.get('name', ''), key=f"adm_edit_name_val_{user_to_edit_uname}_v12_main")
-                            edit_email = st.text_input("Email:", value=user_data_for_form.get('email', ''), key=f"adm_edit_email_val_{user_to_edit_uname}_v12_main")
-                            roles_options = ["user", "admin"]
-                            current_role = user_data_for_form.get('role', 'user')
-                            try: current_role_idx_edit = roles_options.index(current_role)
-                            except ValueError: current_role_idx_edit = 0 
-                            edit_role = st.selectbox("Novo Papel:", roles_options, index=current_role_idx_edit, key=f"adm_edit_role_val_{user_to_edit_uname}_v12_main")
-                            if st.form_submit_button("Salvar Alterações"):
-                                if umdb.update_user_details(user_to_edit_uname, edit_name, edit_email, edit_role):
-                                    st.rerun() 
-                    else:
-                        st.error(f"Não foi possível carregar os dados do usuário '{user_to_edit_uname}'.")
-        
-        elif admin_action == "Redefinir Senha de Usuário":
-            st.subheader("🔑 Redefinir Senha de Usuário")
-            # ... (código como antes, com chaves únicas e correção no st.form) ...
-            if not current_db_users_dict:
-                st.info("Nenhum usuário disponível para redefinir senha.")
-            else:
-                usernames_list_reset = list(current_db_users_dict.keys())
-                user_to_reset_uname = st.selectbox("Usuário:", usernames_list_reset, key="adm_reset_sel_user_v12_main")
-                if user_to_reset_uname:
-                    with st.form(f"form_reset_pass_{user_to_reset_uname}_v12_main", clear_on_submit=True):
-                        st.write(f"Redefinindo senha para: **{user_to_reset_uname}**")
-                        new_pass = st.text_input("Nova Senha:", type="password", key=f"adm_reset_new_pass_{user_to_reset_uname}_v12_main")
-                        confirm_pass = st.text_input("Confirmar Nova Senha:", type="password", key=f"adm_reset_conf_pass_{user_to_reset_uname}_v12_main")
-                        if st.form_submit_button("Redefinir Senha"):
-                            if not new_pass: st.warning("O campo 'Nova Senha' não pode ser vazio.")
-                            elif new_pass != confirm_pass: st.warning("As senhas não coincidem.")
-                            else:
-                                if umdb.update_user_password_by_admin(user_to_reset_uname, new_pass):
-                                    st.rerun() 
-                        
-        elif admin_action == "Excluir Usuário": 
-            st.subheader("🗑️ Excluir Usuário")
-            # ... (código como antes, com chaves únicas) ...
-            if not current_db_users_dict:
-                st.info("Nenhum usuário para excluir.")
-            else:
-                user_to_delete_uname = st.selectbox("Usuário a excluir:", list(current_db_users_dict.keys()), key="adm_del_sel_user_v12_main")
-                if user_to_delete_uname:
-                    st.warning(f"Confirma a exclusão de '{user_to_delete_uname}'?")
-                    if st.button(f"Excluir {user_to_delete_uname}", type="primary", key=f"adm_del_btn_{user_to_delete_uname}_v12_main"):
-                        if umdb.delete_user(user_to_delete_uname):
-                            st.rerun()
-        st.sidebar.info("Acesso de administrador.")
+def fetch_all_users_for_auth():
+    print("INFO_LOG (user_management_db.py): fetch_all_users_for_auth() chamado.")
+    users_collection = get_users_collection()
+    default_credentials = {"usernames": {}} 
+    if users_collection is None:
+        print("WARN_LOG (user_management_db.py - fetch_all_users): Coleção não disponível. Retornando credenciais vazias.")
+        return default_credentials
+    try:
+        users_from_db = list(users_collection.find({}))
+        if not users_from_db:
+            print("INFO_LOG (user_management_db.py - fetch_all_users): Nenhum usuário no banco.")
+    except Exception as e:
+        st.error(f"ERRO ao buscar usuários do DB (fetch_all_users_for_auth): {e}")
+        print(f"FETCH_USERS_DB_ERROR_LOG (user_management_db.py): {e}")
+        return default_credentials
+    credentials = {"usernames": {}}
+    for user_doc in users_from_db:
+        if not all(key in user_doc for key in ["username", "name", "hashed_password", "role"]):
+            print(f"WARN_LOG (user_management_db.py - fetch_all_users): Usuário com dados incompletos (ID: {user_doc.get('_id', 'N/A')}).")
+            continue
+        credentials["usernames"][user_doc["username"]] = {
+            "name": user_doc["name"],
+            "email": user_doc.get("email", ""),
+            "password": user_doc["hashed_password"], # Este é o hash armazenado
+            "role": user_doc["role"]
+        }
+    print(f"INFO_LOG (user_management_db.py - fetch_all_users): {len(credentials['usernames'])} usuários carregados.")
+    return credentials
 
-    # --- Conteúdo Principal da Página Pós-Login ---
-    st.markdown("---") 
-    st.header("Simulador de Telemetria Principal")
-    st.write("Navegue pelas funcionalidades usando o menu lateral.")
-    st.write("As páginas específicas do simulador estarão disponíveis no menu de navegação da barra lateral.")
+def get_user_hashed_password(username: str):
+    """Busca o hash da senha de um usuário específico."""
+    users_collection = get_users_collection()
+    if users_collection is None or not username:
+        return None
+    try:
+        user_data = users_collection.find_one({"username": username}, {"hashed_password": 1})
+        return user_data.get("hashed_password") if user_data else None
+    except Exception as e:
+        print(f"GET_HASHED_PASSWORD_ERROR_LOG (user_management_db.py): User='{username}', Error: {e}")
+        return None
+
+def update_user_password_manual(username: str, new_plain_password: str):
+    """Atualiza a senha de um usuário (usado para alteração manual pelo usuário)."""
+    users_collection = get_users_collection()
+    if users_collection is None:
+        st.error("FALHA (update_user_password_manual): Coleção de usuários indisponível.")
+        return False
+    if not new_plain_password:
+        st.warning("Nova senha não pode ser vazia.")
+        return False
+    try:
+        new_hashed_password = Hasher([new_plain_password]).generate()[0]
+        result = users_collection.update_one(
+            {"username": username},
+            {"$set": {"hashed_password": new_hashed_password}}
+        )
+        if result.modified_count > 0:
+            print(f"INFO_LOG (user_management_db.py - update_user_password_manual): Senha para '{username}' atualizada manualmente.")
+            return True
+        elif result.matched_count > 0 : # Usuário encontrado mas senha não mudou (pode ser a mesma)
+            print(f"INFO_LOG (user_management_db.py - update_user_password_manual): Senha para '{username}' não modificada (pode ser a mesma), mas usuário existe.")
+            return True # Considera sucesso se a operação foi "concluída"
+        else:
+            st.warning(f"Usuário '{username}' não encontrado para atualização de senha manual.")
+            return False
+    except Exception as e:
+        st.error(f"ERRO ao atualizar senha manualmente para '{username}': {e}")
+        print(f"UPDATE_PASSWORD_MANUAL_ERROR_LOG (user_management_db.py): User='{username}', Error: {e}")
+        return False
+
+
+def get_user_role(username: str):
+    # ... (código como antes) ...
+    users_collection = get_users_collection()
+    if users_collection is None or not username: return None
+    try:
+        user_data = users_collection.find_one({"username": username})
+        role = user_data.get("role") if user_data else None
+        # print(f"INFO_LOG (user_management_db.py - get_user_role): Role para '{username}': {role}") # Removido para reduzir logs repetitivos
+        return role
+    except Exception as e:
+        print(f"GET_ROLE_ERROR_LOG (user_management_db.py): User='{username}', Error: {e}")
+        return None
+
+
+def add_user(username: str, name: str, email: str, plain_password: str, role: str):
+    # ... (código como antes) ...
+    users_collection = get_users_collection()
+    if users_collection is None:
+        st.error("FALHA (add_user): Coleção de usuários indisponível.")
+        return False
+    try:
+        if users_collection.find_one({"username": username}):
+            st.warning(f"Usuário '{username}' já existe.")
+            return False
+        hashed_password = Hasher([plain_password]).generate()[0]
+        user_doc = {"username": username, "name": name, "email": email, "hashed_password": hashed_password, "role": role}
+        users_collection.insert_one(user_doc)
+        st.success(f"Usuário '{username}' cadastrado!")
+        print(f"INFO_LOG (user_management_db.py - add_user): Usuário '{username}' adicionado.")
+        return True
+    except Exception as e:
+        st.error(f"ERRO ao cadastrar usuário '{username}': {e}")
+        print(f"ADD_USER_ERROR_LOG (user_management_db.py): User='{username}', Error: {e}")
+        return False
+
+def update_user_details(username: str, new_name: str, new_email: str, new_role: str):
+    # ... (código como antes) ...
+    users_collection = get_users_collection()
+    if users_collection is None:
+        st.error("FALHA (update_user_details): Coleção de usuários indisponível.")
+        print("ERROR_LOG (user_management_db.py - update_user_details): Collection is None.")
+        return False
+    
+    update_fields = {}
+    if new_name is not None: update_fields["name"] = new_name 
+    if new_email is not None: update_fields["email"] = new_email 
+    if new_role is not None: update_fields["role"] = new_role
+
+    if not update_fields: 
+        st.info(f"Nenhum dado novo fornecido para o usuário '{username}'.")
+        return True 
+
+    try:
+        print(f"INFO_LOG (user_management_db.py - update_user_details): Atualizando '{username}' com: {update_fields}")
+        result = users_collection.update_one(
+            {"username": username}, 
+            {"$set": update_fields}
+        )
+        
+        if result.matched_count == 0:
+            st.warning(f"Usuário '{username}' não encontrado para atualização.")
+            print(f"WARN_LOG (user_management_db.py - update_user_details): Usuário '{username}' não encontrado (matched_count=0).")
+            return False
+        if result.modified_count > 0:
+            st.success(f"Detalhes do usuário '{username}' atualizados.")
+            print(f"INFO_LOG (user_management_db.py - update_user_details): Usuário '{username}' atualizado (modified_count > 0).")
+            return True
+        else: 
+            st.info(f"Nenhuma alteração efetiva nos dados do usuário '{username}'.")
+            print(f"INFO_LOG (user_management_db.py - update_user_details): Usuário '{username}' encontrado, mas modified_count é 0.")
+            return True 
+            
+    except Exception as e:
+        st.error(f"ERRO ao atualizar detalhes do usuário '{username}': {e}")
+        print(f"ERROR_LOG (user_management_db.py - update_user_details): User='{username}', Error: {e}")
+        return False
+
+def delete_user(username: str):
+    # ... (código como antes) ...
+    users_collection = get_users_collection()
+    if users_collection is None:
+        st.error("FALHA (delete_user): Coleção de usuários indisponível.")
+        return False
+    try:
+        is_current_user_admin = st.session_state.get("role") == "admin"
+        current_logged_in_username = st.session_state.get("username")
+        if is_current_user_admin and current_logged_in_username == username:
+            if users_collection.count_documents({"role": "admin"}) <= 1:
+                st.error("Não é possível excluir o único administrador.")
+                return False
+        result = users_collection.delete_one({"username": username})
+        if result.deleted_count > 0:
+            st.success(f"Usuário '{username}' excluído.")
+            return True
+        else:
+            st.warning(f"Usuário '{username}' não encontrado para exclusão.")
+            return False
+    except Exception as e:
+        st.error(f"ERRO ao excluir usuário '{username}': {e}")
+        return False
+
+
+def update_user_password_by_admin(username: str, plain_password: str):
+    # ... (código como antes, já usa Hasher) ...
+    users_collection = get_users_collection()
+    if users_collection is None:
+        st.error("FALHA (update_user_password_by_admin): Coleção de usuários indisponível.")
+        print("ERROR_LOG (user_management_db.py - update_user_password_by_admin): Collection is None.")
+        return False
+    if not plain_password: 
+        st.warning("A nova senha não pode ser vazia.")
+        return False
+    try:
+        hashed_password = Hasher([plain_password]).generate()[0]
+        print(f"INFO_LOG (user_management_db.py - update_user_password_by_admin): Tentando redefinir senha para '{username}'.")
+        result = users_collection.update_one(
+            {"username": username},
+            {"$set": {"hashed_password": hashed_password}}
+        )
+        
+        if result.matched_count == 0:
+            st.warning(f"Usuário '{username}' não encontrado para redefinição de senha.")
+            print(f"WARN_LOG (user_management_db.py - update_user_password_by_admin): Usuário '{username}' não encontrado.")
+            return False
+        if result.modified_count > 0:
+            st.success(f"Senha do usuário '{username}' redefinida com sucesso.")
+            print(f"INFO_LOG (user_management_db.py - update_user_password_by_admin): Senha para '{username}' atualizada.")
+            return True
+        else:
+            st.info(f"Senha do usuário '{username}' não foi alterada (a nova senha pode ser igual à anterior).")
+            print(f"INFO_LOG (user_management_db.py - update_user_password_by_admin): Senha para '{username}' não modificada (modified_count=0), mas usuário existe.")
+            return True 
+            
+    except Exception as e:
+        st.error(f"ERRO ao redefinir senha do usuário '{username}': {e}")
+        print(f"ERROR_LOG (user_management_db.py - update_user_password_by_admin): User='{username}', Error: {e}")
+        return False
+
+# Removida a função update_user_password_self, pois a lógica manual a substituirá
+# Se você ainda usar o authenticator.change_password() e ele funcionar,
+# você precisaria de uma função para persistir o hash que ele gera,
+# mas como estamos contornando o change_password() da biblioteca, esta não é mais necessária.
+
+def get_all_users_for_admin_display():
+    # ... (código como antes) ...
+    users_collection = get_users_collection()
+    if users_collection is None:
+        return []
+    try:
+        return list(users_collection.find({}, {"_id": 0, "hashed_password": 0}))
+    except Exception as e:
+        st.error(f"ERRO ao buscar lista de usuários para admin: {e}")
+        return []
