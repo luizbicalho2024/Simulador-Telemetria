@@ -67,7 +67,7 @@ if stauth is None:
     print("FATAL_ERROR_LOG (Simulador_Comercial.py): stauth é None.")
     st.stop()
 if stauth_Hasher_class is None: # Esta é a verificação crucial para o seu erro atual
-    st.error("ERRO FATAL: Componente Hasher da autenticação não carregado. Aplicativo parado.")
+    st.error("ERRO FATAL: Componente Hasher da autenticação não carregado. Verifique os logs de build do Streamlit Cloud para erros na instalação de 'streamlit-authenticator' ou suas dependências (bcrypt, passlib).")
     print("FATAL_ERROR_LOG (Simulador_Comercial.py): stauth_Hasher_class é None. A importação de streamlit_authenticator.utilities.hasher.Hasher falhou.")
     st.stop()
 
@@ -111,7 +111,7 @@ if not credentials.get("usernames"):
     st.title("Bem-vindo ao Simulador Telemetria! 🚀")
     st.subheader("Configuração Inicial: Criar Conta de Administrador")
     print("INFO_LOG (Simulador_Comercial.py): Nenhum usuário. Exibindo formulário de criação do primeiro admin.")
-    with st.form("FormCriarPrimeiroAdmin_v16_main"): 
+    with st.form("FormCriarPrimeiroAdmin_v16_main"): # Chave do formulário atualizada
         admin_name = st.text_input("Nome Completo", key="init_admin_name_v16_main")
         admin_username = st.text_input("Nome de Usuário (login)", key="init_admin_uname_v16_main")
         admin_email = st.text_input("Email", key="init_admin_email_v16_main")
@@ -129,6 +129,7 @@ if not credentials.get("usernames"):
 # --- Processo de Login ---
 print("INFO_LOG (Simulador_Comercial.py): Chamando authenticator.login()...")
 print(f"DEBUG_LOG (Simulador_Comercial.py): st.session_state ANTES do login: {st.session_state.to_dict()}")
+
 
 name, authentication_status, username = None, None, None 
 login_attempted_flag = False 
@@ -197,12 +198,12 @@ elif authentication_status:
                         st.error("A nova senha e a confirmação não coincidem.")
                     else:
                         # stauth_Hasher_class é a classe Hasher importada
-                        if stauth_Hasher_class is None: # Verificação extra, embora já devesse ter parado
-                            st.error("ERRO INTERNO: Componente de hashing não carregado.")
+                        if stauth_Hasher_class is None: 
+                            st.error("ERRO INTERNO: Componente de hashing não carregado. Não é possível alterar a senha.")
                             print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): stauth_Hasher_class é None ao tentar alterar senha.")
                         else:
                             stored_hashed_password = umdb.get_user_hashed_password(st.session_state.username)
-                            if stored_hashed_password and stauth_Hasher_class([current_password]).verify(stored_hashed_password):
+                            if stored_hashed_password and stauth_Hasher_class([current_password]).verify(stored_hashed_password): # Linha do erro
                                 if umdb.update_user_password_manual(st.session_state.username, new_password):
                                     st.success("Senha alterada com sucesso! Para aplicar a alteração, por favor, faça logout e login novamente.")
                                     print(f"INFO_LOG (Simulador_Comercial.py): Senha alterada para '{st.session_state.username}'.")
