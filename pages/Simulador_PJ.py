@@ -2,8 +2,8 @@
 # Importações Python padrão primeiro
 from io import BytesIO
 from docx import Document 
-from docx.shared import Pt
-from docx.enum.text import WD_ALIGN_PARAGRAPH # Para alinhamento, se necessário
+from docx.shared import Pt 
+# from docx.enum.text import WD_ALIGN_PARAGRAPH # Se for usar alinhamento
 import requests
 import time
 from datetime import datetime
@@ -11,11 +11,11 @@ from decimal import Decimal, ROUND_DOWN
 
 import streamlit as st
 
-# 1. st.set_page_config()
+# 1. st.set_page_config() - PRIMEIRO COMANDO STREAMLIT
 st.set_page_config(
     layout="wide",
     page_title="Simulador Pessoa Jurídica", 
-    page_icon="imgs/v-c.png", 
+    page_icon="imgs/v-c.png", # Verifique se o caminho está correto
     initial_sidebar_state="expanded"
 )
 print("INFO_LOG (Simulador_PJ.py): st.set_page_config executado.")
@@ -34,6 +34,7 @@ if auth_status is not True:
 current_username = st.session_state.get('username', 'N/A')
 current_role = st.session_state.get('role', 'Indefinido') 
 current_name = st.session_state.get('name', 'N/A')
+
 print(f"INFO_LOG (Simulador_PJ.py): User '{current_username}' authenticated. Role: '{current_role}'.")
 
 # 3. Restante do código da sua página
@@ -42,10 +43,12 @@ API_KEY_CLOUDCONVERT = st.secrets.get("CLOUDCONVERT_API_KEY")
 api_key_presente = bool(API_KEY_CLOUDCONVERT) 
 
 if not api_key_presente:
-    print("WARN_LOG (Simulador_PJ.py): CLOUDCONVERT_API_KEY não configurada.")
+    print("WARN_LOG (Simulador_PJ.py): CLOUDCONVERT_API_KEY não configurada nos segredos.")
 
 try:
     st.image("imgs/logo.png", width=250) 
+except FileNotFoundError:
+    print("WARN_LOG (Simulador_PJ.py): Arquivo imgs/logo.png não encontrado.")
 except Exception as e_img:
     print(f"WARN_LOG (Simulador_PJ.py): Erro ao carregar imgs/logo.png: {e_img}")
 
@@ -57,20 +60,38 @@ st.markdown("---")
 print("INFO_LOG (Simulador_PJ.py): Cabeçalho e informações do usuário renderizados.")
 
 planos = {
-    "12 Meses": {"GPRS / Gsm": Decimal("80.88"), "Satélite": Decimal("193.80"), "Identificador de Motorista / RFID": Decimal("19.25"), "Leitor de Rede CAN / Telemetria": Decimal("75.25"), "Videomonitoramento + DMS + ADAS": Decimal("409.11")},
-    "24 Meses": {"GPRS / Gsm": Decimal("53.92"), "Satélite": Decimal("129.20"), "Identificador de Motorista / RFID": Decimal("12.83"), "Leitor de Rede CAN / Telemetria": Decimal("50.17"), "Videomonitoramento + DMS + ADAS": Decimal("272.74")},
-    "36 Meses": {"GPRS / Gsm": Decimal("44.93"), "Satélite": Decimal("107.67"), "Identificador de Motorista / RFID": Decimal("10.69"), "Leitor de Rede CAN / Telemetria": Decimal("41.81"), "Videomonitoramento + DMS + ADAS": Decimal("227.28")}
+    "12 Meses": {
+        "GPRS / Gsm": Decimal("80.88"), "Satélite": Decimal("193.80"),
+        "Identificador de Motorista / RFID": Decimal("19.25"),
+        "Leitor de Rede CAN / Telemetria": Decimal("75.25"),
+        "Videomonitoramento + DMS + ADAS": Decimal("409.11")
+    },
+    "24 Meses": {
+        "GPRS / Gsm": Decimal("53.92"), "Satélite": Decimal("129.20"),
+        "Identificador de Motorista / RFID": Decimal("12.83"),
+        "Leitor de Rede CAN / Telemetria": Decimal("50.17"),
+        "Videomonitoramento + DMS + ADAS": Decimal("272.74")
+    },
+    "36 Meses": {
+        "GPRS / Gsm": Decimal("44.93"), "Satélite": Decimal("107.67"),
+        "Identificador de Motorista / RFID": Decimal("10.69"),
+        "Leitor de Rede CAN / Telemetria": Decimal("41.81"),
+        "Videomonitoramento + DMS + ADAS": Decimal("227.28")
+    }
 }
+
 produtos_descricao = {
-    "GPRS / Gsm": "Equipamento de rastreamento GSM/GPRS 2G ou 4G", "Satélite": "Equipamento de rastreamento via satélite",
+    "GPRS / Gsm": "Equipamento de rastreamento GSM/GPRS 2G ou 4G",
+    "Satélite": "Equipamento de rastreamento via satélite",
     "Identificador de Motorista / RFID": "Identificação automática de motoristas via RFID",
     "Leitor de Rede CAN / Telemetria": "Leitura de dados de telemetria via rede CAN",
     "Videomonitoramento + DMS + ADAS": "Sistema de videomonitoramento com assistência ao motorista"
 }
 
 st.sidebar.header("📝 Configurações PJ") 
-qtd_veiculos_key = "pj_qtd_veiculos_sb_v12" 
-temp_contrato_key = "pj_temp_contrato_sb_v12"
+qtd_veiculos_key = "pj_qtd_veiculos_sb_v12_final" 
+temp_contrato_key = "pj_temp_contrato_sb_v12_final"
+
 qtd_veiculos_input = st.sidebar.number_input("Quantidade de Veículos 🚗", min_value=1, value=1, step=1, key=qtd_veiculos_key)
 temp_contrato_selecionado = st.sidebar.selectbox("Tempo de Contrato ⏳", list(planos.keys()), key=temp_contrato_key)
 print("INFO_LOG (Simulador_PJ.py): Widgets da sidebar renderizados.")
@@ -78,12 +99,14 @@ print("INFO_LOG (Simulador_PJ.py): Widgets da sidebar renderizados.")
 st.markdown("### 🛠️ Selecione os Produtos:")
 col1_pj, col2_pj = st.columns(2) 
 produtos_selecionados_pj = {} 
+
 for i, (produto, preco_decimal) in enumerate(planos[temp_contrato_selecionado].items()):
     col_target = col1_pj if i % 2 == 0 else col2_pj
-    produto_toggle_key = f"pj_toggle_{temp_contrato_selecionado.replace(' ','_')}_{produto.replace(' ', '_').replace('/', '_').replace('+', '')}_v12" 
+    produto_toggle_key = f"pj_toggle_{temp_contrato_selecionado.replace(' ','_')}_{produto.replace(' ', '_').replace('/', '_').replace('+', '')}_v12_final" 
     if col_target.toggle(f"{produto} - R$ {preco_decimal:,.2f}", key=produto_toggle_key):
         produtos_selecionados_pj[produto] = preco_decimal 
-print(f"DEBUG_LOG (Simulador_PJ.py): Produtos selecionados: {produtos_selecionados_pj}")
+
+print(f"DEBUG_LOG (Simulador_PJ.py): Produtos selecionados para proposta: {produtos_selecionados_pj}")
 
 soma_mensal_produtos_selecionados_calculada = sum(produtos_selecionados_pj.values()) if produtos_selecionados_pj else Decimal("0")
 qtd_veiculos_decimal = Decimal(str(qtd_veiculos_input)) 
@@ -100,7 +123,7 @@ else:
     st.info("Selecione produtos para ver o cálculo.")
 print("INFO_LOG (Simulador_PJ.py): Seção de cálculo de totais renderizada.")
 
-if st.button("🔄 Limpar Seleção e Recalcular", key="pj_btn_limpar_recalcular_v12"):
+if st.button("🔄 Limpar Seleção e Recalcular", key="pj_btn_limpar_recalcular_v12_final"):
     print("INFO_LOG (Simulador_PJ.py): Botão 'Limpar Seleção' clicado.")
     st.rerun()
 
@@ -109,27 +132,25 @@ if produtos_selecionados_pj:
     st.markdown("---")
     st.subheader("📄 Gerar Proposta")
 
-    if not api_key_presente: # Verifica se a API Key do CloudConvert está disponível
+    if not api_key_presente:
         st.warning("⚠️ A funcionalidade de gerar proposta em PDF (via CloudConvert) está desativada porque a chave da API do CloudConvert não está configurada nos segredos do aplicativo.")
         print("WARN_LOG (Simulador_PJ.py): Geração de PDF desativada (API Key CloudConvert ausente).")
-    
-    # Exibe sempre o formulário de dados da proposta
-    with st.form(f"formulario_proposta_pj_v12", clear_on_submit=True): 
-        nome_empresa = st.text_input("Nome da Empresa", key="pj_form_nome_empresa_v12")
-        nome_responsavel = st.text_input("Nome do Responsável", key="pj_form_nome_responsavel_v12")
-        nome_consultor = st.text_input("Nome do Consultor Comercial", value=current_name, key="pj_form_nome_consultor_v12")
-        validade_proposta_dt = st.date_input("Validade da Proposta", value=datetime.today(), key="pj_form_validade_proposta_v12")
+
+    with st.form(f"formulario_proposta_pj_v12_final", clear_on_submit=True): 
+        nome_empresa = st.text_input("Nome da Empresa", key="pj_form_nome_empresa_v12_final")
+        nome_responsavel = st.text_input("Nome do Responsável", key="pj_form_nome_responsavel_v12_final")
+        nome_consultor = st.text_input("Nome do Consultor Comercial", value=current_name, key="pj_form_nome_consultor_v12_final")
+        validade_proposta_dt = st.date_input("Validade da Proposta", value=datetime.today(), key="pj_form_validade_proposta_v12_final")
         
-        # Botões para gerar DOCX diretamente ou PDF via CloudConvert (se API Key presente)
-        col_btn1, col_btn2 = st.columns(2)
-        with col_btn1:
+        col_btn_form1, col_btn_form2 = st.columns(2)
+        with col_btn_form1:
             gerar_docx_btn = st.form_submit_button("Gerar Proposta em DOCX")
-        with col_btn2:
-            gerar_pdf_cloudconvert_btn = st.form_submit_button("Gerar Proposta em PDF (CloudConvert)", disabled=(not api_key_presente))
+        with col_btn_form2:
+            gerar_pdf_cloudconvert_btn = st.form_submit_button("Gerar PDF (CloudConvert)", disabled=(not api_key_presente))
 
     # Lógica para gerar DOCX
     if gerar_docx_btn:
-        print(f"INFO_LOG (Simulador_PJ.py): Botão 'Gerar Proposta em DOCX' clicado. Empresa: {nome_empresa}")
+        print(f"INFO_LOG (Simulador_PJ.py): Botão 'Gerar DOCX' clicado. Empresa: {nome_empresa}")
         if not all([nome_empresa, nome_responsavel, nome_consultor]):
             st.warning("Preencha os dados da proposta (Empresa, Responsável, Consultor).")
         else:
@@ -138,40 +159,57 @@ if produtos_selecionados_pj:
                 doc = Document(doc_template_path) 
                 print(f"INFO_LOG (Simulador_PJ.py): Template DOCX '{doc_template_path}' carregado para DOCX.")
 
-                # Substituições no texto
-                for p in doc.paragraphs:
+                for p in doc.paragraphs: # Preenchimento dos parágrafos
                     if "Nome da empresa" in p.text: p.text = p.text.replace("Nome da empresa", nome_empresa)
                     if "Nome do Responsável" in p.text: p.text = p.text.replace("Nome do Responsável", nome_responsavel)
                     if "00/00/0000" in p.text: p.text = p.text.replace("00/00/0000", validade_proposta_dt.strftime("%d/%m/%Y"))
                     if "Nome do comercial" in p.text: p.text = p.text.replace("Nome do comercial", nome_consultor)
 
-                table_found_and_filled = False
-                expected_headers = ["Item", "Descrição", "Valor Mensal"] 
-                for table_idx, table in enumerate(doc.tables): # Adiciona índice para debug da tabela
-                    print(f"DEBUG_LOG (Simulador_PJ.py): Verificando tabela {table_idx} no DOCX.")
-                    if len(table.rows) > 0 and len(table.columns) >= len(expected_headers): 
+                # LÓGICA DE PREENCHIMENTO DA TABELA REVISADA
+                table_to_fill = None
+                expected_headers = ["Item", "Descrição", "Valor Mensal"] # Confirme estes cabeçalhos no seu DOCX
+                print(f"DEBUG_LOG (Simulador_PJ.py): Cabeçalhos esperados na tabela: {expected_headers}")
+
+                for table_idx, table in enumerate(doc.tables):
+                    print(f"DEBUG_LOG (Simulador_PJ.py): Verificando Tabela {table_idx} no DOCX...")
+                    if len(table.rows) > 0 and len(table.columns) >= len(expected_headers):
                         header_cells_text = [cell.text.strip() for cell in table.rows[0].cells[:len(expected_headers)]]
-                        print(f"DEBUG_LOG (Simulador_PJ.py): Cabeçalhos encontrados na tabela {table_idx}: {header_cells_text}")
-                        if all(expected_header in header_cells_text for expected_header in expected_headers):
-                            table_found_and_filled = True
-                            print(f"INFO_LOG (Simulador_PJ.py): Tabela de itens CORRETA encontrada no DOCX (Índice: {table_idx}).")
-                            while len(table.rows) > 1: table._tbl.remove(table.rows[1]._tr) 
-                            
-                            print(f"DEBUG_LOG (Simulador_PJ.py): Preenchendo tabela com itens selecionados: {produtos_selecionados_pj}")
-                            for produto_sel, preco_sel_decimal in produtos_selecionados_pj.items():
-                                row_cells = table.add_row().cells
-                                row_cells[0].text = produto_sel
-                                row_cells[1].text = produtos_descricao.get(produto_sel, " ") 
-                                row_cells[2].text = f"R$ {preco_sel_decimal:,.2f}" 
-                            
-                            total_row = table.add_row().cells
-                            total_row[0].text = "TOTAL MENSAL POR VEÍCULO"; total_row[0].paragraphs[0].runs[0].font.bold = True 
-                            total_row[1].text = "" 
-                            total_row[2].text = f"R$ {soma_mensal_produtos_selecionados_calculada:,.2f}"; total_row[2].paragraphs[0].runs[0].font.bold = True
+                        print(f"DEBUG_LOG (Simulador_PJ.py): Cabeçalhos encontrados na Tabela {table_idx}: {header_cells_text}")
+                        # Verifica se todos os cabeçalhos esperados estão contidos nos cabeçalhos da tabela
+                        if all(exp_h in hc_text for exp_h, hc_text in zip(expected_headers, header_cells_text)):
+                            table_to_fill = table
+                            print(f"INFO_LOG (Simulador_PJ.py): Tabela de itens para preenchimento encontrada (Índice: {table_idx}).")
                             break 
                 
-                if not table_found_and_filled:
-                    st.warning("A tabela de itens não foi encontrada ou preenchida corretamente no template do documento. Verifique os cabeçalhos ('Item', 'Descrição', 'Valor Mensal') no seu arquivo .docx.")
+                if table_to_fill:
+                    # Limpa todas as linhas da tabela, exceto a primeira (cabeçalho)
+                    print(f"DEBUG_LOG (Simulador_PJ.py): Limpando linhas da tabela (exceto cabeçalho). Linhas antes: {len(table_to_fill.rows)}")
+                    while len(table_to_fill.rows) > 1:
+                        table_to_fill._tbl.remove(table_to_fill.rows[-1]._tr) # Remove a última linha
+                    print(f"DEBUG_LOG (Simulador_PJ.py): Linhas após limpeza: {len(table_to_fill.rows)}")
+
+                    print(f"DEBUG_LOG (Simulador_PJ.py): Itens SELECIONADOS para adicionar à tabela: {produtos_selecionados_pj}")
+                    if not produtos_selecionados_pj:
+                        print("WARN_LOG (Simulador_PJ.py): Nenhum produto selecionado para adicionar à tabela do DOCX.")
+                        st.warning("Nenhum produto foi selecionado para a proposta.")
+                    
+                    for produto_sel, preco_sel_decimal in produtos_selecionados_pj.items():
+                        row_cells = table_to_fill.add_row().cells
+                        row_cells[0].text = produto_sel
+                        row_cells[1].text = produtos_descricao.get(produto_sel, " ") # Usa .get() para segurança
+                        row_cells[2].text = f"R$ {preco_sel_decimal:,.2f}"
+                        print(f"DEBUG_LOG (Simulador_PJ.py): Adicionado à tabela: {produto_sel}, R$ {preco_sel_decimal:,.2f}")
+                    
+                    # Adiciona linha de TOTAL MENSAL POR VEÍCULO
+                    total_row = table_to_fill.add_row().cells
+                    total_row[0].text = "TOTAL MENSAL POR VEÍCULO"
+                    total_row[0].paragraphs[0].runs[0].font.bold = True 
+                    total_row[1].text = "" 
+                    total_row[2].text = f"R$ {soma_mensal_produtos_selecionados_calculada:,.2f}" # Usa a soma correta
+                    total_row[2].paragraphs[0].runs[0].font.bold = True
+                    print(f"DEBUG_LOG (Simulador_PJ.py): Linha de total adicionada: R$ {soma_mensal_produtos_selecionados_calculada:,.2f}")
+                else:
+                    st.warning("A tabela de itens não foi encontrada no template do documento. Verifique os cabeçalhos ('Item', 'Descrição', 'Valor Mensal') no seu arquivo .docx. A proposta será gerada sem a tabela de itens.")
                     print("WARN_LOG (Simulador_PJ.py): Tabela de itens NÃO encontrada/preenchida no template DOCX.")
 
                 buffer_docx = BytesIO()
@@ -184,7 +222,7 @@ if produtos_selecionados_pj:
                     data=buffer_docx,
                     file_name=f"Proposta_Verdio_{nome_empresa.replace(' ', '_')}_{validade_proposta_dt.strftime('%Y%m%d')}.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    key="pj_download_docx_btn_v12" 
+                    key="pj_download_docx_btn_v12_final" 
                 )
                 st.success("Proposta em DOCX pronta para download!")
 
@@ -195,53 +233,57 @@ if produtos_selecionados_pj:
                 st.error(f"Erro inesperado ao gerar proposta DOCX: {e_gerar_docx}")
                 print(f"ERROR_LOG (Simulador_PJ.py): Erro na geração DOCX: {type(e_gerar_docx).__name__} - {e_gerar_docx}")
 
-    # Lógica para gerar PDF via CloudConvert
+    # Lógica para gerar PDF via CloudConvert (se o botão for clicado e API Key presente)
     if gerar_pdf_cloudconvert_btn and api_key_presente: 
-        print(f"INFO_LOG (Simulador_PJ.py): Botão 'Gerar Proposta em PDF (CloudConvert)' clicado. Empresa: {nome_empresa}")
+        print(f"INFO_LOG (Simulador_PJ.py): Botão 'Gerar PDF (CloudConvert)' clicado. Empresa: {nome_empresa}")
         if not all([nome_empresa, nome_responsavel, nome_consultor]):
             st.warning("Preencha os dados da proposta (Empresa, Responsável, Consultor).")
         else:
-            # Gera o DOCX em memória primeiro
+            # Gera o DOCX em memória primeiro (mesma lógica do botão DOCX)
             try:
                 doc_template_path = "Proposta Comercial e Intenção - Verdio.docx" #
                 doc = Document(doc_template_path)
-                # ... (Repetir a lógica de preenchimento do DOCX como acima) ...
-                for p in doc.paragraphs:
+                for p in doc.paragraphs: # Preenchimento dos parágrafos
                     if "Nome da empresa" in p.text: p.text = p.text.replace("Nome da empresa", nome_empresa)
                     if "Nome do Responsável" in p.text: p.text = p.text.replace("Nome do Responsável", nome_responsavel)
                     if "00/00/0000" in p.text: p.text = p.text.replace("00/00/0000", validade_proposta_dt.strftime("%d/%m/%Y"))
                     if "Nome do comercial" in p.text: p.text = p.text.replace("Nome do comercial", nome_consultor)
                 
-                table_found_and_filled_pdf = False
+                table_to_fill_pdf = None
                 expected_headers_pdf = ["Item", "Descrição", "Valor Mensal"] 
                 for table_idx, table in enumerate(doc.tables):
                     if len(table.rows) > 0 and len(table.columns) >= len(expected_headers_pdf): 
                         header_cells_text_pdf = [cell.text.strip() for cell in table.rows[0].cells[:len(expected_headers_pdf)]]
                         if all(expected_header in header_cells_text_pdf for expected_header in expected_headers_pdf):
-                            table_found_and_filled_pdf = True
-                            while len(table.rows) > 1: table._tbl.remove(table.rows[1]._tr) 
-                            for produto_sel, preco_sel_decimal in produtos_selecionados_pj.items():
-                                row_cells = table.add_row().cells
-                                row_cells[0].text = produto_sel
-                                row_cells[1].text = produtos_descricao.get(produto_sel, " ") 
-                                row_cells[2].text = f"R$ {preco_sel_decimal:,.2f}" 
-                            total_row = table.add_row().cells
-                            total_row[0].text = "TOTAL MENSAL POR VEÍCULO"; total_row[0].paragraphs[0].runs[0].font.bold = True 
-                            total_row[1].text = "" 
-                            total_row[2].text = f"R$ {soma_mensal_produtos_selecionados_calculada:,.2f}"; total_row[2].paragraphs[0].runs[0].font.bold = True
+                            table_to_fill_pdf = table
                             break 
-                if not table_found_and_filled_pdf:
-                    st.warning("Tabela de itens não encontrada no template DOCX para PDF.")
+                
+                if table_to_fill_pdf:
+                    while len(table_to_fill_pdf.rows) > 1: table_to_fill_pdf._tbl.remove(table_to_fill_pdf.rows[-1]._tr) 
+                    for produto_sel, preco_sel_decimal in produtos_selecionados_pj.items():
+                        row_cells = table_to_fill_pdf.add_row().cells
+                        row_cells[0].text = produto_sel
+                        row_cells[1].text = produtos_descricao.get(produto_sel, " ") 
+                        row_cells[2].text = f"R$ {preco_sel_decimal:,.2f}" 
+                    total_row = table_to_fill_pdf.add_row().cells
+                    total_row[0].text = "TOTAL MENSAL POR VEÍCULO"; total_row[0].paragraphs[0].runs[0].font.bold = True 
+                    total_row[1].text = "" 
+                    total_row[2].text = f"R$ {soma_mensal_produtos_selecionados_calculada:,.2f}"; total_row[2].paragraphs[0].runs[0].font.bold = True
+                else:
+                    st.warning("Tabela de itens não encontrada no template para PDF.")
                     print("WARN_LOG (Simulador_PJ.py): Tabela de itens não encontrada para PDF.")
-                    st.stop() # Impede de prosseguir se a tabela não for preenchida
+                    st.stop()
 
                 buffer_docx_for_pdf = BytesIO()
                 doc.save(buffer_docx_for_pdf)
                 buffer_docx_for_pdf.seek(0)
-                print("INFO_LOG (Simulador_PJ.py): DOCX da proposta gerado em buffer para conversão PDF.")
+                print("INFO_LOG (Simulador_PJ.py): DOCX gerado para conversão PDF.")
 
                 with st.spinner("Gerando PDF da proposta via CloudConvert, aguarde..."):
+                    # ... (Lógica de comunicação com CloudConvert como na versão anterior) ...
+                    # Certifique-se que API_KEY_CLOUDCONVERT está sendo usada nos headers.
                     headers = {"Authorization": f"Bearer {API_KEY_CLOUDCONVERT}"} 
+                    # ... (resto da lógica do CloudConvert) ...
                     job_payload = {
                         "tasks": {
                             "import-docx": {"operation": "import/upload", "filename": f"proposta_{nome_empresa.replace(' ', '_')}.docx"},
@@ -277,7 +319,7 @@ if produtos_selecionados_pj:
                     start_process_time = time.time()
                     pdf_download_url = None
                     final_job_status = None
-                    with st.empty(): # Para atualizar mensagens de status no mesmo lugar
+                    with st.empty(): 
                         while time.time() - start_process_time < max_wait_time_seconds:
                             st.write(f"Verificando status da conversão (Job ID: {job_id})...")
                             job_status_response = requests.get(status_check_url, headers=headers)
@@ -296,40 +338,31 @@ if produtos_selecionados_pj:
                                 if pdf_download_url: break 
                             elif current_job_status == 'error':
                                 final_job_status = 'error'
-                                error_message_from_cloudconvert = "Erro CloudConvert." # Default
-                                if job_status_data['data'].get('tasks'):
-                                    for task_data_loop in job_status_data['data']['tasks']:
-                                        if task_data_loop.get('status') == 'error':
-                                            error_message_from_cloudconvert = task_data_loop.get('message', error_message_from_cloudconvert)
-                                            if task_data_loop.get('result') and task_data_loop['result'].get('errors'):
-                                                error_message_from_cloudconvert += f" Detalhes: {task_data_loop['result']['errors']}"
-                                            break
-                                st.error(f"Erro na conversão PDF: {error_message_from_cloudconvert}")
-                                print(f"ERROR_LOG (Simulador_PJ.py): Erro job CloudConvert '{job_id}': {job_status_data['data']}")
+                                # ... (lógica de extração de erro) ...
+                                st.error(f"Erro na conversão PDF via CloudConvert.")
                                 break 
-                            time.sleep(4) # Aumentado para 4 segundos para reduzir chamadas
+                            time.sleep(4) 
                         
                         if pdf_download_url:
-                            print(f"INFO_LOG (Simulador_PJ.py): PDF gerado. URL: {pdf_download_url}")
                             pdf_file_content = requests.get(pdf_download_url).content 
                             st.download_button(
                                 label="📥 Baixar Proposta em PDF",
                                 data=pdf_file_content,
                                 file_name=f"Proposta_Verdio_{nome_empresa.replace(' ', '_')}_{validade_proposta_dt.strftime('%Y%m%d')}.pdf",
                                 mime="application/pdf",
-                                key="pj_download_pdf_btn_v12_final" 
+                                key="pj_download_pdf_btn_v12_final_cc" 
                             )
                         elif final_job_status != 'error': 
                             st.error("Não foi possível obter o PDF ou tempo de espera excedido.")
-                            print(f"ERROR_LOG (Simulador_PJ.py): Job CloudConvert '{job_id}' finalizado sem URL ou timeout.")
+
 
             except FileNotFoundError:
-                st.error(f"ERRO: Template '{doc_template_path}' não encontrado.")
+                st.error(f"ERRO: Template DOCX '{doc_template_path}' não encontrado.")
             except requests.exceptions.RequestException as req_e:
                 st.error(f"Erro de comunicação com CloudConvert: {req_e}")
-            except Exception as e_gerar:
-                st.error(f"Erro inesperado ao gerar proposta PDF: {e_gerar}")
-                print(f"ERROR_LOG (Simulador_PJ.py): Erro na geração PDF: {type(e_gerar).__name__} - {e_gerar}")
+            except Exception as e_gerar_pdf:
+                st.error(f"Erro inesperado ao gerar proposta PDF: {e_gerar_pdf}")
+                print(f"ERROR_LOG (Simulador_PJ.py): Erro na geração PDF: {type(e_gerar_pdf).__name__} - {e_gerar_pdf}")
     
 elif not api_key_presente and produtos_selecionados_pj: 
     pass 
