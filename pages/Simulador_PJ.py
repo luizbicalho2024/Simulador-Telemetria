@@ -6,7 +6,7 @@ from docx.shared import Pt
 import requests
 import time
 from datetime import datetime
-from decimal import Decimal, ROUND_DOWN # Adicionado para cálculos financeiros precisos
+from decimal import Decimal, ROUND_DOWN 
 
 import streamlit as st
 
@@ -14,29 +14,33 @@ import streamlit as st
 st.set_page_config(
     layout="wide",
     page_title="Simulador Pessoa Jurídica", 
-    page_icon="imgs/v-c.png", # Verifique se o caminho está correto relativo à raiz do projeto
+    page_icon="imgs/v-c.png", # Verifique se o caminho está correto
     initial_sidebar_state="expanded"
 )
 print("INFO_LOG (Simulador_PJ.py): st.set_page_config executado.")
 
 # 2. BLOCO DE VERIFICAÇÃO DE AUTENTICAÇÃO
+# Este bloco DEVE vir IMEDIATAMENTE APÓS st.set_page_config e ANTES de qualquer outro comando st.*
 auth_status = st.session_state.get("authentication_status", False)
-if auth_status is not True:
+print(f"DEBUG_LOG (Simulador_PJ.py): Verificando auth_status: {auth_status} (Tipo: {type(auth_status)})")
+
+if auth_status is not True: # Checagem explícita e rigorosa contra True
     st.error("🔒 Acesso Negado! Por favor, faça login na página principal para continuar.")
-    print(f"ACCESS_DENIED_LOG (Simulador_PJ.py): User not authenticated. Status: {auth_status}")
+    print(f"ACCESS_DENIED_LOG (Simulador_PJ.py): User not authenticated. Status: {auth_status}. Parando script.")
     try:
         st.page_link("Simulador_Comercial.py", label="Ir para Login", icon="🏠")
     except AttributeError: 
         st.info("Retorne à página principal para efetuar o login.")
-    st.stop() 
+    st.stop() # Impede a execução do restante da página se não estiver autenticado
 
+# Se chegou aqui, o usuário está autenticado.
 current_username = st.session_state.get('username', 'N/A')
 current_role = st.session_state.get('role', 'Indefinido') 
 current_name = st.session_state.get('name', 'N/A')
 
-print(f"INFO_LOG (Simulador_PJ.py): User '{current_username}' authenticated. Role: '{current_role}'. Iniciando renderização da página...")
+print(f"INFO_LOG (Simulador_PJ.py): User '{current_username}' autenticado. Role: '{current_role}'. Iniciando renderização da página PJ...")
 
-# 3. Restante do código da sua página
+# 3. Restante do código da sua página - AGORA o conteúdo da página começa
 
 # 🛡️ Token CloudConvert - Lendo dos segredos do Streamlit
 API_KEY_CLOUDCONVERT = st.secrets.get("CLOUDCONVERT_API_KEY") 
@@ -65,22 +69,19 @@ print("INFO_LOG (Simulador_PJ.py): Cabeçalho e informações do usuário render
 # Produtos (Convertendo para Decimal na definição para precisão)
 planos = {
     "12 Meses": {
-        "GPRS / Gsm": Decimal("80.88"),
-        "Satélite": Decimal("193.80"),
+        "GPRS / Gsm": Decimal("80.88"), "Satélite": Decimal("193.80"),
         "Identificador de Motorista / RFID": Decimal("19.25"),
         "Leitor de Rede CAN / Telemetria": Decimal("75.25"),
         "Videomonitoramento + DMS + ADAS": Decimal("409.11")
     },
     "24 Meses": {
-        "GPRS / Gsm": Decimal("53.92"),
-        "Satélite": Decimal("129.20"),
+        "GPRS / Gsm": Decimal("53.92"), "Satélite": Decimal("129.20"),
         "Identificador de Motorista / RFID": Decimal("12.83"),
         "Leitor de Rede CAN / Telemetria": Decimal("50.17"),
         "Videomonitoramento + DMS + ADAS": Decimal("272.74")
     },
     "36 Meses": {
-        "GPRS / Gsm": Decimal("44.93"),
-        "Satélite": Decimal("107.67"),
+        "GPRS / Gsm": Decimal("44.93"), "Satélite": Decimal("107.67"),
         "Identificador de Motorista / RFID": Decimal("10.69"),
         "Leitor de Rede CAN / Telemetria": Decimal("41.81"),
         "Videomonitoramento + DMS + ADAS": Decimal("227.28")
@@ -98,8 +99,8 @@ produtos_descricao = {
 # Sidebar
 st.sidebar.header("📝 Configurações PJ") 
 # Chaves únicas para widgets da sidebar
-qtd_veiculos_key = "pj_qtd_veiculos_sb_v6" # Sufixo para garantir unicidade
-temp_contrato_key = "pj_temp_contrato_sb_v6"
+qtd_veiculos_key = "pj_qtd_veiculos_sb_FINAL" # Sufixo para garantir unicidade
+temp_contrato_key = "pj_temp_contrato_sb_FINAL"
 
 qtd_veiculos_input = st.sidebar.number_input("Quantidade de Veículos 🚗", min_value=1, value=1, step=1, key=qtd_veiculos_key)
 temp_contrato_selecionado = st.sidebar.selectbox("Tempo de Contrato ⏳", list(planos.keys()), key=temp_contrato_key)
@@ -112,8 +113,8 @@ produtos_selecionados_pj = {}
 
 for i, (produto, preco_decimal) in enumerate(planos[temp_contrato_selecionado].items()):
     col_target = col1_pj if i % 2 == 0 else col2_pj
-    # Chave de toggle mais robusta e única, incluindo o tempo de contrato para evitar conflitos se o selectbox mudar
-    produto_toggle_key = f"pj_toggle_{temp_contrato_selecionado.replace(' ','_')}_{produto.replace(' ', '_').replace('/', '_').replace('+', '')}_v6" 
+    # Chave de toggle mais robusta e única
+    produto_toggle_key = f"pj_toggle_{temp_contrato_selecionado.replace(' ','_')}_{produto.replace(' ', '_').replace('/', '_').replace('+', '')}_FINAL" 
     if col_target.toggle(f"{produto} - R$ {preco_decimal:,.2f}", key=produto_toggle_key):
         produtos_selecionados_pj[produto] = preco_decimal 
 
@@ -135,7 +136,7 @@ else:
     st.info("Selecione produtos para ver o cálculo.")
 print("INFO_LOG (Simulador_PJ.py): Seção de cálculo de totais renderizada.")
 
-if st.button("🔄 Limpar Seleção e Recalcular", key="pj_btn_limpar_recalcular_v6"):
+if st.button("🔄 Limpar Seleção e Recalcular", key="pj_btn_limpar_recalcular_FINAL"):
     print("INFO_LOG (Simulador_PJ.py): Botão 'Limpar Seleção' clicado.")
     st.rerun()
 
@@ -144,17 +145,17 @@ if produtos_selecionados_pj:
     st.markdown("---")
     st.subheader("📄 Gerar Proposta em PDF")
 
-    if not api_key_presente: # Aviso se a API Key não estiver configurada
+    if not api_key_presente:
         st.warning("⚠️ A funcionalidade de gerar proposta em PDF está desativada porque a chave da API do CloudConvert não está configurada nos segredos do aplicativo.")
-        print("WARN_LOG (Simulador_PJ.py): Geração de PDF desativada (API Key ausente).")
+        print("WARN_LOG (Simulador_PJ.py): Geração de PDF desativada (API Key ausente) antes do formulário.")
 
     # O formulário é sempre exibido se houver produtos, mas o botão de submit pode ser desabilitado
     # A chave do formulário é o primeiro argumento posicional.
-    with st.form(f"formulario_proposta_pj_v6", clear_on_submit=True): 
-        nome_empresa = st.text_input("Nome da Empresa", key="pj_form_nome_empresa_v6")
-        nome_responsavel = st.text_input("Nome do Responsável", key="pj_form_nome_responsavel_v6")
-        nome_consultor = st.text_input("Nome do Consultor Comercial", key="pj_form_nome_consultor_v6")
-        validade_proposta_dt = st.date_input("Validade da Proposta", value=datetime.today(), key="pj_form_validade_proposta_v6")
+    with st.form(f"formulario_proposta_pj_FINAL", clear_on_submit=True): 
+        nome_empresa = st.text_input("Nome da Empresa", key="pj_form_nome_empresa_FINAL")
+        nome_responsavel = st.text_input("Nome do Responsável", key="pj_form_nome_responsavel_FINAL")
+        nome_consultor = st.text_input("Nome do Consultor Comercial", key="pj_form_nome_consultor_FINAL")
+        validade_proposta_dt = st.date_input("Validade da Proposta", value=datetime.today(), key="pj_form_validade_proposta_FINAL")
         
         gerar_proposta_btn = st.form_submit_button("Gerar Proposta", disabled=(not api_key_presente))
 
@@ -200,7 +201,7 @@ if produtos_selecionados_pj:
                 print("INFO_LOG (Simulador_PJ.py): DOCX da proposta gerado em buffer.")
 
                 with st.spinner("Gerando PDF da proposta, aguarde..."):
-                    headers = {"Authorization": f"Bearer {API_KEY}"} # API_KEY definida no início do script
+                    headers = {"Authorization": f"Bearer {API_KEY}"} # API_KEY definida no início
                     job_payload = {
                         "tasks": {
                             "import-docx": {"operation": "import/upload", "filename": f"proposta_{nome_empresa.replace(' ', '_')}.docx"},
@@ -276,7 +277,7 @@ if produtos_selecionados_pj:
                             data=pdf_file_content,
                             file_name=f"Proposta_Verdio_{nome_empresa.replace(' ', '_')}_{validade_proposta_dt.strftime('%Y%m%d')}.pdf",
                             mime="application/pdf",
-                            key="pj_download_pdf_btn_v6" 
+                            key="pj_download_pdf_btn_FINAL" 
                         )
                     elif final_job_status != 'error': 
                         st.error("Não foi possível obter o PDF ou tempo de espera excedido.")
@@ -298,4 +299,4 @@ elif not api_key_presente and produtos_selecionados_pj:
 elif not produtos_selecionados_pj: 
     st.info("Selecione produtos para preencher dados e gerar uma proposta.")
 
-print("INFO_LOG (Simulador_PJ.py): Renderização da página concluída.")
+print("INFO_LOG (Simulador_PJ.py): Renderização da página PJ concluída.")
