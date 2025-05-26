@@ -15,7 +15,7 @@ import streamlit as st
 st.set_page_config(
     layout="wide",
     page_title="Simulador Pessoa Jurídica", 
-    page_icon="imgs/v-c.png", 
+    page_icon="imgs/v-c.png", # Verifique se o caminho está correto
     initial_sidebar_state="expanded"
 )
 print("INFO_LOG (Simulador_PJ.py): st.set_page_config executado.")
@@ -46,6 +46,8 @@ if not api_key_presente:
 
 try:
     st.image("imgs/logo.png", width=250) 
+except FileNotFoundError:
+    print("WARN_LOG (Simulador_PJ.py): Arquivo imgs/logo.png não encontrado.")
 except Exception as e_img:
     print(f"WARN_LOG (Simulador_PJ.py): Erro ao carregar imgs/logo.png: {e_img}")
 
@@ -69,8 +71,8 @@ produtos_descricao = {
 }
 
 st.sidebar.header("📝 Configurações PJ") 
-qtd_veiculos_key = "pj_qtd_veiculos_sb_v18" 
-temp_contrato_key = "pj_temp_contrato_sb_v18"
+qtd_veiculos_key = "pj_qtd_veiculos_sb_v19" 
+temp_contrato_key = "pj_temp_contrato_sb_v19"
 qtd_veiculos_input = st.sidebar.number_input("Quantidade de Veículos 🚗", min_value=1, value=1, step=1, key=qtd_veiculos_key)
 temp_contrato_selecionado_str = st.sidebar.selectbox("Tempo de Contrato ⏳", list(planos.keys()), key=temp_contrato_key) 
 print("INFO_LOG (Simulador_PJ.py): Widgets da sidebar renderizados.")
@@ -80,7 +82,7 @@ col1_pj, col2_pj = st.columns(2)
 produtos_selecionados_pj = {} 
 for i, (produto, preco_decimal) in enumerate(planos[temp_contrato_selecionado_str].items()):
     col_target = col1_pj if i % 2 == 0 else col2_pj
-    produto_toggle_key = f"pj_toggle_{temp_contrato_selecionado_str.replace(' ','_')}_{produto.replace(' ', '_').replace('/', '_').replace('+', '')}_v18" 
+    produto_toggle_key = f"pj_toggle_{temp_contrato_selecionado_str.replace(' ','_')}_{produto.replace(' ', '_').replace('/', '_').replace('+', '')}_v19" 
     if col_target.toggle(f"{produto} - R$ {preco_decimal:,.2f}", key=produto_toggle_key):
         produtos_selecionados_pj[produto] = preco_decimal 
 print(f"DEBUG_LOG (Simulador_PJ.py): Produtos selecionados para proposta: {produtos_selecionados_pj}")
@@ -100,18 +102,16 @@ else:
     st.info("Selecione produtos para ver o cálculo.")
 print("INFO_LOG (Simulador_PJ.py): Seção de cálculo de totais renderizada.")
 
-if st.button("🔄 Limpar Seleção e Recalcular", key="pj_btn_limpar_recalcular_v18"):
+if st.button("🔄 Limpar Seleção e Recalcular", key="pj_btn_limpar_recalcular_v19"):
     print("INFO_LOG (Simulador_PJ.py): Botão 'Limpar Seleção' clicado.")
     st.rerun()
 
 # --- FUNÇÃO AUXILIAR PARA PREENCHER O DOCX ---
-def replace_text_in_paragraph(paragraph, रिप्लेसमेंट्स):
-    """Substitui múltiplos placeholders em um parágrafo, preservando a formatação o máximo possível."""
-    for placeholder, value in रिप्लेसMENTS.items():
+def replace_text_in_paragraph(paragraph, replacements_dict): # Nome do parâmetro corrigido
+    """Substitui múltiplos placeholders em um parágrafo."""
+    for placeholder, value in replacements_dict.items(): # Usa o nome do parâmetro corrigido
         if placeholder in paragraph.text:
-            # Esta é uma substituição simples. Para manter a formatação perfeitamente,
-            # seria necessário iterar sobre paragraph.runs.
-            paragraph.text = paragraph.text.replace(placeholder, value)
+            paragraph.text = paragraph.text.replace(placeholder, str(value)) # Garante que o valor é string
             print(f"DEBUG_LOG (replace_text_in_paragraph): Substituído '{placeholder}' por '{value}'")
 
 def preencher_proposta_docx(doc, nome_empresa, nome_responsavel, nome_consultor, validade_proposta_dt, 
@@ -125,38 +125,29 @@ def preencher_proposta_docx(doc, nome_empresa, nome_responsavel, nome_consultor,
                            ):
     print(f"DEBUG_LOG (preencher_proposta_docx): Iniciando preenchimento para '{nome_empresa}'.")
     
-    # Define os placeholders e seus valores
-    # CERTIFIQUE-SE QUE ESTES PLACEHOLDERS EXISTEM EXATAMENTE ASSIM NO SEU .DOCX
     placeholders_gerais = {
         "[NOME_EMPRESA]": nome_empresa,
         "[NOME_RESPONSAVEL]": nome_responsavel,
         "[DATA_VALIDADE]": validade_proposta_dt.strftime("%d/%m/%Y"),
         "[NOME_CONSULTOR]": nome_consultor,
-        "[QTD_VEICULOS]": str(qtd_veiculos), # Convertido para string
+        "[QTD_VEICULOS]": str(qtd_veiculos),
         "[TEMPO_CONTRATO]": tempo_contrato_str,
         "[VALOR_MENSAL_FROTA]": f"R$ {valor_mensal_total_frota:,.2f}",
         "[VALOR_TOTAL_CONTRATO]": f"R$ {valor_total_do_contrato:,.2f}"
     }
     
-    # Itera sobre todos os parágrafos do documento para substituir placeholders
-    print("DEBUG_LOG (preencher_proposta_docx): Iniciando substituição de placeholders em parágrafos...")
+    print("DEBUG_LOG (preencher_proposta_docx): Substituindo placeholders em parágrafos...")
     for paragraph in doc.paragraphs:
-        replace_text_in_paragraph(paragraph, placeholders_gerais)
+        replace_text_in_paragraph(paragraph, placeholders_gerais) # Passa o dicionário correto
     
-    # Itera sobre todas as tabelas e células para substituir placeholders (caso estejam dentro de tabelas)
-    # Esta parte é mais para garantir, os placeholders principais geralmente estão em parágrafos.
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
                 for paragraph in cell.paragraphs:
-                    replace_text_in_paragraph(paragraph, placeholders_gerais)
-    print("DEBUG_LOG (preencher_proposta_docx): Substituição de placeholders em parágrafos (e tabelas) concluída.")
+                    replace_text_in_paragraph(paragraph, placeholders_gerais) # Passa o dicionário correto
+    print("DEBUG_LOG (preencher_proposta_docx): Substituição de placeholders gerais concluída.")
 
-
-    # --- PREENCHIMENTO DA TABELA DE ITENS ---
     table_to_fill = None
-    # Estes cabeçalhos DEVEM corresponder EXATAMENTE (incluindo maiúsculas/minúsculas se a comparação for sensível)
-    # à primeira linha da sua tabela de itens no template DOCX.
     expected_headers = ["Item", "Descrição", "Preço | Mês"] 
     print(f"DEBUG_LOG (preencher_proposta_docx): Cabeçalhos esperados na tabela de itens: {expected_headers}")
     table_found_and_filled_correctly = False
@@ -164,34 +155,34 @@ def preencher_proposta_docx(doc, nome_empresa, nome_responsavel, nome_consultor,
     for table_idx, table in enumerate(doc.tables):
         print(f"DEBUG_LOG (preencher_proposta_docx): Verificando Tabela {table_idx} no DOCX...")
         if len(table.rows) > 0 and len(table.columns) >= len(expected_headers):
-            header_cells_text_from_doc = [cell.text.strip() for cell in table.rows[0].cells[:len(expected_headers)]]
-            print(f"DEBUG_LOG (preencher_proposta_docx): Cabeçalhos encontrados na Tabela {table_idx}: {header_cells_text_from_doc}")
+            header_cells_text_from_doc = [cell.text.strip().lower() for cell in table.rows[0].cells[:len(expected_headers)]]
+            expected_headers_lower = [h.lower() for h in expected_headers]
+            print(f"DEBUG_LOG (preencher_proposta_docx): Tabela {table_idx} Cabeçalhos (lower): {header_cells_text_from_doc}, Esperados (lower): {expected_headers_lower}")
             
-            # Comparação mais robusta dos cabeçalhos
             headers_match = True
             if len(header_cells_text_from_doc) == len(expected_headers):
                 for i in range(len(expected_headers)):
-                    # Comparação case-insensitive e removendo espaços extras
-                    if expected_headers[i].strip().lower() != header_cells_text_from_doc[i].strip().lower():
+                    if expected_headers_lower[i] not in header_cells_text_from_doc[i]: # Mudança para 'in' para mais flexibilidade
                         headers_match = False
+                        print(f"DEBUG_LOG: Cabeçalho esperado '{expected_headers_lower[i]}' não encontrado em '{header_cells_text_from_doc[i]}'")
                         break
             else:
                 headers_match = False
             
             if headers_match:
                 table_to_fill = table
-                print(f"INFO_LOG (preencher_proposta_docx): Tabela de itens para preenchimento encontrada (Índice: {table_idx}).")
+                print(f"INFO_LOG (preencher_proposta_docx): Tabela de itens encontrada (Índice: {table_idx}).")
                 
-                print(f"DEBUG_LOG (preencher_proposta_docx): Limpando linhas da Tabela. Linhas antes: {len(table_to_fill.rows)}")
-                for i in range(len(table_to_fill.rows) - 1, 0, -1): # Deixa a primeira linha (cabeçalho)
+                print(f"DEBUG_LOG (preencher_proposta_docx): Limpando linhas. Linhas antes: {len(table_to_fill.rows)}")
+                for i in range(len(table_to_fill.rows) - 1, 0, -1):
                     row_to_remove = table_to_fill.rows[i]
                     table_to_fill._tbl.remove(row_to_remove._tr)
                 print(f"DEBUG_LOG (preencher_proposta_docx): Linhas após limpeza: {len(table_to_fill.rows)}")
 
                 if not produtos_selecionados_dict:
-                    print("WARN_LOG (preencher_proposta_docx): Nenhum produto selecionado para adicionar à tabela.")
+                    print("WARN_LOG (preencher_proposta_docx): Nenhum produto selecionado para tabela.")
                 else:
-                    print(f"DEBUG_LOG (preencher_proposta_docx): Adicionando itens à tabela: {produtos_selecionados_dict}")
+                    print(f"DEBUG_LOG (preencher_proposta_docx): Adicionando itens: {produtos_selecionados_dict}")
                     for produto_sel, preco_sel_decimal in produtos_selecionados_dict.items():
                         row_cells = table_to_fill.add_row().cells
                         row_cells[0].text = produto_sel
@@ -202,12 +193,12 @@ def preencher_proposta_docx(doc, nome_empresa, nome_responsavel, nome_consultor,
                 total_row[0].text = "Total Mensal por Veículo"; total_row[0].paragraphs[0].runs[0].font.bold = True 
                 total_row[1].text = "" 
                 total_row[2].text = f"R$ {soma_total_mensal_por_veiculo_decimal:,.2f}"; total_row[2].paragraphs[0].runs[0].font.bold = True
-                print(f"DEBUG_LOG (preencher_proposta_docx): Linha total por veículo adicionada: R$ {soma_total_mensal_por_veiculo_decimal:,.2f}")
+                print(f"DEBUG_LOG (preencher_proposta_docx): Linha total por veículo: R$ {soma_total_mensal_por_veiculo_decimal:,.2f}")
                 table_found_and_filled_correctly = True
-                break # Sai do loop de tabelas após encontrar e preencher
+                break 
     
     if not table_found_and_filled_correctly:
-        print("WARN_LOG (preencher_proposta_docx): Tabela de itens principal NÃO encontrada/preenchida. Verifique os cabeçalhos no template.")
+        print("WARN_LOG (preencher_proposta_docx): Tabela de itens principal NÃO encontrada/preenchida.")
     
     return table_found_and_filled_correctly
 
@@ -221,11 +212,11 @@ if produtos_selecionados_pj:
         st.warning("⚠️ Geração de PDF (CloudConvert) desativada: Chave API não configurada.")
         print("WARN_LOG (Simulador_PJ.py): Geração de PDF desativada.")
 
-    with st.form(f"formulario_proposta_pj_v18_final", clear_on_submit=False): 
-        nome_empresa = st.text_input("Nome da Empresa", key="pj_form_nome_empresa_v18_final")
-        nome_responsavel = st.text_input("Nome do Responsável", key="pj_form_nome_responsavel_v18_final")
-        nome_consultor = st.text_input("Nome do Consultor Comercial", value=current_name, key="pj_form_nome_consultor_v18_final")
-        validade_proposta_dt = st.date_input("Validade da Proposta", value=datetime.today(), key="pj_form_validade_proposta_v18_final")
+    with st.form(f"formulario_proposta_pj_v19_final", clear_on_submit=False): 
+        nome_empresa = st.text_input("Nome da Empresa", key="pj_form_nome_empresa_v19_final")
+        nome_responsavel = st.text_input("Nome do Responsável", key="pj_form_nome_responsavel_v19_final")
+        nome_consultor = st.text_input("Nome do Consultor Comercial", value=current_name, key="pj_form_nome_consultor_v19_final")
+        validade_proposta_dt = st.date_input("Validade da Proposta", value=datetime.today(), key="pj_form_validade_proposta_v19_final")
         
         col_btn_form1, col_btn_form2 = st.columns(2)
         with col_btn_form1:
@@ -252,8 +243,8 @@ if produtos_selecionados_pj:
                     valor_mensal_total_frota_calculado, valor_total_contrato_calculado
                 )
                 
-                if not tabela_foi_preenchida: # Se a tabela de itens não foi encontrada
-                    st.warning("Atenção: A tabela de itens não foi encontrada ou preenchida corretamente no template. A proposta foi gerada, mas verifique a seção de itens. Certifique-se de que os cabeçalhos 'Item', 'Descrição', 'Preço | Mês' existem na tabela do seu template DOCX.")
+                if not tabela_foi_preenchida:
+                    st.warning("Atenção: A tabela de itens não foi encontrada/preenchida no template. A proposta pode estar incompleta. Verifique os cabeçalhos do seu template DOCX.")
                 
                 buffer_docx = BytesIO()
                 doc.save(buffer_docx)
@@ -264,12 +255,12 @@ if produtos_selecionados_pj:
                     data=buffer_docx,
                     file_name=f"Proposta_Verdio_{nome_empresa.replace(' ', '_')}_{validade_proposta_dt.strftime('%Y%m%d')}.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    key="pj_download_docx_btn_v18_final" 
+                    key="pj_download_docx_btn_v19_final" 
                 )
                 st.success("Proposta em DOCX pronta para download!")
 
             except FileNotFoundError:
-                st.error(f"ERRO: Arquivo template DOCX '{doc_template_path}' não encontrado.")
+                st.error(f"ERRO: O arquivo template DOCX '{doc_template_path}' não foi encontrado.")
                 print(f"ERROR_LOG (Simulador_PJ.py): Template DOCX '{doc_template_path}' não encontrado.")
             except Exception as e_gerar_docx:
                 st.error(f"Erro inesperado ao gerar proposta DOCX: {e_gerar_docx}")
@@ -295,7 +286,7 @@ if produtos_selecionados_pj:
                 )
 
                 if not tabela_foi_preenchida_pdf:
-                    st.warning("Atenção: A tabela de itens não foi encontrada no template. A conversão para PDF pode não incluir os itens detalhados.")
+                    st.warning("Atenção: A tabela de itens não foi encontrada no template. A conversão para PDF pode ter problemas.")
                 
                 buffer_docx_for_pdf = BytesIO()
                 doc.save(buffer_docx_for_pdf)
@@ -306,6 +297,7 @@ if produtos_selecionados_pj:
                     # ... (Lógica de comunicação com CloudConvert como na versão anterior) ...
                     # (O restante da lógica do CloudConvert permanece o mesmo)
                     headers = {"Authorization": f"Bearer {API_KEY_CLOUDCONVERT}"} 
+                    # ... (resto da lógica do CloudConvert) ...
                     job_payload = {
                         "tasks": {
                             "import-docx": {"operation": "import/upload", "filename": f"proposta_{nome_empresa.replace(' ', '_')}.docx"},
@@ -372,11 +364,10 @@ if produtos_selecionados_pj:
                                 data=pdf_file_content,
                                 file_name=f"Proposta_Verdio_{nome_empresa.replace(' ', '_')}_{validade_proposta_dt.strftime('%Y%m%d')}.pdf",
                                 mime="application/pdf",
-                                key="pj_download_pdf_btn_v18_final_cc" 
+                                key="pj_download_pdf_btn_v19_final_cc" 
                             )
                         elif final_job_status != 'error': 
                             st.error("Não foi possível obter o PDF ou tempo de espera excedido.")
-
 
             except FileNotFoundError:
                 st.error(f"ERRO: Template DOCX '{doc_template_path}' não encontrado.")
