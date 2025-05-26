@@ -17,13 +17,7 @@ if st.session_state.get("authentication_status", False) is not True:
     # st.page_link("Simulador_Comercial.py", label="Ir para Login", icon="🏠")
     st.stop() # Impede a execução do restante da página se não estiver autenticado
 
-# Se chegou aqui, o usuário está autenticado.
-# Agora você pode ter outros imports específicos da página ou começar o layout.
 
-# 3. Restante do código da página
-# 🔵 Logotipo e cabeçalho estilizado
-# Verifique se o caminho para "imgs/logo.png" está correto a partir da raiz do projeto.
-# Se a pasta 'imgs' estiver na raiz do projeto, o caminho está ok.
 try:
     st.image("imgs/logo.png", width=250)
 except FileNotFoundError:

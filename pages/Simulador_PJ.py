@@ -1,14 +1,6 @@
 # Exemplo para: pages/Simulador_PF.py (e outros arquivos em pages/)
 import streamlit as st
 
-# 2. BLOCO DE VERIFICAÇÃO DE AUTENTICAÇÃO
-# Este bloco deve vir DEPOIS de st.set_page_config e ANTES de qualquer outro st.* comando.
-if st.session_state.get("authentication_status", False) is not True:
-    st.error("🔒 Acesso Negado! Por favor, faça login na página principal para continuar.")
-    # Considere adicionar um link para a página de login se desejar:
-    # st.page_link("Simulador_Comercial.py", label="Ir para Login", icon="🏠")
-    st.stop() # Impede a execução do restante da página se não estiver autenticado
-
 # --- Restante do código da sua página ---
 st.title(f"Simulador Pessoa Física (Acessado por: {st.session_state.get('name', 'Usuário')})")
 # ... seu código específico para esta página ...
@@ -37,6 +29,15 @@ st.set_page_config(layout="wide", page_title="Simulador PJ")
 st.image("imgs/logo.png", width=250)
 st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador de Venda - Pessoa Jurídica</h1>", unsafe_allow_html=True)
 st.markdown("---")
+
+# 2. BLOCO DE VERIFICAÇÃO DE AUTENTICAÇÃO
+# Este bloco deve vir DEPOIS de st.set_page_config e ANTES de qualquer outro st.* comando.
+if st.session_state.get("authentication_status", False) is not True:
+    st.error("🔒 Acesso Negado! Por favor, faça login na página principal para continuar.")
+    # Considere adicionar um link para a página de login se desejar:
+    # st.page_link("Simulador_Comercial.py", label="Ir para Login", icon="🏠")
+    st.stop() # Impede a execução do restante da página se não estiver autenticado
+
 
 # Produtos
 planos = {
