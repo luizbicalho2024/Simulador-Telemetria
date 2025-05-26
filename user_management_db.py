@@ -1,9 +1,10 @@
 # user_management_db.py
 import streamlit as st
 from pymongo import MongoClient, errors as pymongo_errors
-from streamlit_authenticator.utilities.hasher import Hasher
+from streamlit_authenticator.utilities.hasher import Hasher 
 import certifi 
 
+# --- Configurações do Banco de Dados ---
 @st.cache_resource(show_spinner="Conectando ao Banco de Dados...")
 def get_mongo_client():
     print("INFO_LOG (user_management_db.py): get_mongo_client() chamado.")
@@ -11,9 +12,11 @@ def get_mongo_client():
         st.error("CONFIGURAÇÃO CRÍTICA AUSENTE (user_management_db.py): 'MONGO_CONNECTION_STRING' não definida nos segredos.")
         print("CRITICAL_ERROR_LOG (user_management_db.py): MONGO_CONNECTION_STRING not found in Streamlit Cloud secrets.")
         return None
+    
     CONNECTION_STRING = st.secrets["MONGO_CONNECTION_STRING"]
+    
     try:
-        print("INFO_LOG (user_management_db.py): Tentando conectar ao MongoDB...")
+        print("INFO_LOG (user_management_db.py): Tentando conectar ao MongoDB com PyMongo...")
         client = MongoClient(
             CONNECTION_STRING,
             tlsCAFile=certifi.where(), 
@@ -48,6 +51,7 @@ def get_users_collection():
     try:
         db_name = st.secrets.get("MONGO_DB_NAME", "simulador_db") 
         collection_name = st.secrets.get("MONGO_USERS_COLLECTION", "users")
+        
         db = client[db_name]
         users_collection = db[collection_name]
         print(f"INFO_LOG (user_management_db.py): Acessando DB: '{db_name}', Coleção: '{collection_name}'")
@@ -80,11 +84,66 @@ def fetch_all_users_for_auth():
         credentials["usernames"][user_doc["username"]] = {
             "name": user_doc["name"],
             "email": user_doc.get("email", ""),
-            "password": user_doc["hashed_password"],
+            "password": user_doc["hashed_password"], 
             "role": user_doc["role"]
         }
     print(f"INFO_LOG (user_management_db.py - fetch_all_users): {len(credentials['usernames'])} usuários carregados.")
     return credentials
+
+# --- FUNÇÃO ESSENCIAL PARA ALTERAR SENHA MANUALMENTE ---
+def get_user_hashed_password(username: str):
+    """Busca o hash da senha de um usuário específico."""
+    print(f"INFO_LOG (user_management_db.py - get_user_hashed_password): Buscando hash para '{username}'.")
+    users_collection = get_users_collection()
+    if users_collection is None:
+        print(f"WARN_LOG (user_management_db.py - get_user_hashed_password): Coleção de usuários não disponível para '{username}'.")
+        return None
+    if not username:
+        print(f"WARN_LOG (user_management_db.py - get_user_hashed_password): Username vazio fornecido.")
+        return None
+    try:
+        user_data = users_collection.find_one({"username": username}, {"hashed_password": 1, "_id": 0}) 
+        if user_data and "hashed_password" in user_data:
+            print(f"INFO_LOG (user_management_db.py - get_user_hashed_password): Hash da senha encontrado para '{username}'.")
+            return user_data["hashed_password"]
+        else:
+            print(f"WARN_LOG (user_management_db.py - get_user_hashed_password): Usuário '{username}' não encontrado ou não possui senha hasheada.")
+            return None
+    except Exception as e:
+        st.error(f"ERRO ao buscar hash da senha para '{username}': {e}")
+        print(f"ERROR_LOG (user_management_db.py - get_user_hashed_password): User='{username}', Error: {e}")
+        return None
+
+def update_user_password_manual(username: str, new_plain_password: str):
+    """Atualiza a senha de um usuário (usado para alteração manual pelo usuário)."""
+    print(f"INFO_LOG (user_management_db.py - update_user_password_manual): Tentando atualizar senha para '{username}'.")
+    users_collection = get_users_collection()
+    if users_collection is None:
+        st.error("FALHA (update_user_password_manual): Coleção de usuários indisponível.")
+        return False
+    if not new_plain_password:
+        st.warning("Nova senha não pode ser vazia.")
+        return False
+    try:
+        new_hashed_password = Hasher([new_plain_password]).generate()[0]
+        result = users_collection.update_one(
+            {"username": username},
+            {"$set": {"hashed_password": new_hashed_password}}
+        )
+        if result.modified_count > 0:
+            print(f"INFO_LOG (user_management_db.py - update_user_password_manual): Senha para '{username}' atualizada manualmente.")
+            return True
+        elif result.matched_count > 0 : 
+            print(f"INFO_LOG (user_management_db.py - update_user_password_manual): Senha para '{username}' não modificada (pode ser a mesma), mas usuário existe.")
+            return True 
+        else: # matched_count == 0
+            st.warning(f"Usuário '{username}' não encontrado para atualização de senha manual.")
+            print(f"WARN_LOG (user_management_db.py - update_user_password_manual): Usuário '{username}' não encontrado.")
+            return False
+    except Exception as e:
+        st.error(f"ERRO ao atualizar senha manualmente para '{username}': {e}")
+        print(f"UPDATE_PASSWORD_MANUAL_ERROR_LOG (user_management_db.py): User='{username}', Error: {e}")
+        return False
 
 def get_user_role(username: str):
     users_collection = get_users_collection()
@@ -92,8 +151,7 @@ def get_user_role(username: str):
     try:
         user_data = users_collection.find_one({"username": username})
         role = user_data.get("role") if user_data else None
-        print(f"INFO_LOG (user_management_db.py - get_user_role): Role para '{username}': {role}")
-        return role
+        return role # Removido print repetitivo daqui
     except Exception as e:
         print(f"GET_ROLE_ERROR_LOG (user_management_db.py): User='{username}', Error: {e}")
         return None
@@ -119,49 +177,39 @@ def add_user(username: str, name: str, email: str, plain_password: str, role: st
         return False
 
 def update_user_details(username: str, new_name: str, new_email: str, new_role: str):
-    """Atualiza nome, email e/ou papel de um usuário. Não altera o username."""
     users_collection = get_users_collection()
     if users_collection is None:
         st.error("FALHA (update_user_details): Coleção de usuários indisponível.")
         print("ERROR_LOG (user_management_db.py - update_user_details): Collection is None.")
         return False
-    
     update_fields = {}
-    if new_name: update_fields["name"] = new_name
-    if new_email: update_fields["email"] = new_email # Adicione validação de email se necessário
-    if new_role: update_fields["role"] = new_role
-
-    if not update_fields:
-        st.info("Nenhum campo fornecido para atualização.")
-        return False # Ou True, dependendo se "nenhuma ação" é sucesso.
-
+    if new_name is not None: update_fields["name"] = new_name 
+    if new_email is not None: update_fields["email"] = new_email 
+    if new_role is not None: update_fields["role"] = new_role
+    if not update_fields: 
+        st.info(f"Nenhum dado novo fornecido para o usuário '{username}'.")
+        return True 
     try:
-        print(f"INFO_LOG (user_management_db.py - update_user_details): Tentando atualizar usuário '{username}' com dados: {update_fields}")
-        result = users_collection.update_one(
-            {"username": username}, # Critério de busca
-            {"$set": update_fields}  # Campos a serem atualizados
-        )
-        
+        print(f"INFO_LOG (user_management_db.py - update_user_details): Atualizando '{username}' com: {update_fields}")
+        result = users_collection.update_one({"username": username}, {"$set": update_fields})
         if result.matched_count == 0:
             st.warning(f"Usuário '{username}' não encontrado para atualização.")
-            print(f"WARN_LOG (user_management_db.py - update_user_details): Usuário '{username}' não encontrado.")
+            print(f"WARN_LOG (user_management_db.py - update_user_details): Usuário '{username}' não encontrado (matched_count=0).")
             return False
         if result.modified_count > 0:
-            st.success(f"Detalhes do usuário '{username}' atualizados com sucesso.")
-            print(f"INFO_LOG (user_management_db.py - update_user_details): Usuário '{username}' atualizado.")
+            st.success(f"Detalhes do usuário '{username}' atualizados.")
+            print(f"INFO_LOG (user_management_db.py - update_user_details): Usuário '{username}' atualizado (modified_count > 0).")
             return True
-        else:
-            st.info(f"Nenhuma alteração efetiva nos dados do usuário '{username}' (os novos dados podem ser iguais aos atuais).")
+        else: 
+            st.info(f"Nenhuma alteração efetiva nos dados do usuário '{username}'.")
             print(f"INFO_LOG (user_management_db.py - update_user_details): Usuário '{username}' encontrado, mas modified_count é 0.")
-            return True # Considera sucesso se o usuário foi encontrado e a operação tentada, mesmo sem modificação.
-            
+            return True 
     except Exception as e:
         st.error(f"ERRO ao atualizar detalhes do usuário '{username}': {e}")
         print(f"ERROR_LOG (user_management_db.py - update_user_details): User='{username}', Error: {e}")
         return False
 
 def delete_user(username: str):
-    # (Código como na versão anterior, parece robusto)
     users_collection = get_users_collection()
     if users_collection is None:
         st.error("FALHA (delete_user): Coleção de usuários indisponível.")
@@ -184,24 +232,19 @@ def delete_user(username: str):
         st.error(f"ERRO ao excluir usuário '{username}': {e}")
         return False
 
-
 def update_user_password_by_admin(username: str, plain_password: str):
     users_collection = get_users_collection()
     if users_collection is None:
         st.error("FALHA (update_user_password_by_admin): Coleção de usuários indisponível.")
         print("ERROR_LOG (user_management_db.py - update_user_password_by_admin): Collection is None.")
         return False
-    if not plain_password: # Validação adicional
+    if not plain_password: 
         st.warning("A nova senha não pode ser vazia.")
         return False
     try:
         hashed_password = Hasher([plain_password]).generate()[0]
         print(f"INFO_LOG (user_management_db.py - update_user_password_by_admin): Tentando redefinir senha para '{username}'.")
-        result = users_collection.update_one(
-            {"username": username},
-            {"$set": {"hashed_password": hashed_password}}
-        )
-        
+        result = users_collection.update_one({"username": username}, {"$set": {"hashed_password": hashed_password}})
         if result.matched_count == 0:
             st.warning(f"Usuário '{username}' não encontrado para redefinição de senha.")
             print(f"WARN_LOG (user_management_db.py - update_user_password_by_admin): Usuário '{username}' não encontrado.")
@@ -211,37 +254,17 @@ def update_user_password_by_admin(username: str, plain_password: str):
             print(f"INFO_LOG (user_management_db.py - update_user_password_by_admin): Senha para '{username}' atualizada.")
             return True
         else:
-            # Usuário encontrado, mas a senha pode ser a mesma
             st.info(f"Senha do usuário '{username}' não foi alterada (a nova senha pode ser igual à anterior).")
-            print(f"INFO_LOG (user_management_db.py - update_user_password_by_admin): Senha para '{username}' encontrada, mas modified_count é 0.")
-            return True # Considera sucesso se o usuário foi encontrado, mesmo se a senha não mudou.
-            
+            print(f"INFO_LOG (user_management_db.py - update_user_password_by_admin): Senha para '{username}' não modificada, mas usuário existe.")
+            return True 
     except Exception as e:
         st.error(f"ERRO ao redefinir senha do usuário '{username}': {e}")
         print(f"ERROR_LOG (user_management_db.py - update_user_password_by_admin): User='{username}', Error: {e}")
         return False
 
-def update_user_password_self(username: str, new_hashed_password: str):
-    # (Código como na versão anterior, parece robusto)
-    users_collection = get_users_collection()
-    if users_collection is None:
-        st.error("FALHA (update_user_password_self): Coleção de usuários indisponível.")
-        return False
-    try:
-        users_collection.update_one(
-            {"username": username},
-            {"$set": {"hashed_password": new_hashed_password}}
-        )
-        return True 
-    except Exception as e:
-        st.error(f"ERRO ao salvar sua nova senha no banco: {e}")
-        return False
-
 def get_all_users_for_admin_display():
-    # (Código como na versão anterior, parece robusto)
     users_collection = get_users_collection()
-    if users_collection is None:
-        return []
+    if users_collection is None: return []
     try:
         return list(users_collection.find({}, {"_id": 0, "hashed_password": 0}))
     except Exception as e:
