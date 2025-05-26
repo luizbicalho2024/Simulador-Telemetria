@@ -11,9 +11,10 @@ umdb = None
 try:
     import user_management_db as umdb_module
     umdb = umdb_module 
-    print("INFO_LOG (Simulador_Comercial.py): Módulo user_management_db importado.")
+    print("INFO_LOG (Simulador_Comercial.py): Módulo user_management_db importado com sucesso.")
 except ModuleNotFoundError:
-    st.error("ERRO CRÍTICO: 'user_management_db.py' não encontrado.")
+    st.error("ERRO CRÍTICO: O arquivo 'user_management_db.py' não foi encontrado.")
+    st.info("Verifique se 'user_management_db.py' está na mesma pasta que 'Simulador_Comercial.py'.")
     print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): user_management_db.py não encontrado.")
     st.stop() 
 except ImportError as ie_umdb:
@@ -26,36 +27,40 @@ except Exception as e_umdb_general:
     st.stop()
 
 stauth = None 
-stauth_Hasher = None 
+stauth_Hasher_class = None # Renomeado para clareza que é a classe
 try:
     import streamlit_authenticator as stauth_module 
     stauth = stauth_module 
-    from streamlit_authenticator.utilities.hasher import Hasher as AuthHasher 
-    stauth_Hasher = AuthHasher 
     if hasattr(stauth, '__version__'):
         print(f"INFO_LOG (Simulador_Comercial.py): streamlit_authenticator importado. Versão: {stauth.__version__}")
     else:
         print(f"INFO_LOG (Simulador_Comercial.py): streamlit_authenticator importado, mas sem atributo __version__.")
+    
+    # Tenta importar Hasher especificamente
+    from streamlit_authenticator.utilities.hasher import Hasher
+    stauth_Hasher_class = Hasher # Atribui a classe Hasher
+    print(f"INFO_LOG (Simulador_Comercial.py): streamlit_authenticator.utilities.hasher.Hasher importado com sucesso.")
+
 except ModuleNotFoundError:
-    st.error("ERRO CRÍTICO: 'streamlit-authenticator' não instalado. Verifique requirements.txt e logs de build.")
-    print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): streamlit-authenticator NÃO ENCONTRADO.")
+    st.error("ERRO CRÍTICO: A biblioteca 'streamlit-authenticator' não foi encontrada. Verifique 'requirements.txt' e os logs de build do Streamlit Cloud.")
+    print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): streamlit-authenticator NÃO ENCONTRADO (ModuleNotFoundError).")
     st.stop()
 except ImportError as ie_stauth: 
-    if 'Hasher' in str(ie_stauth):
-        st.error("ERRO CRÍTICO: Não foi possível importar 'Hasher'. Verifique a versão da biblioteca.")
-        print(f"CRITICAL_IMPORT_ERROR_LOG (Simulador_Comercial.py): streamlit_authenticator.utilities.hasher.Hasher: {ie_stauth}")
-    else:
-        st.error(f"ERRO CRÍTICO AO IMPORTAR streamlit_authenticator: {ie_stauth}")
-        print(f"CRITICAL_IMPORT_ERROR_LOG (Simulador_Comercial.py): streamlit_authenticator (ImportError): {ie_stauth}")
+    st.error(f"ERRO CRÍTICO AO IMPORTAR 'streamlit-authenticator' ou seus componentes (como Hasher): {ie_stauth}. Verifique a instalação da biblioteca e suas dependências.")
+    print(f"CRITICAL_IMPORT_ERROR_LOG (Simulador_Comercial.py): streamlit_authenticator/Hasher (ImportError): {ie_stauth}")
     st.stop()
 except Exception as e_stauth_general: 
     st.error(f"ERRO INESPERADO AO IMPORTAR streamlit_authenticator ou Hasher: {e_stauth_general}")
     print(f"UNEXPECTED_IMPORT_ERROR_LOG (Simulador_Comercial.py): streamlit_authenticator/Hasher (Exception): {e_stauth_general}")
     st.stop()
 
-if umdb is None or stauth is None or stauth_Hasher is None:
-    st.error("ERRO CRÍTICO: Falha ao carregar módulos essenciais. App não pode continuar.")
-    print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): umdb, stauth ou stauth_Hasher é None.")
+# Verificação final se os módulos essenciais foram carregados
+if umdb is None or stauth is None or stauth_Hasher_class is None:
+    st.error("ERRO CRÍTICO: Falha ao carregar módulos essenciais para autenticação ou banco de dados. O aplicativo não pode continuar.")
+    print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): umdb, stauth ou stauth_Hasher_class permaneceu None.")
+    if umdb is None: print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): umdb é None.")
+    if stauth is None: print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): stauth é None.")
+    if stauth_Hasher_class is None: print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): stauth_Hasher_class é None (falha ao importar Hasher).")
     st.stop()
 
 
@@ -98,11 +103,11 @@ if not credentials.get("usernames"):
     st.title("Bem-vindo ao Simulador Telemetria! 🚀")
     st.subheader("Configuração Inicial: Criar Conta de Administrador")
     print("INFO_LOG (Simulador_Comercial.py): Nenhum usuário. Exibindo formulário de criação do primeiro admin.")
-    with st.form("FormCriarPrimeiroAdmin_v14_main"): 
-        admin_name = st.text_input("Nome Completo", key="init_admin_name_v14_main")
-        admin_username = st.text_input("Nome de Usuário (login)", key="init_admin_uname_v14_main")
-        admin_email = st.text_input("Email", key="init_admin_email_v14_main")
-        admin_password = st.text_input("Senha", type="password", key="init_admin_pass_v14_main")
+    with st.form("FormCriarPrimeiroAdmin_v15_main"): 
+        admin_name = st.text_input("Nome Completo", key="init_admin_name_v15_main")
+        admin_username = st.text_input("Nome de Usuário (login)", key="init_admin_uname_v15_main")
+        admin_email = st.text_input("Email", key="init_admin_email_v15_main")
+        admin_password = st.text_input("Senha", type="password", key="init_admin_pass_v15_main")
         submit_admin = st.form_submit_button("Criar Administrador")
         if submit_admin:
             if all([admin_name, admin_username, admin_email, admin_password]):
@@ -150,9 +155,9 @@ elif authentication_status is None:
         st.info("Por favor, insira seu nome de usuário e senha.")
 elif authentication_status: 
     st.session_state.name = name
-    st.session_state.username = username # username já é o nome de usuário correto aqui
+    st.session_state.username = username 
     st.session_state.authentication_status = authentication_status
-    st.session_state.role = umdb.get_user_role(username) # Usa o username retornado pelo login
+    st.session_state.role = umdb.get_user_role(username) 
     if st.session_state.role is None:
         st.error("ERRO PÓS-LOGIN: Não foi possível determinar seu nível de acesso.")
         print(f"ERROR_LOG (Simulador_Comercial.py): Falha ao obter role para '{username}'.")
@@ -160,7 +165,7 @@ elif authentication_status:
         st.stop()
     print(f"INFO_LOG (Simulador_Comercial.py): Usuário '{username}' logado. Role: '{st.session_state.role}'.")
 
-    st.sidebar.title(f"Bem-vindo(a), {st.session_state.name}!") # Usa o nome da sessão
+    st.sidebar.title(f"Bem-vindo(a), {st.session_state.name}!") 
     authenticator.logout("Logout", "sidebar")
 
     # --- SEÇÕES DE USUÁRIO E ADMIN ---
@@ -169,11 +174,10 @@ elif authentication_status:
         print(f"DEBUG_LOG (Simulador_Comercial.py): Usuário '{st.session_state.username}' na seção de usuário.")
         
         with st.sidebar.expander("Alterar Minha Senha", expanded=False):
-            # Usar uma chave única para o formulário de alteração de senha do usuário
-            with st.form("form_user_change_password_v14", clear_on_submit=True):
-                current_password = st.text_input("Senha Atual", type="password", key="user_current_pass_v14")
-                new_password = st.text_input("Nova Senha", type="password", key="user_new_pass_v14")
-                confirm_new_password = st.text_input("Confirmar Nova Senha", type="password", key="user_confirm_new_pass_v14")
+            with st.form("form_user_change_password_v15", clear_on_submit=True): # Chave atualizada
+                current_password = st.text_input("Senha Atual", type="password", key="user_current_pass_v15")
+                new_password = st.text_input("Nova Senha", type="password", key="user_new_pass_v15")
+                confirm_new_password = st.text_input("Confirmar Nova Senha", type="password", key="user_confirm_new_pass_v15")
                 submit_change_pass_btn = st.form_submit_button("Salvar Nova Senha")
 
                 if submit_change_pass_btn:
@@ -183,17 +187,15 @@ elif authentication_status:
                     elif new_password != confirm_new_password:
                         st.error("A nova senha e a confirmação não coincidem.")
                     else:
-                        # Verificar senha atual
                         stored_hashed_password = umdb.get_user_hashed_password(st.session_state.username)
-                        if stored_hashed_password and stauth_Hasher([current_password]).verify(stored_hashed_password):
-                            # Senha atual correta, proceder com a alteração
+                        if stored_hashed_password and stauth_Hasher_class([current_password]).verify(stored_hashed_password): # Usa stauth_Hasher_class
                             if umdb.update_user_password_manual(st.session_state.username, new_password):
-                                st.success("Senha alterada com sucesso! Para aplicar a alteração, por favor, faça logout e login novamente.")
-                                print(f"INFO_LOG (Simulador_Comercial.py): Senha alterada para '{st.session_state.username}' por ele mesmo.")
-                                # Não fazer logout automático aqui para o usuário ver a mensagem de sucesso.
-                                # O cookie do authenticator ainda terá o hash antigo até o próximo login.
+                                st.success("Senha alterada com sucesso! Para aplicar, faça logout e login novamente.")
+                                print(f"INFO_LOG (Simulador_Comercial.py): Senha alterada para '{st.session_state.username}'.")
+                                # Recomenda-se logout para forçar o uso do novo hash no cookie
+                                # authenticator.logout("Senha Alterada", "main") # Comentar se quiser que o usuário faça manualmente
                             else:
-                                st.error("Falha ao atualizar a senha no banco de dados. Tente novamente.")
+                                st.error("Falha ao atualizar a senha no banco de dados.")
                         else:
                             st.error("Senha atual incorreta.")
         
@@ -201,10 +203,10 @@ elif authentication_status:
 
     elif st.session_state.role == "admin":
         st.sidebar.subheader("Painel de Administração")
-        # ... (código do painel admin como na última versão completa, com chaves únicas _v14_main) ...
+        # ... (código do painel admin como na última versão completa, com chaves únicas _v15_main) ...
         admin_action_options = ["Ver Usuários", "Cadastrar Novo Usuário", "Editar Usuário",
                                 "Excluir Usuário", "Redefinir Senha de Usuário"]
-        admin_action = st.sidebar.selectbox("Gerenciar Usuários", admin_action_options, key="admin_action_sb_v14_main")
+        admin_action = st.sidebar.selectbox("Gerenciar Usuários", admin_action_options, key="admin_action_sb_v15_main")
         
         current_db_users_dict = umdb.fetch_all_users_for_auth().get("usernames", {})
         
@@ -219,12 +221,12 @@ elif authentication_status:
 
         elif admin_action == "Cadastrar Novo Usuário":
             st.subheader("Cadastrar Novo Usuário")
-            with st.form("form_admin_cadastrar_usuario_v14_main", clear_on_submit=True):
-                reg_name_adm = st.text_input("Nome Completo", key="adm_reg_name_v14_main")
-                reg_uname_adm = st.text_input("Nome de Usuário (login)", key="adm_reg_uname_v14_main")
-                reg_email_adm = st.text_input("Email", key="adm_reg_email_v14_main")
-                reg_pass_adm = st.text_input("Senha", type="password", key="adm_reg_pass_v14_main")
-                reg_role_adm = st.selectbox("Papel", ["user", "admin"], key="adm_reg_role_v14_main")
+            with st.form("form_admin_cadastrar_usuario_v15_main", clear_on_submit=True):
+                reg_name_adm = st.text_input("Nome Completo", key="adm_reg_name_v15_main")
+                reg_uname_adm = st.text_input("Nome de Usuário (login)", key="adm_reg_uname_v15_main")
+                reg_email_adm = st.text_input("Email", key="adm_reg_email_v15_main")
+                reg_pass_adm = st.text_input("Senha", type="password", key="adm_reg_pass_v15_main")
+                reg_role_adm = st.selectbox("Papel", ["user", "admin"], key="adm_reg_role_v15_main")
                 if st.form_submit_button("Cadastrar Usuário"):
                     if all([reg_name_adm, reg_uname_adm, reg_email_adm, reg_pass_adm, reg_role_adm]):
                         if umdb.add_user(reg_uname_adm, reg_name_adm, reg_email_adm, reg_pass_adm, reg_role_adm):
@@ -238,20 +240,20 @@ elif authentication_status:
                 st.info("Nenhum usuário disponível para edição.")
             else:
                 usernames_list_edit = list(current_db_users_dict.keys())
-                user_to_edit_uname = st.selectbox("Usuário a editar:", usernames_list_edit, key="adm_edit_sel_user_v14_main")
+                user_to_edit_uname = st.selectbox("Usuário a editar:", usernames_list_edit, key="adm_edit_sel_user_v15_main")
                 
                 if user_to_edit_uname:
                     user_data_for_form = current_db_users_dict.get(user_to_edit_uname)
                     if user_data_for_form:
-                        with st.form(f"form_edit_user_{user_to_edit_uname}_v14_main", clear_on_submit=False): 
+                        with st.form(f"form_edit_user_{user_to_edit_uname}_v15_main", clear_on_submit=False): 
                             st.write(f"Editando dados para: **{user_to_edit_uname}**")
-                            edit_name = st.text_input("Nome Completo:", value=user_data_for_form.get('name', ''), key=f"adm_edit_name_val_{user_to_edit_uname}_v14_main")
-                            edit_email = st.text_input("Email:", value=user_data_for_form.get('email', ''), key=f"adm_edit_email_val_{user_to_edit_uname}_v14_main")
+                            edit_name = st.text_input("Nome Completo:", value=user_data_for_form.get('name', ''), key=f"adm_edit_name_val_{user_to_edit_uname}_v15_main")
+                            edit_email = st.text_input("Email:", value=user_data_for_form.get('email', ''), key=f"adm_edit_email_val_{user_to_edit_uname}_v15_main")
                             roles_options = ["user", "admin"]
                             current_role = user_data_for_form.get('role', 'user')
                             try: current_role_idx_edit = roles_options.index(current_role)
                             except ValueError: current_role_idx_edit = 0 
-                            edit_role = st.selectbox("Novo Papel:", roles_options, index=current_role_idx_edit, key=f"adm_edit_role_val_{user_to_edit_uname}_v14_main")
+                            edit_role = st.selectbox("Novo Papel:", roles_options, index=current_role_idx_edit, key=f"adm_edit_role_val_{user_to_edit_uname}_v15_main")
                             if st.form_submit_button("Salvar Alterações"):
                                 if umdb.update_user_details(user_to_edit_uname, edit_name, edit_email, edit_role):
                                     st.rerun() 
@@ -264,12 +266,12 @@ elif authentication_status:
                 st.info("Nenhum usuário disponível para redefinir senha.")
             else:
                 usernames_list_reset = list(current_db_users_dict.keys())
-                user_to_reset_uname = st.selectbox("Usuário:", usernames_list_reset, key="adm_reset_sel_user_v14_main")
+                user_to_reset_uname = st.selectbox("Usuário:", usernames_list_reset, key="adm_reset_sel_user_v15_main")
                 if user_to_reset_uname:
-                    with st.form(f"form_reset_pass_{user_to_reset_uname}_v14_main", clear_on_submit=True):
+                    with st.form(f"form_reset_pass_{user_to_reset_uname}_v15_main", clear_on_submit=True):
                         st.write(f"Redefinindo senha para: **{user_to_reset_uname}**")
-                        new_pass = st.text_input("Nova Senha:", type="password", key=f"adm_reset_new_pass_{user_to_reset_uname}_v14_main")
-                        confirm_pass = st.text_input("Confirmar Nova Senha:", type="password", key=f"adm_reset_conf_pass_{user_to_reset_uname}_v14_main")
+                        new_pass = st.text_input("Nova Senha:", type="password", key=f"adm_reset_new_pass_{user_to_reset_uname}_v15_main")
+                        confirm_pass = st.text_input("Confirmar Nova Senha:", type="password", key=f"adm_reset_conf_pass_{user_to_reset_uname}_v15_main")
                         if st.form_submit_button("Redefinir Senha"):
                             if not new_pass: st.warning("O campo 'Nova Senha' não pode ser vazio.")
                             elif new_pass != confirm_pass: st.warning("As senhas não coincidem.")
@@ -282,10 +284,10 @@ elif authentication_status:
             if not current_db_users_dict:
                 st.info("Nenhum usuário para excluir.")
             else:
-                user_to_delete_uname = st.selectbox("Usuário a excluir:", list(current_db_users_dict.keys()), key="adm_del_sel_user_v14_main")
+                user_to_delete_uname = st.selectbox("Usuário a excluir:", list(current_db_users_dict.keys()), key="adm_del_sel_user_v15_main")
                 if user_to_delete_uname:
                     st.warning(f"Confirma a exclusão de '{user_to_delete_uname}'?")
-                    if st.button(f"Excluir {user_to_delete_uname}", type="primary", key=f"adm_del_btn_{user_to_delete_uname}_v14_main"):
+                    if st.button(f"Excluir {user_to_delete_uname}", type="primary", key=f"adm_del_btn_{user_to_delete_uname}_v15_main"):
                         if umdb.delete_user(user_to_delete_uname):
                             st.rerun()
         st.sidebar.info("Acesso de administrador.")
