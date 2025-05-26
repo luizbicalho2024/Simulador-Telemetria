@@ -2,7 +2,7 @@
 # Importações Python padrão primeiro
 from io import BytesIO
 from docx import Document 
-from docx.shared import Pt 
+from docx.shared import Pt, RGBColor # Adicionado RGBColor para cor de fonte, se desejar
 from docx.enum.text import WD_ALIGN_PARAGRAPH # Para alinhamento
 import requests
 import time
@@ -42,7 +42,7 @@ API_KEY_CLOUDCONVERT = st.secrets.get("CLOUDCONVERT_API_KEY")
 api_key_presente = bool(API_KEY_CLOUDCONVERT) 
 
 if not api_key_presente:
-    print("WARN_LOG (Simulador_PJ.py): CLOUDCONVERT_API_KEY não configurada.")
+    print("WARN_LOG (Simulador_PJ.py): CLOUDCONVERT_API_KEY não configurada nos segredos.")
 
 try:
     st.image("imgs/logo.png", width=250) 
@@ -69,10 +69,10 @@ produtos_descricao = {
 }
 
 st.sidebar.header("📝 Configurações PJ") 
-qtd_veiculos_key = "pj_qtd_veiculos_sb_v15" 
-temp_contrato_key = "pj_temp_contrato_sb_v15"
+qtd_veiculos_key = "pj_qtd_veiculos_sb_v16" 
+temp_contrato_key = "pj_temp_contrato_sb_v16"
 qtd_veiculos_input = st.sidebar.number_input("Quantidade de Veículos 🚗", min_value=1, value=1, step=1, key=qtd_veiculos_key)
-temp_contrato_selecionado_str = st.sidebar.selectbox("Tempo de Contrato ⏳", list(planos.keys()), key=temp_contrato_key) # Renomeado para evitar confusão
+temp_contrato_selecionado_str = st.sidebar.selectbox("Tempo de Contrato ⏳", list(planos.keys()), key=temp_contrato_key) 
 print("INFO_LOG (Simulador_PJ.py): Widgets da sidebar renderizados.")
 
 st.markdown("### 🛠️ Selecione os Produtos:")
@@ -80,7 +80,7 @@ col1_pj, col2_pj = st.columns(2)
 produtos_selecionados_pj = {} 
 for i, (produto, preco_decimal) in enumerate(planos[temp_contrato_selecionado_str].items()):
     col_target = col1_pj if i % 2 == 0 else col2_pj
-    produto_toggle_key = f"pj_toggle_{temp_contrato_selecionado_str.replace(' ','_')}_{produto.replace(' ', '_').replace('/', '_').replace('+', '')}_v15" 
+    produto_toggle_key = f"pj_toggle_{temp_contrato_selecionado_str.replace(' ','_')}_{produto.replace(' ', '_').replace('/', '_').replace('+', '')}_v16" 
     if col_target.toggle(f"{produto} - R$ {preco_decimal:,.2f}", key=produto_toggle_key):
         produtos_selecionados_pj[produto] = preco_decimal 
 print(f"DEBUG_LOG (Simulador_PJ.py): Produtos selecionados para proposta: {produtos_selecionados_pj}")
@@ -100,7 +100,7 @@ else:
     st.info("Selecione produtos para ver o cálculo.")
 print("INFO_LOG (Simulador_PJ.py): Seção de cálculo de totais renderizada.")
 
-if st.button("🔄 Limpar Seleção e Recalcular", key="pj_btn_limpar_recalcular_v15"):
+if st.button("🔄 Limpar Seleção e Recalcular", key="pj_btn_limpar_recalcular_v16"):
     print("INFO_LOG (Simulador_PJ.py): Botão 'Limpar Seleção' clicado.")
     st.rerun()
 
@@ -108,105 +108,79 @@ if st.button("🔄 Limpar Seleção e Recalcular", key="pj_btn_limpar_recalcular
 def preencher_proposta_docx(doc, nome_empresa, nome_responsavel, nome_consultor, validade_proposta_dt, 
                             produtos_selecionados_dict, 
                             produtos_descricao_dict,   
-                            soma_total_mensal_por_veiculo_decimal, # Renomeado para clareza
-                            # Novos parâmetros para os totais e informações do contrato
+                            soma_total_mensal_por_veiculo_decimal,
                             qtd_veiculos, 
-                            tempo_contrato_str, # Ex: "12 Meses"
+                            tempo_contrato_str,
                             valor_mensal_total_frota,
                             valor_total_do_contrato 
                            ):
     print(f"DEBUG_LOG (preencher_proposta_docx): Iniciando preenchimento para '{nome_empresa}'.")
-    print(f"DEBUG_LOG (preencher_proposta_docx): Itens selecionados: {produtos_selecionados_dict}")
-    print(f"DEBUG_LOG (preencher_proposta_docx): Soma mensal por veículo: {soma_total_mensal_por_veiculo_decimal}")
-    print(f"DEBUG_LOG (preencher_proposta_docx): Qtd Veículos: {qtd_veiculos}, Tempo Contrato: {tempo_contrato_str}")
-    print(f"DEBUG_LOG (preencher_proposta_docx): Valor Mensal Frota: {valor_mensal_total_frota}, Valor Total Contrato: {valor_total_do_contrato}")
-
+    
+    # Preenche parágrafos
     for p_idx, p in enumerate(doc.paragraphs):
         if "Nome da empresa" in p.text: p.text = p.text.replace("Nome da empresa", nome_empresa)
         if "Nome do Responsável" in p.text: p.text = p.text.replace("Nome do Responsável", nome_responsavel)
         if "00/00/0000" in p.text: p.text = p.text.replace("00/00/0000", validade_proposta_dt.strftime("%d/%m/%Y"))
         if "Nome do comercial" in p.text: p.text = p.text.replace("Nome do comercial", nome_consultor)
 
+    # Encontra e preenche a tabela de itens
     table_to_fill = None
-    expected_headers = ["Item", "Descrição", "Preço | Mês"] # Ajuste conforme seu template
+    expected_headers = ["Item", "Descrição", "Preço | Mês"] 
     print(f"DEBUG_LOG (preencher_proposta_docx): Cabeçalhos esperados na tabela: {expected_headers}")
-
     for table_idx, table in enumerate(doc.tables):
-        print(f"DEBUG_LOG (preencher_proposta_docx): Verificando Tabela {table_idx}...")
         if len(table.rows) > 0 and len(table.columns) >= len(expected_headers):
             header_cells_text = [cell.text.strip().lower() for cell in table.rows[0].cells[:len(expected_headers)]]
             expected_headers_lower = [h.lower() for h in expected_headers]
-            print(f"DEBUG_LOG (preencher_proposta_docx): Tabela {table_idx} Cabeçalhos (lower): {header_cells_text}, Esperados (lower): {expected_headers_lower}")
             if header_cells_text == expected_headers_lower:
                 table_to_fill = table
                 print(f"INFO_LOG (preencher_proposta_docx): Tabela de itens encontrada (Índice: {table_idx}).")
                 break 
     
     if table_to_fill:
-        print(f"DEBUG_LOG (preencher_proposta_docx): Limpando linhas da Tabela. Linhas antes: {len(table_to_fill.rows)}")
         for i in range(len(table_to_fill.rows) - 1, 0, -1):
             row = table_to_fill.rows[i]
             table_to_fill._tbl.remove(row._tr)
-        print(f"DEBUG_LOG (preencher_proposta_docx): Linhas após limpeza: {len(table_to_fill.rows)}")
-
+        
         if not produtos_selecionados_dict:
-            print("WARN_LOG (preencher_proposta_docx): Nenhum produto selecionado.")
+            print("WARN_LOG (preencher_proposta_docx): Nenhum produto selecionado para tabela.")
         else:
-            print(f"DEBUG_LOG (preencher_proposta_docx): Adicionando itens: {produtos_selecionados_dict}")
             for produto_sel, preco_sel_decimal in produtos_selecionados_dict.items():
                 row_cells = table_to_fill.add_row().cells
                 row_cells[0].text = produto_sel
                 row_cells[1].text = produtos_descricao_dict.get(produto_sel, " ") 
                 row_cells[2].text = f"R$ {preco_sel_decimal:,.2f}"
         
-        # Adiciona linha de TOTAL MENSAL POR VEÍCULO
         total_row = table_to_fill.add_row().cells
         total_row[0].text = "Total Mensal por Veículo"; total_row[0].paragraphs[0].runs[0].font.bold = True 
         total_row[1].text = "" 
         total_row[2].text = f"R$ {soma_total_mensal_por_veiculo_decimal:,.2f}"; total_row[2].paragraphs[0].runs[0].font.bold = True
-        print(f"DEBUG_LOG (preencher_proposta_docx): Linha total por veículo adicionada: R$ {soma_total_mensal_por_veiculo_decimal:,.2f}")
-
-        # Adicionar linha em branco para espaçamento (opcional)
-        # table_to_fill.add_row() 
-
-        # Adicionar Quantidade de Veículos
-        qtd_row = table_to_fill.add_row().cells
-        qtd_row[0].text = "Quantidade de Veículos"
-        qtd_row[0].paragraphs[0].runs[0].font.bold = True
-        qtd_row[1].text = "" # Pode mesclar ou deixar em branco
-        qtd_row[2].text = str(qtd_veiculos) # Converte para string
-        qtd_row[2].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT # Exemplo de alinhamento
-        print(f"DEBUG_LOG (preencher_proposta_docx): Linha Qtd Veículos adicionada: {qtd_veiculos}")
         
-        # Adicionar Tempo de Contrato
-        tempo_row = table_to_fill.add_row().cells
-        tempo_row[0].text = "Tempo de Contrato"
-        tempo_row[0].paragraphs[0].runs[0].font.bold = True
-        tempo_row[1].text = ""
-        tempo_row[2].text = tempo_contrato_str # Ex: "12 Meses"
-        tempo_row[2].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        print(f"DEBUG_LOG (preencher_proposta_docx): Linha Tempo Contrato adicionada: {tempo_contrato_str}")
-
-        # Adicionar Valor Mensal Total para a Frota
-        frota_mensal_row = table_to_fill.add_row().cells
-        frota_mensal_row[0].text = "Valor Mensal Total para a Frota"
-        frota_mensal_row[0].paragraphs[0].runs[0].font.bold = True
-        frota_mensal_row[1].text = ""
-        frota_mensal_row[2].text = f"R$ {valor_mensal_total_frota:,.2f}"
-        frota_mensal_row[2].paragraphs[0].runs[0].font.bold = True
-        frota_mensal_row[2].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        print(f"DEBUG_LOG (preencher_proposta_docx): Linha Valor Mensal Frota adicionada: R$ {valor_mensal_total_frota:,.2f}")
-
-        # Adicionar Valor Total do Contrato
-        contrato_total_row = table_to_fill.add_row().cells
-        contrato_total_row[0].text = "Valor Total do Contrato"
-        contrato_total_row[0].paragraphs[0].runs[0].font.bold = True
-        contrato_total_row[1].text = ""
-        contrato_total_row[2].text = f"R$ {valor_total_do_contrato:,.2f}"
-        contrato_total_row[2].paragraphs[0].runs[0].font.bold = True
-        contrato_total_row[2].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        print(f"DEBUG_LOG (preencher_proposta_docx): Linha Valor Total Contrato adicionada: R$ {valor_total_do_contrato:,.2f}")
+        # ADICIONAR INFORMAÇÕES DO CONTRATO APÓS A TABELA DE ITENS
+        # Você pode adicionar parágrafos diretamente ao corpo do documento (doc.add_paragraph)
+        # ou, se houver um placeholder específico no template para estas informações, substituí-lo.
+        # Para este exemplo, vamos adicionar novos parágrafos após a última tabela encontrada (ou no final).
         
+        # Adiciona um parágrafo em branco para espaçamento
+        doc.add_paragraph("") 
+
+        p_qtd = doc.add_paragraph()
+        p_qtd.add_run("Quantidade de Veículos Contratados: ").bold = True
+        p_qtd.add_run(str(qtd_veiculos))
+
+        p_tempo = doc.add_paragraph()
+        p_tempo.add_run("Tempo de Contrato: ").bold = True
+        p_tempo.add_run(tempo_contrato_str)
+        
+        # Estes já são exibidos na interface, podem ser redundantes no DOCX ou formatados de forma diferente
+        # p_frota = doc.add_paragraph()
+        # p_frota.add_run("Valor Mensal Total para a Frota: ").bold = True
+        # p_frota.add_run(f"R$ {valor_mensal_total_frota:,.2f}")
+
+        # p_total_contrato = doc.add_paragraph()
+        # p_total_contrato.add_run("Valor Total Global do Contrato: ").bold = True
+        # p_total_contrato.add_run(f"R$ {valor_total_do_contrato:,.2f}")
+        
+        print(f"DEBUG_LOG (preencher_proposta_docx): Informações de contrato adicionadas após a tabela.")
         return True 
     else:
         print("WARN_LOG (preencher_proposta_docx): Tabela de itens NÃO encontrada no template DOCX.")
@@ -222,11 +196,11 @@ if produtos_selecionados_pj:
         st.warning("⚠️ Geração de PDF (CloudConvert) desativada: Chave API não configurada.")
         print("WARN_LOG (Simulador_PJ.py): Geração de PDF desativada (API Key CloudConvert ausente).")
 
-    with st.form(f"formulario_proposta_pj_v15_final", clear_on_submit=False): 
-        nome_empresa = st.text_input("Nome da Empresa", key="pj_form_nome_empresa_v15_final")
-        nome_responsavel = st.text_input("Nome do Responsável", key="pj_form_nome_responsavel_v15_final")
-        nome_consultor = st.text_input("Nome do Consultor Comercial", value=current_name, key="pj_form_nome_consultor_v15_final")
-        validade_proposta_dt = st.date_input("Validade da Proposta", value=datetime.today(), key="pj_form_validade_proposta_v15_final")
+    with st.form(f"formulario_proposta_pj_v16_final", clear_on_submit=False): 
+        nome_empresa = st.text_input("Nome da Empresa", key="pj_form_nome_empresa_v16_final")
+        nome_responsavel = st.text_input("Nome do Responsável", key="pj_form_nome_responsavel_v16_final")
+        nome_consultor = st.text_input("Nome do Consultor Comercial", value=current_name, key="pj_form_nome_consultor_v16_final")
+        validade_proposta_dt = st.date_input("Validade da Proposta", value=datetime.today(), key="pj_form_validade_proposta_v16_final")
         
         col_btn_form1, col_btn_form2 = st.columns(2)
         with col_btn_form1:
@@ -249,12 +223,12 @@ if produtos_selecionados_pj:
                     doc, nome_empresa, nome_responsavel, nome_consultor, 
                     validade_proposta_dt, produtos_selecionados_pj, 
                     produtos_descricao, soma_mensal_produtos_selecionados_calculada,
-                    qtd_veiculos_input, temp_contrato_selecionado_str, # Passando novos argumentos
+                    qtd_veiculos_input, temp_contrato_selecionado_str, 
                     valor_mensal_total_frota_calculado, valor_total_contrato_calculado
                 )
                 
                 if not tabela_preenchida_docx:
-                    st.warning("Atenção: A tabela de itens não foi encontrada no template. A proposta será gerada sem a lista detalhada de itens. Verifique os cabeçalhos do seu template DOCX ('Item', 'Descrição', 'Preço | Mês').")
+                    st.warning("Atenção: A tabela de itens não foi encontrada no template. Verifique os cabeçalhos do seu template DOCX.")
                 
                 buffer_docx = BytesIO()
                 doc.save(buffer_docx)
@@ -265,7 +239,7 @@ if produtos_selecionados_pj:
                     data=buffer_docx,
                     file_name=f"Proposta_Verdio_{nome_empresa.replace(' ', '_')}_{validade_proposta_dt.strftime('%Y%m%d')}.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    key="pj_download_docx_btn_v15_final" 
+                    key="pj_download_docx_btn_v16_final" 
                 )
                 st.success("Proposta em DOCX pronta para download!")
 
@@ -291,12 +265,12 @@ if produtos_selecionados_pj:
                     doc, nome_empresa, nome_responsavel, nome_consultor, 
                     validade_proposta_dt, produtos_selecionados_pj, 
                     produtos_descricao, soma_mensal_produtos_selecionados_calculada,
-                    qtd_veiculos_input, temp_contrato_selecionado_str, # Passando novos argumentos
+                    qtd_veiculos_input, temp_contrato_selecionado_str, 
                     valor_mensal_total_frota_calculado, valor_total_contrato_calculado
                 )
 
                 if not tabela_preenchida_pdf:
-                    st.warning("Atenção: A tabela de itens não foi encontrada no template. A conversão para PDF pode não incluir os itens detalhados. Verifique os cabeçalhos do seu template DOCX.")
+                    st.warning("Atenção: A tabela de itens não foi encontrada no template. A conversão para PDF pode ter problemas.")
                 
                 buffer_docx_for_pdf = BytesIO()
                 doc.save(buffer_docx_for_pdf)
@@ -304,6 +278,8 @@ if produtos_selecionados_pj:
                 print("INFO_LOG (Simulador_PJ.py): DOCX gerado para conversão PDF.")
 
                 with st.spinner("Gerando PDF da proposta via CloudConvert, aguarde..."):
+                    # ... (Lógica de comunicação com CloudConvert como na versão anterior,
+                    #      usando API_KEY_CLOUDCONVERT) ...
                     headers = {"Authorization": f"Bearer {API_KEY_CLOUDCONVERT}"} 
                     job_payload = {
                         "tasks": {
@@ -312,7 +288,6 @@ if produtos_selecionados_pj:
                             "export-pdf": {"operation": "export/url", "input": "convert-to-pdf", "inline": False, "archive_multiple_files": False}
                         }
                     }
-                    # ... (resto da lógica do CloudConvert como na versão anterior) ...
                     job_creation_response = requests.post('https://api.cloudconvert.com/v2/jobs', json=job_payload, headers=headers)
                     job_creation_response.raise_for_status() 
                     job_data = job_creation_response.json()
@@ -330,7 +305,7 @@ if produtos_selecionados_pj:
                         st.error("Falha ao obter URL/parâmetros de upload do CloudConvert.")
                         st.stop() 
                     
-                    files_payload_for_upload = {'file': (f'proposta_{nome_empresa.replace(" ", "_")}.docx', buffer_docx_for_pdf, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')}
+                    files_payload_for_upload = {'file': (f"proposta_{nome_empresa.replace(' ', '_')}.docx", buffer_docx_for_pdf, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')}
                     upload_post_response = requests.post(upload_url, data=upload_parameters, files=files_payload_for_upload)
                     upload_post_response.raise_for_status()
 
@@ -372,7 +347,7 @@ if produtos_selecionados_pj:
                                 data=pdf_file_content,
                                 file_name=f"Proposta_Verdio_{nome_empresa.replace(' ', '_')}_{validade_proposta_dt.strftime('%Y%m%d')}.pdf",
                                 mime="application/pdf",
-                                key="pj_download_pdf_btn_v15_final_cc" 
+                                key="pj_download_pdf_btn_v16_final_cc" 
                             )
                         elif final_job_status != 'error': 
                             st.error("Não foi possível obter o PDF ou tempo de espera excedido.")
