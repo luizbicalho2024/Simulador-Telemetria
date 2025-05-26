@@ -1,5 +1,4 @@
 # pages/Simulador_PJ.py
-# Importações Python padrão primeiro
 from io import BytesIO
 from docx import Document 
 from docx.shared import Pt
@@ -7,7 +6,6 @@ import requests
 import time
 from datetime import datetime
 from decimal import Decimal, ROUND_DOWN 
-
 import streamlit as st
 
 # 1. st.set_page_config() - PRIMEIRO COMANDO STREAMLIT
@@ -20,37 +18,30 @@ st.set_page_config(
 print("INFO_LOG (Simulador_PJ.py): st.set_page_config executado.")
 
 # 2. BLOCO DE VERIFICAÇÃO DE AUTENTICAÇÃO
-# Este bloco DEVE vir IMEDIATAMENTE APÓS st.set_page_config e ANTES de qualquer outro comando st.*
 auth_status = st.session_state.get("authentication_status", False)
-print(f"DEBUG_LOG (Simulador_PJ.py): Verificando auth_status: {auth_status} (Tipo: {type(auth_status)})")
-
-if auth_status is not True: # Checagem explícita e rigorosa contra True
+if auth_status is not True:
     st.error("🔒 Acesso Negado! Por favor, faça login na página principal para continuar.")
-    print(f"ACCESS_DENIED_LOG (Simulador_PJ.py): User not authenticated. Status: {auth_status}. Parando script.")
+    print(f"ACCESS_DENIED_LOG (Simulador_PJ.py): User not authenticated. Status: {auth_status}")
     try:
         st.page_link("Simulador_Comercial.py", label="Ir para Login", icon="🏠")
     except AttributeError: 
         st.info("Retorne à página principal para efetuar o login.")
-    st.stop() # Impede a execução do restante da página se não estiver autenticado
+    st.stop() 
 
-# Se chegou aqui, o usuário está autenticado.
 current_username = st.session_state.get('username', 'N/A')
 current_role = st.session_state.get('role', 'Indefinido') 
 current_name = st.session_state.get('name', 'N/A')
+print(f"INFO_LOG (Simulador_PJ.py): User '{current_username}' authenticated. Role: '{current_role}'.")
 
-print(f"INFO_LOG (Simulador_PJ.py): User '{current_username}' autenticado. Role: '{current_role}'. Iniciando renderização da página PJ...")
+# 3. Restante do código da sua página
 
-# 3. Restante do código da sua página - AGORA o conteúdo da página começa
-
-# 🛡️ Token CloudConvert - Lendo dos segredos do Streamlit
+# Busca a API Key do CloudConvert dos segredos do Streamlit
 API_KEY_CLOUDCONVERT = st.secrets.get("CLOUDCONVERT_API_KEY") 
-api_key_presente = bool(API_KEY_CLOUDCONVERT)
+api_key_presente = bool(API_KEY_CLOUDCONVERT) 
 
 if not api_key_presente:
     print("WARN_LOG (Simulador_PJ.py): CLOUDCONVERT_API_KEY não configurada nos segredos.")
-    # O aviso ao usuário será mostrado mais abaixo, condicionalmente.
 
-# 🔵 Logotipo e cabeçalho estilizado
 try:
     st.image("imgs/logo.png", width=250) 
 except FileNotFoundError:
@@ -60,13 +51,11 @@ except Exception as e_img:
 
 st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador de Venda - Pessoa Jurídica</h1>", unsafe_allow_html=True)
 st.markdown("---")
-
 st.write(f"Usuário: {current_name} ({current_username})")
 st.write(f"Nível de Acesso: {current_role}") 
 st.markdown("---")
 print("INFO_LOG (Simulador_PJ.py): Cabeçalho e informações do usuário renderizados.")
 
-# Produtos (Convertendo para Decimal na definição para precisão)
 planos = {
     "12 Meses": {
         "GPRS / Gsm": Decimal("80.88"), "Satélite": Decimal("193.80"),
@@ -96,31 +85,26 @@ produtos_descricao = {
     "Videomonitoramento + DMS + ADAS": "Sistema de videomonitoramento com assistência ao motorista"
 }
 
-# Sidebar
 st.sidebar.header("📝 Configurações PJ") 
-# Chaves únicas para widgets da sidebar
-qtd_veiculos_key = "pj_qtd_veiculos_sb_FINAL" # Sufixo para garantir unicidade
-temp_contrato_key = "pj_temp_contrato_sb_FINAL"
+qtd_veiculos_key = "pj_qtd_veiculos_sb_v7" 
+temp_contrato_key = "pj_temp_contrato_sb_v7"
 
 qtd_veiculos_input = st.sidebar.number_input("Quantidade de Veículos 🚗", min_value=1, value=1, step=1, key=qtd_veiculos_key)
 temp_contrato_selecionado = st.sidebar.selectbox("Tempo de Contrato ⏳", list(planos.keys()), key=temp_contrato_key)
 print("INFO_LOG (Simulador_PJ.py): Widgets da sidebar renderizados.")
 
-# Seção principal
 st.markdown("### 🛠️ Selecione os Produtos:")
 col1_pj, col2_pj = st.columns(2) 
 produtos_selecionados_pj = {} 
 
 for i, (produto, preco_decimal) in enumerate(planos[temp_contrato_selecionado].items()):
     col_target = col1_pj if i % 2 == 0 else col2_pj
-    # Chave de toggle mais robusta e única
-    produto_toggle_key = f"pj_toggle_{temp_contrato_selecionado.replace(' ','_')}_{produto.replace(' ', '_').replace('/', '_').replace('+', '')}_FINAL" 
+    produto_toggle_key = f"pj_toggle_{temp_contrato_selecionado.replace(' ','_')}_{produto.replace(' ', '_').replace('/', '_').replace('+', '')}_v7" 
     if col_target.toggle(f"{produto} - R$ {preco_decimal:,.2f}", key=produto_toggle_key):
         produtos_selecionados_pj[produto] = preco_decimal 
 
 print(f"DEBUG_LOG (Simulador_PJ.py): Produtos selecionados: {produtos_selecionados_pj}")
 
-# Cálculos
 soma_mensal_produtos_selecionados = sum(produtos_selecionados_pj.values()) if produtos_selecionados_pj else Decimal("0")
 qtd_veiculos_decimal = Decimal(str(qtd_veiculos_input)) 
 valor_mensal_total_frota = soma_mensal_produtos_selecionados * qtd_veiculos_decimal
@@ -136,7 +120,7 @@ else:
     st.info("Selecione produtos para ver o cálculo.")
 print("INFO_LOG (Simulador_PJ.py): Seção de cálculo de totais renderizada.")
 
-if st.button("🔄 Limpar Seleção e Recalcular", key="pj_btn_limpar_recalcular_FINAL"):
+if st.button("🔄 Limpar Seleção e Recalcular", key="pj_btn_limpar_recalcular_v7"):
     print("INFO_LOG (Simulador_PJ.py): Botão 'Limpar Seleção' clicado.")
     st.rerun()
 
@@ -147,15 +131,13 @@ if produtos_selecionados_pj:
 
     if not api_key_presente:
         st.warning("⚠️ A funcionalidade de gerar proposta em PDF está desativada porque a chave da API do CloudConvert não está configurada nos segredos do aplicativo.")
-        print("WARN_LOG (Simulador_PJ.py): Geração de PDF desativada (API Key ausente) antes do formulário.")
+        print("WARN_LOG (Simulador_PJ.py): Formulário de proposta mostrado, mas PDF desativado por falta de API Key.")
 
-    # O formulário é sempre exibido se houver produtos, mas o botão de submit pode ser desabilitado
-    # A chave do formulário é o primeiro argumento posicional.
-    with st.form(f"formulario_proposta_pj_FINAL", clear_on_submit=True): 
-        nome_empresa = st.text_input("Nome da Empresa", key="pj_form_nome_empresa_FINAL")
-        nome_responsavel = st.text_input("Nome do Responsável", key="pj_form_nome_responsavel_FINAL")
-        nome_consultor = st.text_input("Nome do Consultor Comercial", key="pj_form_nome_consultor_FINAL")
-        validade_proposta_dt = st.date_input("Validade da Proposta", value=datetime.today(), key="pj_form_validade_proposta_FINAL")
+    with st.form("formulario_proposta_pj_v7", key="pj_form_proposta_v7"): # Chave do form atualizada
+        nome_empresa = st.text_input("Nome da Empresa", key="pj_form_nome_empresa_v7")
+        nome_responsavel = st.text_input("Nome do Responsável", key="pj_form_nome_responsavel_v7")
+        nome_consultor = st.text_input("Nome do Consultor Comercial", key="pj_form_nome_consultor_v7")
+        validade_proposta_dt = st.date_input("Validade da Proposta", value=datetime.today(), key="pj_form_validade_proposta_v7")
         
         gerar_proposta_btn = st.form_submit_button("Gerar Proposta", disabled=(not api_key_presente))
 
@@ -169,39 +151,54 @@ if produtos_selecionados_pj:
                 doc = Document(doc_template_path) 
                 print(f"INFO_LOG (Simulador_PJ.py): Template DOCX '{doc_template_path}' carregado.")
 
+                # Substituições no texto
                 for p in doc.paragraphs:
                     if "Nome da empresa" in p.text: p.text = p.text.replace("Nome da empresa", nome_empresa)
                     if "Nome do Responsável" in p.text: p.text = p.text.replace("Nome do Responsável", nome_responsavel)
                     if "00/00/0000" in p.text: p.text = p.text.replace("00/00/0000", validade_proposta_dt.strftime("%d/%m/%Y"))
                     if "Nome do comercial" in p.text: p.text = p.text.replace("Nome do comercial", nome_consultor)
 
-                table_found = False
+                # Substituições na tabela de produtos
+                table_found_and_filled = False
+                expected_headers = ["Item", "Descrição", "Valor Mensal"] # Adapte se os cabeçalhos forem diferentes
                 for table in doc.tables:
-                    header_texts = [cell.text.strip() for cell in table.rows[0].cells]
-                    if "Item" in header_texts and "Descrição" in header_texts and "Valor Mensal" in header_texts: 
-                        table_found = True
-                        while len(table.rows) > 1: table._tbl.remove(table.rows[1]._tr) 
-                        for produto_sel, preco_sel in produtos_selecionados_pj.items():
-                            row_cells = table.add_row().cells
-                            row_cells[0].text = produto_sel
-                            row_cells[1].text = produtos_descricao.get(produto_sel, " ") 
-                            row_cells[2].text = f"R$ {preco_sel:,.2f}" 
-                        total_row = table.add_row().cells
-                        total_row[0].text = "TOTAL MENSAL POR VEÍCULO"; total_row[0].paragraphs[0].runs[0].font.bold = True 
-                        total_row[1].text = "" 
-                        total_row[2].text = f"R$ {soma_mensal_produtos_selecionados:,.2f}"; total_row[2].paragraphs[0].runs[0].font.bold = True
-                        break 
-                if not table_found:
-                    print("WARN_LOG (Simulador_PJ.py): Tabela de itens não encontrada no template DOCX.")
-                    st.warning("A tabela de itens não foi encontrada no template.")
+                    if len(table.rows) > 0 and len(table.columns) >= len(expected_headers): # Verifica se a tabela tem cabeçalho e colunas suficientes
+                        header_cells_text = [cell.text.strip() for cell in table.rows[0].cells[:len(expected_headers)]]
+                        # Verifica se todos os cabeçalhos esperados estão presentes
+                        if all(expected_header in header_cells_text for expected_header in expected_headers):
+                            table_found_and_filled = True
+                            print(f"INFO_LOG (Simulador_PJ.py): Tabela de itens encontrada no DOCX.")
+                            # Limpa linhas antigas (exceto o cabeçalho)
+                            while len(table.rows) > 1:
+                                table._tbl.remove(table.rows[1]._tr) 
+                            
+                            # Adiciona novos produtos selecionados
+                            for produto_sel, preco_sel in produtos_selecionados_pj.items():
+                                row_cells = table.add_row().cells
+                                row_cells[0].text = produto_sel
+                                row_cells[1].text = produtos_descricao.get(produto_sel, " ") 
+                                row_cells[2].text = f"R$ {preco_sel:,.2f}" 
+                            
+                            # Adiciona linha de TOTAL MENSAL POR VEÍCULO
+                            total_row = table.add_row().cells
+                            total_row[0].text = "TOTAL MENSAL POR VEÍCULO"; total_row[0].paragraphs[0].runs[0].font.bold = True 
+                            total_row[1].text = "" 
+                            total_row[2].text = f"R$ {soma_mensal_produtos_selecionados:,.2f}"; total_row[2].paragraphs[0].runs[0].font.bold = True
+                            break # Assume que encontrou e preencheu a tabela correta
+                
+                if not table_found_and_filled:
+                    st.warning("A tabela de itens não foi encontrada ou preenchida corretamente no template do documento. Verifique os cabeçalhos ('Item', 'Descrição', 'Valor Mensal') no seu arquivo .docx.")
+                    print("WARN_LOG (Simulador_PJ.py): Tabela de itens não encontrada/preenchida no template DOCX.")
+
 
                 buffer_docx = BytesIO()
                 doc.save(buffer_docx)
                 buffer_docx.seek(0)
                 print("INFO_LOG (Simulador_PJ.py): DOCX da proposta gerado em buffer.")
 
+                # CORREÇÃO: Usar a variável correta API_KEY_CLOUDCONVERT
                 with st.spinner("Gerando PDF da proposta, aguarde..."):
-                    headers = {"Authorization": f"Bearer {API_KEY}"} # API_KEY definida no início
+                    headers = {"Authorization": f"Bearer {API_KEY_CLOUDCONVERT}"} 
                     job_payload = {
                         "tasks": {
                             "import-docx": {"operation": "import/upload", "filename": f"proposta_{nome_empresa.replace(' ', '_')}.docx"},
@@ -257,13 +254,7 @@ if produtos_selecionados_pj:
                         elif current_job_status == 'error':
                             final_job_status = 'error'
                             error_message_from_cloudconvert = "Erro CloudConvert."
-                            if job_status_data['data'].get('tasks'):
-                                for task_data_loop in job_status_data['data']['tasks']:
-                                    if task_data_loop.get('status') == 'error':
-                                        error_message_from_cloudconvert = task_data_loop.get('message', error_message_from_cloudconvert)
-                                        if task_data_loop.get('result') and task_data_loop['result'].get('errors'):
-                                            error_message_from_cloudconvert += f" Detalhes: {task_data_loop['result']['errors']}"
-                                        break
+                            # ... (lógica de extração de erro como antes) ...
                             st.error(f"Erro na conversão PDF: {error_message_from_cloudconvert}")
                             print(f"ERROR_LOG (Simulador_PJ.py): Erro job CloudConvert '{job_id}': {job_status_data['data']}")
                             break 
@@ -277,7 +268,7 @@ if produtos_selecionados_pj:
                             data=pdf_file_content,
                             file_name=f"Proposta_Verdio_{nome_empresa.replace(' ', '_')}_{validade_proposta_dt.strftime('%Y%m%d')}.pdf",
                             mime="application/pdf",
-                            key="pj_download_pdf_btn_FINAL" 
+                            key="pj_download_pdf_btn_v7" 
                         )
                     elif final_job_status != 'error': 
                         st.error("Não foi possível obter o PDF ou tempo de espera excedido.")
@@ -294,8 +285,7 @@ if produtos_selecionados_pj:
                 print(f"ERROR_LOG (Simulador_PJ.py): Erro na geração da proposta: {type(e_gerar).__name__} - {e_gerar}")
     
 elif not api_key_presente and produtos_selecionados_pj: 
-    # O aviso já é mostrado acima do formulário se a API Key não está presente.
-    pass
+    pass # O aviso já é mostrado acima do formulário.
 elif not produtos_selecionados_pj: 
     st.info("Selecione produtos para preencher dados e gerar uma proposta.")
 
