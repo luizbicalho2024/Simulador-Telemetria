@@ -11,10 +11,9 @@ umdb = None
 try:
     import user_management_db as umdb_module
     umdb = umdb_module 
-    print("INFO_LOG (Simulador_Comercial.py): Módulo user_management_db importado com sucesso.")
+    print("INFO_LOG (Simulador_Comercial.py): Módulo user_management_db importado.")
 except ModuleNotFoundError:
-    st.error("ERRO CRÍTICO: O arquivo 'user_management_db.py' não foi encontrado.")
-    st.info("Verifique se 'user_management_db.py' está na mesma pasta que 'Simulador_Comercial.py'.")
+    st.error("ERRO CRÍTICO: 'user_management_db.py' não encontrado.")
     print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): user_management_db.py não encontrado.")
     st.stop() 
 except ImportError as ie_umdb:
@@ -35,8 +34,8 @@ try:
     else:
         print(f"INFO_LOG (Simulador_Comercial.py): streamlit_authenticator importado, mas sem atributo __version__.")
 except ModuleNotFoundError:
-    st.error("ERRO CRÍTICO: A biblioteca 'streamlit-authenticator' não está instalada. Verifique seu 'requirements.txt' e os logs de build do Streamlit Cloud.")
-    print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): streamlit-authenticator NÃO ENCONTRADO (ModuleNotFoundError).")
+    st.error("ERRO CRÍTICO: 'streamlit-authenticator' não instalado. Verifique requirements.txt e logs de build.")
+    print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): streamlit-authenticator NÃO ENCONTRADO.")
     st.stop()
 except ImportError as ie_stauth:
     st.error(f"ERRO CRÍTICO AO IMPORTAR streamlit_authenticator: {ie_stauth}")
@@ -92,11 +91,11 @@ if not credentials.get("usernames"):
     st.title("Bem-vindo ao Simulador Telemetria! 🚀")
     st.subheader("Configuração Inicial: Criar Conta de Administrador")
     print("INFO_LOG (Simulador_Comercial.py): Nenhum usuário. Exibindo formulário de criação do primeiro admin.")
-    with st.form("FormCriarPrimeiroAdmin_v9"): # Chave do formulário atualizada
-        admin_name = st.text_input("Nome Completo", key="init_admin_name_v9")
-        admin_username = st.text_input("Nome de Usuário (login)", key="init_admin_uname_v9")
-        admin_email = st.text_input("Email", key="init_admin_email_v9")
-        admin_password = st.text_input("Senha", type="password", key="init_admin_pass_v9")
+    with st.form("FormCriarPrimeiroAdmin_v10"): # Chave do formulário atualizada
+        admin_name = st.text_input("Nome Completo", key="init_admin_name_v10")
+        admin_username = st.text_input("Nome de Usuário (login)", key="init_admin_uname_v10")
+        admin_email = st.text_input("Email", key="init_admin_email_v10")
+        admin_password = st.text_input("Senha", type="password", key="init_admin_pass_v10")
         submit_admin = st.form_submit_button("Criar Administrador")
         if submit_admin:
             if all([admin_name, admin_username, admin_email, admin_password]):
@@ -139,7 +138,7 @@ if authentication_status is False:
     st.error("Nome de usuário ou senha incorreto(s).")
 elif authentication_status is None:
     if login_attempted_flag and login_return_value is None:
-        st.warning("Ocorreu um problema ao processar o login. Tente novamente.")
+        st.warning("Ocorreu um problema ao processar o login. Verifique os logs e tente novamente.")
     else: 
         st.info("Por favor, insira seu nome de usuário e senha.")
 elif authentication_status: 
@@ -175,8 +174,9 @@ elif authentication_status:
         st.sidebar.subheader("Painel de Administração")
         admin_action_options = ["Ver Usuários", "Cadastrar Novo Usuário", "Editar Usuário",
                                 "Excluir Usuário", "Redefinir Senha de Usuário"]
-        admin_action = st.sidebar.selectbox("Gerenciar Usuários", admin_action_options, key="admin_action_sb_v9")
+        admin_action = st.sidebar.selectbox("Gerenciar Usuários", admin_action_options, key="admin_action_sb_v10")
         
+        # Busca a informação mais recente dos usuários do DB para o painel admin
         current_db_users_dict = umdb.fetch_all_users_for_auth().get("usernames", {})
         
         if admin_action == "Ver Usuários":
@@ -190,12 +190,12 @@ elif authentication_status:
 
         elif admin_action == "Cadastrar Novo Usuário":
             st.subheader("Cadastrar Novo Usuário")
-            with st.form("form_admin_cadastrar_usuario_v9", clear_on_submit=True):
-                reg_name_adm = st.text_input("Nome Completo", key="adm_reg_name_v9")
-                reg_uname_adm = st.text_input("Nome de Usuário (login)", key="adm_reg_uname_v9")
-                reg_email_adm = st.text_input("Email", key="adm_reg_email_v9")
-                reg_pass_adm = st.text_input("Senha", type="password", key="adm_reg_pass_v9")
-                reg_role_adm = st.selectbox("Papel", ["user", "admin"], key="adm_reg_role_v9")
+            with st.form("form_admin_cadastrar_usuario_v10", clear_on_submit=True):
+                reg_name_adm = st.text_input("Nome Completo", key="adm_reg_name_v10")
+                reg_uname_adm = st.text_input("Nome de Usuário (login)", key="adm_reg_uname_v10")
+                reg_email_adm = st.text_input("Email", key="adm_reg_email_v10")
+                reg_pass_adm = st.text_input("Senha", type="password", key="adm_reg_pass_v10")
+                reg_role_adm = st.selectbox("Papel", ["user", "admin"], key="adm_reg_role_v10")
                 if st.form_submit_button("Cadastrar Usuário"):
                     if all([reg_name_adm, reg_uname_adm, reg_email_adm, reg_pass_adm, reg_role_adm]):
                         if umdb.add_user(reg_uname_adm, reg_name_adm, reg_email_adm, reg_pass_adm, reg_role_adm):
@@ -204,21 +204,22 @@ elif authentication_status:
                         st.warning("Preencha todos os campos.")
         
         elif admin_action == "Editar Usuário":
-            st.subheader("⚙️ Editar Usuário") # Emoji para diferenciar
+            st.subheader("⚙️ Editar Usuário")
             if not current_db_users_dict:
                 st.info("Nenhum usuário disponível para edição.")
             else:
                 usernames_list_edit = list(current_db_users_dict.keys())
-                user_to_edit_uname = st.selectbox("Usuário a editar:", usernames_list_edit, key="adm_edit_sel_user_v9")
+                user_to_edit_uname = st.selectbox("Usuário a editar:", usernames_list_edit, key="adm_edit_sel_user_v10")
                 
                 if user_to_edit_uname:
                     user_data_for_form = current_db_users_dict.get(user_to_edit_uname)
                     if user_data_for_form:
-                        # CORREÇÃO: Usar apenas o primeiro argumento para a chave do formulário
-                        with st.form(f"form_edit_user_{user_to_edit_uname}_v9", clear_on_submit=False): 
+                        # CORREÇÃO: Usar a chave única do formulário como primeiro argumento posicional.
+                        # clear_on_submit=False é o padrão, mas explícito para clareza.
+                        with st.form(key=f"form_edit_user_{user_to_edit_uname}_v10", clear_on_submit=False): 
                             st.write(f"Editando dados para: **{user_to_edit_uname}**")
-                            edit_name = st.text_input("Nome Completo:", value=user_data_for_form.get('name', ''), key=f"adm_edit_name_{user_to_edit_uname}_v9")
-                            edit_email = st.text_input("Email:", value=user_data_for_form.get('email', ''), key=f"adm_edit_email_{user_to_edit_uname}_v9")
+                            edit_name = st.text_input("Nome Completo:", value=user_data_for_form.get('name', ''), key=f"adm_edit_name_val_{user_to_edit_uname}_v10")
+                            edit_email = st.text_input("Email:", value=user_data_for_form.get('email', ''), key=f"adm_edit_email_val_{user_to_edit_uname}_v10")
                             
                             roles_options = ["user", "admin"]
                             current_role = user_data_for_form.get('role', 'user')
@@ -227,7 +228,7 @@ elif authentication_status:
                             except ValueError: 
                                 current_role_idx_edit = 0 
                             
-                            edit_role = st.selectbox("Novo Papel:", roles_options, index=current_role_idx_edit, key=f"adm_edit_role_{user_to_edit_uname}_v9")
+                            edit_role = st.selectbox("Novo Papel:", roles_options, index=current_role_idx_edit, key=f"adm_edit_role_val_{user_to_edit_uname}_v10")
                             
                             if st.form_submit_button("Salvar Alterações"):
                                 print(f"INFO_LOG (Simulador_Comercial.py - Admin Editar): Tentando editar '{user_to_edit_uname}'")
@@ -238,19 +239,19 @@ elif authentication_status:
                         print(f"ERROR_LOG (Simulador_Comercial.py - Admin Editar): Dados para '{user_to_edit_uname}' não encontrados.")
         
         elif admin_action == "Redefinir Senha de Usuário":
-            st.subheader("🔑 Redefinir Senha de Usuário") # Emoji para diferenciar
+            st.subheader("🔑 Redefinir Senha de Usuário")
             if not current_db_users_dict:
                 st.info("Nenhum usuário disponível para redefinir senha.")
             else:
                 usernames_list_reset = list(current_db_users_dict.keys())
-                user_to_reset_uname = st.selectbox("Usuário:", usernames_list_reset, key="adm_reset_sel_user_v9")
+                user_to_reset_uname = st.selectbox("Usuário:", usernames_list_reset, key="adm_reset_sel_user_v10")
                 
                 if user_to_reset_uname:
-                    # CORREÇÃO: Usar apenas o primeiro argumento para a chave do formulário
-                    with st.form(f"form_reset_pass_{user_to_reset_uname}_v9", clear_on_submit=True):
+                    # CORREÇÃO: Usar a chave única do formulário como primeiro argumento posicional.
+                    with st.form(key=f"form_reset_pass_{user_to_reset_uname}_v10", clear_on_submit=True):
                         st.write(f"Redefinindo senha para: **{user_to_reset_uname}**")
-                        new_pass = st.text_input("Nova Senha:", type="password", key=f"adm_reset_new_pass_{user_to_reset_uname}_v9")
-                        confirm_pass = st.text_input("Confirmar Nova Senha:", type="password", key=f"adm_reset_conf_pass_{user_to_reset_uname}_v9")
+                        new_pass = st.text_input("Nova Senha:", type="password", key=f"adm_reset_new_pass_{user_to_reset_uname}_v10")
+                        confirm_pass = st.text_input("Confirmar Nova Senha:", type="password", key=f"adm_reset_conf_pass_{user_to_reset_uname}_v10")
                         
                         if st.form_submit_button("Redefinir Senha"):
                             print(f"INFO_LOG (Simulador_Comercial.py - Admin Redefinir Senha): Tentativa para '{user_to_reset_uname}'.")
@@ -263,19 +264,20 @@ elif authentication_status:
                                     st.rerun() 
                         
         elif admin_action == "Excluir Usuário": 
-            st.subheader("🗑️ Excluir Usuário") # Emoji para diferenciar
+            st.subheader("🗑️ Excluir Usuário")
             if not current_db_users_dict:
                 st.info("Nenhum usuário para excluir.")
             else:
-                user_to_delete_uname = st.selectbox("Usuário a excluir:", list(current_db_users_dict.keys()), key="adm_del_sel_user_v9")
+                user_to_delete_uname = st.selectbox("Usuário a excluir:", list(current_db_users_dict.keys()), key="adm_del_sel_user_v10")
                 if user_to_delete_uname:
                     st.warning(f"Confirma a exclusão de '{user_to_delete_uname}'?")
-                    if st.button(f"Excluir {user_to_delete_uname}", type="primary", key=f"adm_del_btn_{user_to_delete_uname}_v9"):
+                    if st.button(f"Excluir {user_to_delete_uname}", type="primary", key=f"adm_del_btn_{user_to_delete_uname}_v10"):
                         print(f"INFO_LOG (Simulador_Comercial.py - Admin Excluir): Tentativa de excluir '{user_to_delete_uname}'.")
                         if umdb.delete_user(user_to_delete_uname):
                             st.rerun()
         st.sidebar.info("Acesso de administrador.")
 
+    # --- Conteúdo Principal da Página Pós-Login ---
     st.markdown("---") 
     st.header("Simulador de Telemetria Principal")
     st.write("Navegue pelas funcionalidades usando o menu lateral.")
