@@ -133,6 +133,7 @@ if not credentials.get("usernames"):
 print("INFO_LOG (Simulador_Comercial.py): Chamando authenticator.login()...")
 print(f"DEBUG_LOG (Simulador_Comercial.py): st.session_state ANTES do login: {st.session_state.to_dict()}")
 
+
 name, authentication_status, username = None, None, None 
 login_attempted_flag = False 
 
@@ -200,8 +201,9 @@ elif authentication_status:
                         st.error("A nova senha e a confirmação não coincidem.")
                     else:
                         # stauth_Hasher_class é a classe Hasher importada e verificada no início do script
+                        # A verificação if stauth_Hasher_class is None: já deve ter parado o script se falhou
                         stored_hashed_password = umdb.get_user_hashed_password(st.session_state.username)
-                        if stored_hashed_password and stauth_Hasher_class([current_password]).verify(stored_hashed_password): # Linha do erro (206 ou perto)
+                        if stored_hashed_password and stauth_Hasher_class([current_password]).verify(stored_hashed_password): # Linha 206 (ou perto)
                             if umdb.update_user_password_manual(st.session_state.username, new_password):
                                 st.success("Senha alterada com sucesso! Para aplicar a alteração, por favor, faça logout e login novamente.")
                                 print(f"INFO_LOG (Simulador_Comercial.py): Senha alterada para '{st.session_state.username}'.")
