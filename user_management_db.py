@@ -1,7 +1,7 @@
 # user_management_db.py
 import streamlit as st
 from pymongo import MongoClient, errors as pymongo_errors
-from streamlit_authenticator.utilities.hasher import Hasher # Importação correta
+from streamlit_authenticator.utilities.hasher import Hasher # Importação correta do Hasher
 import certifi 
 
 # --- Configurações do Banco de Dados ---
@@ -9,9 +9,7 @@ import certifi
 def get_mongo_client():
     """Retorna um cliente MongoDB conectado ou None em caso de falha."""
     if "MONGO_CONNECTION_STRING" not in st.secrets:
-        # Esta mensagem será visível na UI se o segredo não estiver no Streamlit Cloud
         st.error("CONFIGURAÇÃO CRÍTICA AUSENTE (user_management_db.py): 'MONGO_CONNECTION_STRING' não está definida nos segredos do aplicativo Streamlit Cloud.")
-        # Este print será visível nos logs do Streamlit Cloud
         print("CRITICAL_ERROR_LOG (user_management_db.py): MONGO_CONNECTION_STRING not found in Streamlit Cloud secrets.")
         return None
     
@@ -25,7 +23,6 @@ def get_mongo_client():
             serverSelectionTimeoutMS=25000, 
             socketTimeoutMS=25000,          
             connectTimeoutMS=25000          
-            # NÃO DESCOMENTE tlsAllowInvalidCertificates=True em produção.
             # , tlsAllowInvalidCertificates=True # APENAS PARA DIAGNÓSTICO LOCAL EXTREMO
         )
         client.admin.command('ping') 
@@ -51,7 +48,6 @@ def get_users_collection():
     """Retorna a coleção de usuários do MongoDB ou None em caso de falha."""
     client = get_mongo_client()
     if client is None:
-        # Erro já foi logado e possivelmente mostrado na UI por get_mongo_client()
         return None
     try:
         db_name = st.secrets.get("MONGO_DB_NAME", "simulador_db") 
@@ -67,7 +63,6 @@ def get_users_collection():
         return None
 
 def fetch_all_users_for_auth():
-    """Busca todos os usuários e formata para o streamlit-authenticator."""
     users_collection = get_users_collection()
     default_credentials = {"usernames": {}} 
 
@@ -222,7 +217,7 @@ def get_all_users_for_admin_display():
     if users_collection is None:
         return []
     try:
-        return list(users_collection.find({}, {"_id": 0, "hashed_password": 0})) # Exclui campos sensíveis
+        return list(users_collection.find({}, {"_id": 0, "hashed_password": 0}))
     except Exception as e:
         st.error(f"ERRO ao buscar lista de usuários para admin: {e}")
         return []

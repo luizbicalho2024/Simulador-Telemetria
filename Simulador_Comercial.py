@@ -1,17 +1,16 @@
 # Simulador_Comercial.py
 import streamlit as st
-import pandas as pd # Certifique-se de que 'pandas' está no seu requirements.txt
+import pandas as pd
 
 # --- Configuração Inicial da Página ---
-# Deve ser o primeiro comando Streamlit, exceto imports.
 st.set_page_config(page_title="Simulador Telemetria Principal", layout="wide")
 print(f"INFO_LOG (Simulador_Comercial.py): Página configurada. Streamlit version: {st.__version__}")
 
 # --- Importação Segura de Módulos Essenciais ---
-umdb = None
+umdb = None # Inicializa para verificação posterior
 try:
     import user_management_db as umdb_module
-    umdb = umdb_module # Atribui ao alias global se a importação for bem-sucedida
+    umdb = umdb_module 
     print("INFO_LOG (Simulador_Comercial.py): Módulo user_management_db importado com sucesso.")
 except ModuleNotFoundError:
     st.error("ERRO CRÍTICO: O arquivo 'user_management_db.py' não foi encontrado.")
@@ -22,15 +21,15 @@ except ImportError as ie_umdb:
     st.error(f"ERRO CRÍTICO AO IMPORTAR user_management_db: {ie_umdb}")
     print(f"CRITICAL_IMPORT_ERROR_LOG (Simulador_Comercial.py): user_management_db: {ie_umdb}")
     st.stop()
-except Exception as e_umdb_general: # Captura genérica para outros possíveis erros de importação de umdb
+except Exception as e_umdb_general: 
     st.error(f"ERRO INESPERADO AO IMPORTAR user_management_db: {e_umdb_general}")
     print(f"UNEXPECTED_IMPORT_ERROR_LOG (Simulador_Comercial.py): user_management_db: {e_umdb_general}")
     st.stop()
 
 stauth = None # Inicializa stauth como None
 try:
-    import streamlit_authenticator as stauth_module # Importa para uma variável temporária
-    stauth = stauth_module # Atribui à variável principal se a importação for bem-sucedida
+    import streamlit_authenticator as stauth_module 
+    stauth = stauth_module 
     print(f"INFO_LOG (Simulador_Comercial.py): streamlit_authenticator importado. Versão: {stauth.__version__}")
 except ModuleNotFoundError:
     st.error("ERRO CRÍTICO: A biblioteca 'streamlit-authenticator' não está instalada. Verifique seu 'requirements.txt' e os logs de build do Streamlit Cloud.")
@@ -40,19 +39,14 @@ except ImportError as ie_stauth:
     st.error(f"ERRO CRÍTICO AO IMPORTAR streamlit_authenticator: {ie_stauth}")
     print(f"CRITICAL_IMPORT_ERROR_LOG (Simulador_Comercial.py): streamlit_authenticator (ImportError): {ie_stauth}")
     st.stop()
-except Exception as e_stauth_general: # Captura genérica para outros possíveis erros de importação
+except Exception as e_stauth_general: 
     st.error(f"ERRO INESPERADO AO IMPORTAR streamlit_authenticator: {e_stauth_general}")
     print(f"UNEXPECTED_IMPORT_ERROR_LOG (Simulador_Comercial.py): streamlit_authenticator (Exception): {e_stauth_general}")
     st.stop()
 
-# Verificação final se os módulos essenciais foram carregados
-if umdb is None or stauth is None:
+if umdb is None or stauth is None: # Verificação final se os módulos foram carregados
     st.error("ERRO CRÍTICO: Falha ao carregar módulos essenciais (user_management_db ou streamlit_authenticator). O aplicativo não pode continuar.")
     print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): umdb ou stauth permaneceu None após tentativas de importação.")
-    if umdb is None:
-        print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): umdb é None.")
-    if stauth is None:
-        print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): stauth é None.")
     st.stop()
 
 
@@ -64,7 +58,7 @@ client_available = umdb.get_mongo_client() is not None
 print(f"DEBUG_LOG (Simulador_Comercial.py): client_available = {client_available}")
 print(f"DEBUG_LOG (Simulador_Comercial.py): credentials (tipo: {type(credentials)}) = {credentials}")
 if isinstance(credentials, dict) and not credentials.get("usernames"):
-    print("DEBUG_LOG (Simulador_Comercial.py): 'credentials[\"usernames\"]' está vazio ou não existe (pode ser normal se o DB estiver vazio ou a conexão falhou).")
+    print("DEBUG_LOG (Simulador_Comercial.py): 'credentials[\"usernames\"]' está vazio ou não existe.")
 
 
 # --- Configuração do Autenticador ---
@@ -75,7 +69,7 @@ auth_cookie_expiry_days = st.secrets.get("AUTH_COOKIE_EXPIRY_DAYS", 30)
 if not auth_cookie_name or not auth_cookie_key:
     st.error("ERRO DE CONFIGURAÇÃO CRÍTICO: AUTH_COOKIE_NAME ou AUTH_COOKIE_KEY não definidos nos segredos do Streamlit Cloud.")
     print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): AUTH_COOKIE_NAME ou AUTH_COOKIE_KEY não encontrados nos segredos.")
-    st.info("Adicione-os nas configurações de 'Secrets' do seu app no Streamlit Cloud. O aplicativo não pode continuar de forma segura.")
+    st.info("Adicione-os nas configurações de 'Secrets' do seu app no Streamlit Cloud.")
     st.stop()
 
 try:
@@ -99,17 +93,15 @@ except Exception as e_auth_init:
 if not client_available:
     st.title("Simulador Telemetria")
     st.error("FALHA CRÍTICA NA CONEXÃO COM O BANCO DE DADOS.")
-    st.info("O sistema de login e as funcionalidades dependentes estão indisponíveis. "
-            "Verifique os logs do aplicativo no Streamlit Cloud para mensagens de erro de 'user_management_db.py', "
-            "especialmente sobre MONGO_CONNECTION_STRING e acesso à rede do MongoDB Atlas.")
+    st.info("Funcionalidades de login indisponíveis. Verifique os logs do app no Streamlit Cloud.")
     print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): client_available é False. Parando execução.")
     st.stop()
 
 if not credentials.get("usernames"): 
     st.title("Bem-vindo ao Simulador Telemetria! 🚀")
     st.subheader("Configuração Inicial: Criar Conta de Administrador")
-    print("INFO_LOG (Simulador_Comercial.py): Nenhum usuário no DB (ou falha ao buscar). Exibindo formulário de criação do primeiro admin.")
-    with st.form("FormCriarPrimeiroAdmin_v5"): # Chave do formulário atualizada
+    print("INFO_LOG (Simulador_Comercial.py): Nenhum usuário no DB. Exibindo formulário de criação do primeiro admin.")
+    with st.form("FormCriarPrimeiroAdmin_v5"):
         admin_name = st.text_input("Nome Completo", key="init_admin_name_v5")
         admin_username = st.text_input("Nome de Usuário (login)", key="init_admin_uname_v5")
         admin_email = st.text_input("Email", key="init_admin_email_v5")
@@ -143,7 +135,7 @@ try:
     if login_return_value is not None and isinstance(login_return_value, tuple) and len(login_return_value) == 3:
         name, authentication_status, username = login_return_value
     elif login_return_value is None:
-        print("WARN_LOG (Simulador_Comercial.py): authenticator.login() retornou None. Investigar.")
+        print("WARN_LOG (Simulador_Comercial.py): authenticator.login() retornou None. Investigar (pode ser normal se o formulário não foi submetido ou cookie inválido).")
         authentication_status = None 
     else: 
         st.error(f"ERRO INESPERADO NO LOGIN: authenticator.login() retornou: {login_return_value}")
@@ -162,11 +154,11 @@ if authentication_status is False:
     st.error("Nome de usuário ou senha incorreto(s). Tente novamente.")
 elif authentication_status is None:
     if login_attempted_flag and login_return_value is None:
-        st.warning("Ocorreu um problema ao processar o login. Verifique os logs do aplicativo no Streamlit Cloud e tente novamente.")
-        st.info("Causas comuns: falha na conexão com o banco de dados ou problema com cookies.")
+        st.warning("Ocorreu um problema ao processar o login. Verifique os logs do aplicativo no Streamlit Cloud para mais detalhes e tente novamente.")
+        st.info("Causas comuns: falha na conexão com o banco de dados ou problema com cookies de autenticação.")
     else: 
         st.info("Por favor, insira seu nome de usuário e senha.")
-elif authentication_status: # True, login bem-sucedido
+elif authentication_status: 
     st.session_state.name = name
     st.session_state.username = username
     st.session_state.authentication_status = authentication_status
@@ -182,12 +174,11 @@ elif authentication_status: # True, login bem-sucedido
     st.sidebar.title(f"Bem-vindo(a), {name}!")
     authenticator.logout("Logout", "sidebar")
 
-    # --- SEÇÕES DE USUÁRIO E ADMIN ---
     if st.session_state.role == "user":
         st.sidebar.subheader("Minha Conta")
         try:
             if authenticator.change_password(username, 'Alterar Senha', location='sidebar'):
-                new_hashed_pass = authenticator.credentials['usernames'][username]['password'] # Pega o novo hash do authenticator
+                new_hashed_pass = authenticator.credentials['usernames'][username]['password'] 
                 if umdb.update_user_password_self(username, new_hashed_pass):
                     st.sidebar.success('Senha alterada com sucesso!')
                 else:
@@ -280,8 +271,7 @@ elif authentication_status: # True, login bem-sucedido
                                     st.rerun()
         st.sidebar.info("Acesso de administrador.")
 
-    # --- Conteúdo Principal da Página Pós-Login ---
     st.markdown("---") 
     st.header("Simulador de Telemetria Principal")
     st.write("Navegue pelas funcionalidades usando o menu lateral.")
-    st.write("As páginas específicas do simulador estarão disponíveis no menu de navegação da barra lateral (geralmente rotulado como 'Pages' ou com os nomes dos arquivos).")
+    st.write("As páginas específicas do simulador estarão disponíveis no menu de navegação da barra lateral.")
