@@ -178,7 +178,7 @@ elif authentication_status:
     print(f"INFO_LOG (Simulador_Comercial.py): Usuário '{username}' logado. Role: '{st.session_state.role}'.")
 
     st.sidebar.title(f"Bem-vindo(a), {st.session_state.name}!") 
-    authenticator.logout("Logout", "sidebar")
+    authenticator.logout("Sair", "sidebar")
 
     # --- SEÇÕES DE USUÁRIO E ADMIN ---
     if st.session_state.role == "user":
