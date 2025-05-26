@@ -1,36 +1,60 @@
 # Exemplo para: pages/Simulador_PF.py (e outros arquivos em pages/)
+# pages/Simulador_Licitação.py
 import streamlit as st
-
-# --- Restante do código da sua página ---
-st.title(f"Simulador Pessoa Física (Acessado por: {st.session_state.get('name', 'Usuário')})")
-# ... seu código específico para esta página ...
-
-# Exemplo de verificação de papel (role) se necessário dentro de uma página específica:
-# if st.session_state.get("role") == "admin":
-#     st.write("Conteúdo específico para Admin nesta página.")
-# elif st.session_state.get("role") == "user":
-#     st.write("Conteúdo específico para Usuário Comum nesta página.")
-# else:
-#     st.warning("Papel do usuário não definido.")
-
 from decimal import Decimal, ROUND_DOWN
+# Adicione quaisquer outras importações que esta página específica precise (ex: pandas, numpy, etc.)
+# import pandas as pd
 
-# 🛠️ Configuração da página
+# 1. st.set_page_config() - PRIMEIRO COMANDO STREAMLIT
+# Ajuste page_title e page_icon para cada página específica.
 st.set_page_config(
     layout="wide",
-    page_title="Licitações e Editais",
-    page_icon="imgs/v-c.png",
+    page_title="Simulador Licitação", 
+    page_icon="📝", # Exemplo de ícone, você pode usar o seu "imgs/v-c.png" se o caminho estiver correto
     initial_sidebar_state="expanded"
 )
 
 # 2. BLOCO DE VERIFICAÇÃO DE AUTENTICAÇÃO
-# Este bloco deve vir DEPOIS de st.set_page_config e ANTES de qualquer outro st.* comando.
-if st.session_state.get("authentication_status", False) is not True:
+# Este bloco garante que apenas usuários logados acessem a página.
+auth_status = st.session_state.get("authentication_status", False)
+if auth_status is not True: # Checagem explícita contra True
     st.error("🔒 Acesso Negado! Por favor, faça login na página principal para continuar.")
-    # Considere adicionar um link para a página de login se desejar:
-    # st.page_link("Simulador_Comercial.py", label="Ir para Login", icon="🏠")
-    st.stop() # Impede a execução do restante da página se não estiver autenticado
+    # Adiciona um print para os logs do Streamlit Cloud para ajudar na depuração
+    print(f"ACCESS_DENIED_LOG (Simulador_Licitação.py): User not authenticated. Status: {auth_status}")
+    # Tenta usar st.page_link, com fallback se não disponível (versões antigas do Streamlit)
+    try:
+        # Certifique-se que o nome do arquivo da página principal está correto aqui
+        st.page_link("Simulador_Comercial.py", label="Ir para Login", icon="🏠")
+    except AttributeError: # st.page_link pode não existir em versões mais antigas
+        st.info("Retorne à página principal para efetuar o login.")
+    st.stop() # Impede a execução do restante da página
 
+# Se chegou aqui, o usuário está autenticado.
+current_username = st.session_state.get('username', 'N/A')
+current_role = st.session_state.get('role', 'Indefinido')
+current_name = st.session_state.get('name', 'N/A')
+
+# Adiciona um print para os logs do Streamlit Cloud
+print(f"INFO_LOG (Simulador_Licitação.py): User '{current_username}' authenticated. Role: '{current_role}'")
+
+# 3. Restante do código da sua página
+# (Cole aqui o conteúdo específico da sua página Simulador_Licitação.py)
+
+# Exemplo de como você pode iniciar o conteúdo da página:
+# try:
+#     st.image("imgs/logo.png", width=250) # Verifique o caminho para 'imgs/logo.png'
+# except FileNotFoundError:
+#     print(f"WARN_LOG (Simulador_Licitação.py): Arquivo imgs/logo.png não encontrado.")
+# except Exception as e_img:
+#     print(f"WARN_LOG (Simulador_Licitação.py): Erro ao carregar imgs/logo.png: {e_img}")
+
+
+st.markdown("<h1 style='text-align: center; color: #00447C;'>Simulador de Licitação</h1>", unsafe_allow_html=True) # Cor exemplo
+st.markdown("---")
+
+st.write(f"Usuário: {current_name} ({current_username})")
+st.write(f"Nível de Acesso: {current_role}")
+st.markdown("---")
 
 # 🔵 Logotipo e cabeçalho estilizado
 st.image("imgs/logo.png", width=250)
