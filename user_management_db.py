@@ -194,11 +194,16 @@ def update_user_password_by_admin(username: str, plain_password: str):
         if result.modified_count > 0:
             st.success(f"Senha do usuário '{username}' redefinida com sucesso.")
             return True
-        else: 
-            st.warning(f"Senha do usuário '{username}' não alterada (usuário não encontrado ou senha igual à anterior).")
+        elif users_collection.count_documents({"username": username}) > 0: # Verifica se o usuário existe
+            st.warning(f"Senha do usuário '{username}' não alterada (pode ser igual à anterior).")
+            return False # Retorna False se não houve modificação, mesmo que o usuário exista
+        else:
+            st.warning(f"Usuário '{username}' não encontrado para redefinição de senha.")
             return False
+            
     except Exception as e:
         st.error(f"ERRO ao redefinir senha do usuário '{username}': {e}")
+        print(f"UPDATE_PASSWORD_ADMIN_ERROR_LOG (user_management_db.py): User='{username}', Error: {e}")
         return False
 
 def update_user_password_self(username: str, new_hashed_password: str):
