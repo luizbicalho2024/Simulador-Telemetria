@@ -8,6 +8,7 @@ import certifi
 @st.cache_resource(show_spinner="Conectando ao Banco de Dados...")
 def get_mongo_client():
     """Retorna um cliente MongoDB conectado ou None em caso de falha."""
+    print("INFO_LOG (user_management_db.py): get_mongo_client() chamado.")
     if "MONGO_CONNECTION_STRING" not in st.secrets:
         st.error("CONFIGURAÇÃO CRÍTICA AUSENTE (user_management_db.py): 'MONGO_CONNECTION_STRING' não está definida nos segredos do aplicativo Streamlit Cloud.")
         print("CRITICAL_ERROR_LOG (user_management_db.py): MONGO_CONNECTION_STRING not found in Streamlit Cloud secrets.")
@@ -23,7 +24,7 @@ def get_mongo_client():
             serverSelectionTimeoutMS=25000, 
             socketTimeoutMS=25000,          
             connectTimeoutMS=25000          
-            # , tlsAllowInvalidCertificates=True # APENAS PARA DIAGNÓSTICO LOCAL EXTREMO
+            # , tlsAllowInvalidCertificates=True # MANTENHA COMENTADO EM PRODUÇÃO
         )
         client.admin.command('ping') 
         print("INFO_LOG (user_management_db.py): Conexão com MongoDB Atlas bem-sucedida.")
@@ -46,8 +47,10 @@ def get_mongo_client():
 @st.cache_resource
 def get_users_collection():
     """Retorna a coleção de usuários do MongoDB ou None em caso de falha."""
+    print("INFO_LOG (user_management_db.py): get_users_collection() chamado.")
     client = get_mongo_client()
     if client is None:
+        print("WARN_LOG (user_management_db.py - get_users_collection): Cliente MongoDB é None. Coleção não pode ser obtida.")
         return None
     try:
         db_name = st.secrets.get("MONGO_DB_NAME", "simulador_db") 
@@ -63,6 +66,7 @@ def get_users_collection():
         return None
 
 def fetch_all_users_for_auth():
+    print("INFO_LOG (user_management_db.py): fetch_all_users_for_auth() chamado.")
     users_collection = get_users_collection()
     default_credentials = {"usernames": {}} 
 

@@ -1,6 +1,6 @@
 streamlit>=1.33.0
 pymongo[srv]>=4.6.0
-streamlit-authenticator==0.3.2 # Especifique a versão que funciona para você
+streamlit-authenticator==0.3.2 # Especifique a versão exata que funciona para você
 certifi>=2023.7.22
 pandas
 numpy==1.26.4

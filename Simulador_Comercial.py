@@ -7,7 +7,7 @@ st.set_page_config(page_title="Simulador Telemetria Principal", layout="wide")
 print(f"INFO_LOG (Simulador_Comercial.py): Página configurada. Streamlit version: {st.__version__}")
 
 # --- Importação Segura de Módulos Essenciais ---
-umdb = None # Inicializa para verificação posterior
+umdb = None 
 try:
     import user_management_db as umdb_module
     umdb = umdb_module 
@@ -28,11 +28,16 @@ except Exception as e_umdb_general:
 
 stauth = None # Inicializa stauth como None
 try:
+    # Tenta importar o módulo principal primeiro
     import streamlit_authenticator as stauth_module 
-    stauth = stauth_module 
-    print(f"INFO_LOG (Simulador_Comercial.py): streamlit_authenticator importado. Versão: {stauth.__version__}")
+    stauth = stauth_module # Atribui à variável principal se a importação for bem-sucedida
+    # Tenta acessar __version__ somente se stauth for um módulo válido
+    if hasattr(stauth, '__version__'):
+        print(f"INFO_LOG (Simulador_Comercial.py): streamlit_authenticator importado. Versão: {stauth.__version__}")
+    else:
+        print(f"INFO_LOG (Simulador_Comercial.py): streamlit_authenticator importado, mas não possui atributo __version__ (Tipo: {type(stauth)}).")
 except ModuleNotFoundError:
-    st.error("ERRO CRÍTICO: A biblioteca 'streamlit-authenticator' não está instalada. Verifique seu 'requirements.txt' e os logs de build do Streamlit Cloud.")
+    st.error("ERRO CRÍTICO: A biblioteca 'streamlit-authenticator' não foi encontrada no ambiente do Streamlit Cloud. Verifique seu arquivo 'requirements.txt' e os logs de build do aplicativo.")
     print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): streamlit-authenticator NÃO ENCONTRADO (ModuleNotFoundError).")
     st.stop()
 except ImportError as ie_stauth:
@@ -44,9 +49,14 @@ except Exception as e_stauth_general:
     print(f"UNEXPECTED_IMPORT_ERROR_LOG (Simulador_Comercial.py): streamlit_authenticator (Exception): {e_stauth_general}")
     st.stop()
 
-if umdb is None or stauth is None: # Verificação final se os módulos foram carregados
+# Verificação final se os módulos essenciais foram carregados
+if umdb is None or stauth is None:
     st.error("ERRO CRÍTICO: Falha ao carregar módulos essenciais (user_management_db ou streamlit_authenticator). O aplicativo não pode continuar.")
     print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): umdb ou stauth permaneceu None após tentativas de importação.")
+    if umdb is None:
+        print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): umdb é None.")
+    if stauth is None: # Este é o cenário do seu erro atual
+        print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): stauth é None. A importação do streamlit_authenticator falhou.")
     st.stop()
 
 
@@ -58,7 +68,7 @@ client_available = umdb.get_mongo_client() is not None
 print(f"DEBUG_LOG (Simulador_Comercial.py): client_available = {client_available}")
 print(f"DEBUG_LOG (Simulador_Comercial.py): credentials (tipo: {type(credentials)}) = {credentials}")
 if isinstance(credentials, dict) and not credentials.get("usernames"):
-    print("DEBUG_LOG (Simulador_Comercial.py): 'credentials[\"usernames\"]' está vazio ou não existe.")
+    print("DEBUG_LOG (Simulador_Comercial.py): 'credentials[\"usernames\"]' está vazio ou não existe (pode ser normal se o DB estiver vazio ou a conexão falhou).")
 
 
 # --- Configuração do Autenticador ---
@@ -101,11 +111,11 @@ if not credentials.get("usernames"):
     st.title("Bem-vindo ao Simulador Telemetria! 🚀")
     st.subheader("Configuração Inicial: Criar Conta de Administrador")
     print("INFO_LOG (Simulador_Comercial.py): Nenhum usuário no DB. Exibindo formulário de criação do primeiro admin.")
-    with st.form("FormCriarPrimeiroAdmin_v5"):
-        admin_name = st.text_input("Nome Completo", key="init_admin_name_v5")
-        admin_username = st.text_input("Nome de Usuário (login)", key="init_admin_uname_v5")
-        admin_email = st.text_input("Email", key="init_admin_email_v5")
-        admin_password = st.text_input("Senha", type="password", key="init_admin_pass_v5")
+    with st.form("FormCriarPrimeiroAdmin_v6"): # Chave do formulário atualizada
+        admin_name = st.text_input("Nome Completo", key="init_admin_name_v6")
+        admin_username = st.text_input("Nome de Usuário (login)", key="init_admin_uname_v6")
+        admin_email = st.text_input("Email", key="init_admin_email_v6")
+        admin_password = st.text_input("Senha", type="password", key="init_admin_pass_v6")
         submit_admin = st.form_submit_button("Criar Administrador")
 
         if submit_admin:
@@ -135,7 +145,7 @@ try:
     if login_return_value is not None and isinstance(login_return_value, tuple) and len(login_return_value) == 3:
         name, authentication_status, username = login_return_value
     elif login_return_value is None:
-        print("WARN_LOG (Simulador_Comercial.py): authenticator.login() retornou None. Investigar (pode ser normal se o formulário não foi submetido ou cookie inválido).")
+        print("WARN_LOG (Simulador_Comercial.py): authenticator.login() retornou None. Investigar.")
         authentication_status = None 
     else: 
         st.error(f"ERRO INESPERADO NO LOGIN: authenticator.login() retornou: {login_return_value}")
@@ -154,8 +164,8 @@ if authentication_status is False:
     st.error("Nome de usuário ou senha incorreto(s). Tente novamente.")
 elif authentication_status is None:
     if login_attempted_flag and login_return_value is None:
-        st.warning("Ocorreu um problema ao processar o login. Verifique os logs do aplicativo no Streamlit Cloud para mais detalhes e tente novamente.")
-        st.info("Causas comuns: falha na conexão com o banco de dados ou problema com cookies de autenticação.")
+        st.warning("Ocorreu um problema ao processar o login. Verifique os logs do aplicativo no Streamlit Cloud e tente novamente.")
+        st.info("Causas comuns: falha na conexão com o banco de dados ou problema com cookies.")
     else: 
         st.info("Por favor, insira seu nome de usuário e senha.")
 elif authentication_status: 
@@ -174,6 +184,7 @@ elif authentication_status:
     st.sidebar.title(f"Bem-vindo(a), {name}!")
     authenticator.logout("Logout", "sidebar")
 
+    # --- SEÇÕES DE USUÁRIO E ADMIN ---
     if st.session_state.role == "user":
         st.sidebar.subheader("Minha Conta")
         try:
@@ -192,7 +203,7 @@ elif authentication_status:
         st.sidebar.subheader("Painel de Administração")
         admin_action_options = ["Ver Usuários", "Cadastrar Novo Usuário", "Editar Usuário",
                                 "Excluir Usuário", "Redefinir Senha de Usuário"]
-        admin_action = st.sidebar.selectbox("Gerenciar Usuários", admin_action_options, key="admin_action_sb_v5")
+        admin_action = st.sidebar.selectbox("Gerenciar Usuários", admin_action_options, key="admin_action_sb_v6")
         
         current_db_users_info = umdb.fetch_all_users_for_auth().get("usernames", {})
         
@@ -207,12 +218,12 @@ elif authentication_status:
 
         elif admin_action == "Cadastrar Novo Usuário":
             st.subheader("Cadastrar Novo Usuário")
-            with st.form("form_admin_cadastrar_usuario_v5", clear_on_submit=True):
-                reg_name_adm = st.text_input("Nome Completo", key="adm_reg_name_v5")
-                reg_uname_adm = st.text_input("Nome de Usuário (login)", key="adm_reg_uname_v5")
-                reg_email_adm = st.text_input("Email", key="adm_reg_email_v5")
-                reg_pass_adm = st.text_input("Senha", type="password", key="adm_reg_pass_v5")
-                reg_role_adm = st.selectbox("Papel", ["user", "admin"], key="adm_reg_role_v5")
+            with st.form("form_admin_cadastrar_usuario_v6", clear_on_submit=True):
+                reg_name_adm = st.text_input("Nome Completo", key="adm_reg_name_v6")
+                reg_uname_adm = st.text_input("Nome de Usuário (login)", key="adm_reg_uname_v6")
+                reg_email_adm = st.text_input("Email", key="adm_reg_email_v6")
+                reg_pass_adm = st.text_input("Senha", type="password", key="adm_reg_pass_v6")
+                reg_role_adm = st.selectbox("Papel", ["user", "admin"], key="adm_reg_role_v6")
                 if st.form_submit_button("Cadastrar Usuário"):
                     if all([reg_name_adm, reg_uname_adm, reg_email_adm, reg_pass_adm, reg_role_adm]):
                         if umdb.add_user(reg_uname_adm, reg_name_adm, reg_email_adm, reg_pass_adm, reg_role_adm):
@@ -225,16 +236,16 @@ elif authentication_status:
             if not current_db_users_info:
                 st.info("Nenhum usuário para editar.")
             else:
-                user_to_edit_uname = st.selectbox("Usuário a editar", list(current_db_users_info.keys()), key="adm_edit_sel_user_v5")
+                user_to_edit_uname = st.selectbox("Usuário a editar", list(current_db_users_info.keys()), key="adm_edit_sel_user_v6")
                 if user_to_edit_uname:
                     user_data = current_db_users_info.get(user_to_edit_uname) 
                     if user_data:
-                        with st.form(f"form_edit_user_{user_to_edit_uname}", key=f"adm_edit_form_{user_to_edit_uname}_v5"):
-                            edit_name = st.text_input("Nome", value=user_data.get('name', ''), key=f"adm_edit_name_{user_to_edit_uname}_v5")
-                            edit_email = st.text_input("Email", value=user_data.get('email', ''), key=f"adm_edit_email_{user_to_edit_uname}_v5")
+                        with st.form(f"form_edit_user_{user_to_edit_uname}", key=f"adm_edit_form_{user_to_edit_uname}_v6"):
+                            edit_name = st.text_input("Nome", value=user_data.get('name', ''), key=f"adm_edit_name_{user_to_edit_uname}_v6")
+                            edit_email = st.text_input("Email", value=user_data.get('email', ''), key=f"adm_edit_email_{user_to_edit_uname}_v6")
                             roles = ["user", "admin"]
                             current_role_idx = roles.index(user_data.get('role', 'user')) if user_data.get('role', 'user') in roles else 0
-                            edit_role = st.selectbox("Papel", roles, index=current_role_idx, key=f"adm_edit_role_{user_to_edit_uname}_v5")
+                            edit_role = st.selectbox("Papel", roles, index=current_role_idx, key=f"adm_edit_role_{user_to_edit_uname}_v6")
                             if st.form_submit_button("Salvar Alterações"):
                                 if umdb.update_user_details(user_to_edit_uname, edit_name, edit_email, edit_role):
                                     st.rerun()
@@ -246,10 +257,10 @@ elif authentication_status:
             if not current_db_users_info:
                 st.info("Nenhum usuário para excluir.")
             else:
-                user_to_delete_uname = st.selectbox("Usuário a excluir", list(current_db_users_info.keys()), key="adm_del_sel_user_v5")
+                user_to_delete_uname = st.selectbox("Usuário a excluir", list(current_db_users_info.keys()), key="adm_del_sel_user_v6")
                 if user_to_delete_uname:
                     st.warning(f"Confirma a exclusão de '{user_to_delete_uname}'?")
-                    if st.button(f"Excluir {user_to_delete_uname}", type="primary", key=f"adm_del_btn_{user_to_delete_uname}_v5"):
+                    if st.button(f"Excluir {user_to_delete_uname}", type="primary", key=f"adm_del_btn_{user_to_delete_uname}_v6"):
                         if umdb.delete_user(user_to_delete_uname):
                             st.rerun()
 
@@ -258,11 +269,11 @@ elif authentication_status:
             if not current_db_users_info:
                 st.info("Nenhum usuário para redefinir senha.")
             else:
-                user_to_reset_uname = st.selectbox("Usuário", list(current_db_users_info.keys()), key="adm_reset_sel_user_v5")
+                user_to_reset_uname = st.selectbox("Usuário", list(current_db_users_info.keys()), key="adm_reset_sel_user_v6")
                 if user_to_reset_uname:
-                    with st.form(f"form_reset_pass_{user_to_reset_uname}", clear_on_submit=True, key=f"adm_reset_form_{user_to_reset_uname}_v5"):
-                        new_pass = st.text_input("Nova Senha", type="password", key=f"adm_reset_new_pass_{user_to_reset_uname}_v5")
-                        confirm_pass = st.text_input("Confirmar Nova Senha", type="password", key=f"adm_reset_conf_pass_{user_to_reset_uname}_v5")
+                    with st.form(f"form_reset_pass_{user_to_reset_uname}", clear_on_submit=True, key=f"adm_reset_form_{user_to_reset_uname}_v6"):
+                        new_pass = st.text_input("Nova Senha", type="password", key=f"adm_reset_new_pass_{user_to_reset_uname}_v6")
+                        confirm_pass = st.text_input("Confirmar Nova Senha", type="password", key=f"adm_reset_conf_pass_{user_to_reset_uname}_v6")
                         if st.form_submit_button("Redefinir Senha"):
                             if not new_pass: st.warning("Senha não pode ser vazia.")
                             elif new_pass != confirm_pass: st.warning("Senhas não coincidem.")
@@ -271,6 +282,7 @@ elif authentication_status:
                                     st.rerun()
         st.sidebar.info("Acesso de administrador.")
 
+    # --- Conteúdo Principal da Página Pós-Login ---
     st.markdown("---") 
     st.header("Simulador de Telemetria Principal")
     st.write("Navegue pelas funcionalidades usando o menu lateral.")
