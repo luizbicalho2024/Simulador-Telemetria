@@ -3,6 +3,7 @@
 from io import BytesIO
 from docx import Document 
 from docx.shared import Pt 
+# from docx.enum.text import WD_ALIGN_PARAGRAPH # Descomente se for usar alinhamento
 import requests
 import time
 from datetime import datetime
@@ -10,11 +11,11 @@ from decimal import Decimal, ROUND_DOWN
 
 import streamlit as st
 
-# 1. st.set_page_config()
+# 1. st.set_page_config() - PRIMEIRO COMANDO STREAMLIT
 st.set_page_config(
     layout="wide",
     page_title="Simulador Pessoa Jurídica", 
-    page_icon="imgs/v-c.png", 
+    page_icon="imgs/v-c.png", # Verifique se o caminho está correto
     initial_sidebar_state="expanded"
 )
 print("INFO_LOG (Simulador_PJ.py): st.set_page_config executado.")
@@ -45,7 +46,7 @@ if not api_key_presente:
 
 try:
     st.image("imgs/logo.png", width=250) 
-except Exception as e_img:
+except Exception as e_img: # Mais genérico para capturar outros erros de imagem
     print(f"WARN_LOG (Simulador_PJ.py): Erro ao carregar imgs/logo.png: {e_img}")
 
 st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador de Venda - Pessoa Jurídica</h1>", unsafe_allow_html=True)
@@ -68,8 +69,9 @@ produtos_descricao = {
 }
 
 st.sidebar.header("📝 Configurações PJ") 
-qtd_veiculos_key = "pj_qtd_veiculos_sb_v23" 
-temp_contrato_key = "pj_temp_contrato_sb_v23"
+# Chaves únicas para widgets da sidebar, incrementando a versão para evitar conflitos
+qtd_veiculos_key = "pj_qtd_veiculos_sb_v24" 
+temp_contrato_key = "pj_temp_contrato_sb_v24"
 qtd_veiculos_input = st.sidebar.number_input("Quantidade de Veículos 🚗", min_value=1, value=1, step=1, key=qtd_veiculos_key)
 temp_contrato_selecionado_str = st.sidebar.selectbox("Tempo de Contrato ⏳", list(planos.keys()), key=temp_contrato_key) 
 print("INFO_LOG (Simulador_PJ.py): Widgets da sidebar renderizados.")
@@ -79,7 +81,7 @@ col1_pj, col2_pj = st.columns(2)
 produtos_selecionados_pj = {} 
 for i, (produto, preco_decimal) in enumerate(planos[temp_contrato_selecionado_str].items()):
     col_target = col1_pj if i % 2 == 0 else col2_pj
-    produto_toggle_key = f"pj_toggle_{temp_contrato_selecionado_str.replace(' ','_')}_{produto.replace(' ', '_').replace('/', '_').replace('+', '')}_v23" 
+    produto_toggle_key = f"pj_toggle_{temp_contrato_selecionado_str.replace(' ','_')}_{produto.replace(' ', '_').replace('/', '_').replace('+', '')}_v24" 
     if col_target.toggle(f"{produto} - R$ {preco_decimal:,.2f}", key=produto_toggle_key):
         produtos_selecionados_pj[produto] = preco_decimal 
 print(f"DEBUG_LOG (Simulador_PJ.py): Produtos selecionados para proposta: {produtos_selecionados_pj}")
@@ -99,43 +101,28 @@ else:
     st.info("Selecione produtos para ver o cálculo.")
 print("INFO_LOG (Simulador_PJ.py): Seção de cálculo de totais renderizada.")
 
-if st.button("🔄 Limpar Seleção e Recalcular", key="pj_btn_limpar_recalcular_v23"):
+if st.button("🔄 Limpar Seleção e Recalcular", key="pj_btn_limpar_recalcular_v24"):
     print("INFO_LOG (Simulador_PJ.py): Botão 'Limpar Seleção' clicado.")
     st.rerun()
 
 # --- FUNÇÃO AUXILIAR PARA PREENCHER O DOCX ---
-def docx_replace_text_in_runs_of_paragraph(paragraph, replacements_map):
-    """Substitui placeholders em todos os 'runs' de um parágrafo."""
-    for placeholder, value in replacements_map.items():
-        if placeholder in paragraph.text:
-            # print(f"DEBUG_LOG (docx_replace_text_in_runs_of_paragraph): Tentando substituir '{placeholder}' em '{paragraph.text[:70]}...'")
-            full_text = paragraph.text
-            # Iterar sobre runs para tentar preservar formatação é complexo se o placeholder estiver dividido.
-            # Uma substituição mais simples no texto do parágrafo é mais robusta para encontrar, mas pode perder formatação de run.
-            if placeholder in full_text:
-                # Tentativa de substituir mantendo a formatação do primeiro run que contém o placeholder (simplificado)
-                # Para substituições complexas que mantêm formatação perfeitamente, seria necessário
-                # reconstruir os runs.
-                for i_run, run in enumerate(paragraph.runs):
+def docx_replace_text_in_runs(element_container, replacements_map):
+    """
+    Itera sobre parágrafos (em um documento ou célula de tabela)
+    e substitui placeholders dentro dos runs de cada parágrafo.
+    'element_container' pode ser 'doc' (o objeto Document) ou 'cell'.
+    """
+    for paragraph in element_container.paragraphs:
+        for placeholder, value in replacements_map.items():
+            # Verifica se o placeholder existe no texto completo do parágrafo primeiro
+            if placeholder in paragraph.text:
+                # Itera sobre os 'runs' (segmentos de texto com a mesma formatação)
+                for run in paragraph.runs:
                     if placeholder in run.text:
                         run.text = run.text.replace(placeholder, str(value))
-                        # Se o placeholder foi totalmente substituído no primeiro run encontrado, pode parar.
-                        # Se o placeholder pode estar dividido entre runs, esta lógica é insuficiente.
-                        # Para a maioria dos casos de placeholders simples, isso deve funcionar.
-                        # print(f"DEBUG_LOG (docx_replace_text_in_runs_of_paragraph): Substituído '{placeholder}' por '{value}' no run {i_run}")
-                        # Para evitar múltiplas substituições se o placeholder aparecer de novo após a substituição parcial:
-                        # break # Comentar se o placeholder pode aparecer várias vezes no mesmo parágrafo.
-                # Se a substituição acima via runs não for suficiente (ex: placeholder quebrado),
-                # uma substituição no texto do parágrafo inteiro pode ser um fallback,
-                # mas pode perder formatação específica de runs.
-                # No entanto, para placeholders simples, a substituição run a run acima deve ser priorizada.
-                # Se, após iterar os runs, o placeholder ainda estiver no texto do parágrafo (devido a quebras de run),
-                # fazer uma substituição final no texto do parágrafo pode ser necessário,
-                # mas isso indica que o placeholder não está contido em um único run.
-                if placeholder in paragraph.text: # Verifica novamente se a substituição no run foi completa
-                     paragraph.text = paragraph.text.replace(placeholder, str(value))
-                     print(f"DEBUG_LOG (docx_replace_text_in_runs_of_paragraph): Substituição final de '{placeholder}' no texto do parágrafo.")
-
+                        print(f"DEBUG_LOG (docx_replace_text_in_runs): Substituído '{placeholder}' por '{value}' no run: '{run.text[:50]}...'")
+                        # Não interrompa o loop do run aqui, pois o mesmo placeholder pode aparecer
+                        # em múltiplos runs se a formatação mudar no meio do placeholder (embora isso seja raro para placeholders bem definidos).
 
 def preencher_proposta_docx(doc, nome_empresa_val, nome_responsavel_val, nome_consultor_val, 
                             validade_proposta_dt_val, 
@@ -149,8 +136,11 @@ def preencher_proposta_docx(doc, nome_empresa_val, nome_responsavel_val, nome_co
                            ):
     print(f"DEBUG_LOG (preencher_proposta_docx): Iniciando preenchimento para '{nome_empresa_val}'.")
     
+    # Define os placeholders e seus valores
+    # CERTIFIQUE-SE QUE ESTES PLACEHOLDERS EXISTEM EXATAMENTE ASSIM NO SEU .DOCX
+    # (Ex: {{NOME_EMPRESA}}, não [NOME_EMPRESA] se você mudou o padrão)
     placeholders_gerais = {
-        "{{NOME_EMPRESA}}": nome_empresa_val,
+        "{{NOME_EMPRESA}}": nome_empresa_val, # Ajuste se seus placeholders forem diferentes
         "{{NOME_RESPONSAVEL}}": nome_responsavel_val,
         "{{DATA_VALIDADE}}": validade_proposta_dt_val.strftime("%d/%m/%Y"),
         "{{NOME_CONSULTOR}}": nome_consultor_val,
@@ -161,23 +151,19 @@ def preencher_proposta_docx(doc, nome_empresa_val, nome_responsavel_val, nome_co
     }
     print(f"DEBUG_LOG (preencher_proposta_docx): Placeholders a serem substituídos: {placeholders_gerais}")
     
+    # Substituir em parágrafos principais do documento
     print("DEBUG_LOG (preencher_proposta_docx): Substituindo placeholders em parágrafos do corpo...")
-    for paragraph in doc.paragraphs:
-        docx_replace_text_in_runs_of_paragraph(paragraph, placeholders_gerais)
+    docx_replace_text_in_runs(doc, placeholders_gerais) # Passa o objeto 'doc'
     
+    # Substituir em tabelas (em todas as células)
     print("DEBUG_LOG (preencher_proposta_docx): Substituindo placeholders em tabelas do corpo...")
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
-                # CORREÇÃO: Um objeto 'Cell' não tem um atributo '.paragraphs' diretamente acessível como uma lista iterável da mesma forma que doc.paragraphs.
-                # Em vez disso, o texto da célula é o conteúdo principal, ou você pode iterar sobre os parágrafos dentro da célula.
-                # A função docx_replace_text_in_runs_of_paragraph espera um objeto 'Paragraph'.
-                # Então, precisamos iterar sobre os parágrafos da célula.
-                for paragraph_in_cell in cell.paragraphs:
-                    docx_replace_text_in_runs_of_paragraph(paragraph_in_cell, placeholders_gerais)
-
+                docx_replace_text_in_runs(cell, placeholders_gerais) # Passa o objeto 'cell'
     print("DEBUG_LOG (preencher_proposta_docx): Substituição de placeholders gerais concluída.")
 
+    # --- PREENCHIMENTO DA TABELA DE ITENS ---
     table_to_fill = None
     expected_headers = ["Item", "Descrição", "Preço | Mês"] 
     print(f"DEBUG_LOG (preencher_proposta_docx): Cabeçalhos esperados na tabela de itens: {expected_headers}")
@@ -234,11 +220,11 @@ if produtos_selecionados_pj:
         st.warning("⚠️ Geração de PDF (CloudConvert) desativada: Chave API não configurada.")
         print("WARN_LOG (Simulador_PJ.py): Geração de PDF desativada.")
 
-    with st.form(f"formulario_proposta_pj_v23_final", clear_on_submit=False): 
-        form_nome_empresa = st.text_input("Nome da Empresa", key="pj_form_nome_empresa_v23_final")
-        form_nome_responsavel = st.text_input("Nome do Responsável", key="pj_form_nome_responsavel_v23_final")
-        form_nome_consultor = st.text_input("Nome do Consultor Comercial", value=current_name, key="pj_form_nome_consultor_v23_final")
-        form_validade_proposta_dt = st.date_input("Validade da Proposta", value=datetime.today(), key="pj_form_validade_proposta_v23_final")
+    with st.form(f"formulario_proposta_pj_v24_final", clear_on_submit=False): 
+        form_nome_empresa = st.text_input("Nome da Empresa", key="pj_form_nome_empresa_v24_final")
+        form_nome_responsavel = st.text_input("Nome do Responsável", key="pj_form_nome_responsavel_v24_final")
+        form_nome_consultor = st.text_input("Nome do Consultor Comercial", value=current_name, key="pj_form_nome_consultor_v24_final")
+        form_validade_proposta_dt = st.date_input("Validade da Proposta", value=datetime.today(), key="pj_form_validade_proposta_v24_final")
         
         col_btn_form1, col_btn_form2 = st.columns(2)
         with col_btn_form1:
@@ -277,7 +263,7 @@ if produtos_selecionados_pj:
                     data=buffer_docx,
                     file_name=f"Proposta_Verdio_{form_nome_empresa.replace(' ', '_')}_{form_validade_proposta_dt.strftime('%Y%m%d')}.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    key="pj_download_docx_btn_v23_final" 
+                    key="pj_download_docx_btn_v24_final" 
                 )
                 st.success("Proposta em DOCX pronta para download!")
 
@@ -291,6 +277,7 @@ if produtos_selecionados_pj:
     if gerar_pdf_cloudconvert_btn and api_key_presente: 
         # (A lógica para gerar PDF permanece a mesma da resposta anterior,
         #  chamando a mesma função preencher_proposta_docx)
+        # ... (código para CloudConvert) ...
         print(f"INFO_LOG (Simulador_PJ.py): Botão 'Gerar PDF (CloudConvert)' clicado. Empresa: {form_nome_empresa}")
         if not all([form_nome_empresa, form_nome_responsavel, form_nome_consultor]):
             st.warning("Preencha os dados da proposta (Empresa, Responsável, Consultor).")
@@ -385,7 +372,7 @@ if produtos_selecionados_pj:
                                 data=pdf_file_content,
                                 file_name=f"Proposta_Verdio_{form_nome_empresa.replace(' ', '_')}_{form_validade_proposta_dt.strftime('%Y%m%d')}.pdf",
                                 mime="application/pdf",
-                                key="pj_download_pdf_btn_v23_final_cc" 
+                                key="pj_download_pdf_btn_v24_final_cc" 
                             )
                         elif final_job_status != 'error': 
                             st.error("Não foi possível obter o PDF ou tempo de espera excedido.")
