@@ -2,72 +2,23 @@
 import streamlit as st
 import pandas as pd
 
-# --- Configuração Inicial da Página com o Novo Tema ---
-st.set_page_config(
-    page_title="Simulador Telemetria Principal", 
-    layout="wide",
-    # page_icon="imgs/v-c.png", # Mantenha se o caminho estiver correto
-    initial_sidebar_state="expanded",
-    theme={
-        "primaryColor": "#27ff82", # Verde vibrante para elementos interativos principais
-        "backgroundColor": "#001e2b", # Azul bem escuro para o fundo principal
-        "secondaryBackgroundColor": "#112733", # Azul um pouco mais claro para fundos secundários (ex: sidebar, expanders)
-        "textColor": "#ffffff", # Branco para o texto principal
-        "font": "sans serif" # ou "serif" ou "monospace"
-    }
-)
-
-# CSS Customizado para ajustes finos (opcional, mas pode ser necessário)
-# Para aplicar a secondaryBackgroundColor em mais lugares, ou para outros ajustes.
-custom_css = f"""
-<style>
-    /* Aplicar a cor de fundo secundária à barra lateral */
-    /* Streamlit pode usar diferentes seletores dependendo da versão, inspecione se necessário */
-    div[data-testid="stSidebarNav"] {{
-        background-color: #112733; 
-    }}
-    div[data-testid="stSidebarUserContent"] {{
-        background-color: #112733;
-    }}
-    /* Cor de fundo para expanders */
-    div[data-testid="stExpander"] {{
-        background-color: #112733;
-        border-radius: 0.5rem; /* Exemplo de borda arredondada */
-    }}
-    /* Cor do texto dentro de expanders (se não herdar corretamente) */
-    div[data-testid="stExpander"] p, 
-    div[data-testid="stExpander"] label,
-    div[data-testid="stExpander"] div[data-testid="stMarkdownContainer"] {{
-        color: #ffffff !important; /* Força a cor do texto se necessário */
-    }}
-
-    /* Cor de botões (Streamlit usa primaryColor, mas pode ser ajustado) */
-    /* div[data-testid="stButton"] > button {{
-        background-color: #27ff82;
-        color: #001e2b; /* Cor do texto do botão para contraste */
-        border: none;
-    }} */
-
-    /* Cor do texto em st.info, st.success, st.warning, st.error se necessário */
-    /* Pode ser que o tema padrão já lide bem com isso com a textColor principal */
-
-</style>
-"""
-# Descomente a linha abaixo se quiser injetar CSS customizado.
-# CUIDADO: CSS customizado pode ser frágil entre versões do Streamlit. Teste bem.
-# st.markdown(custom_css, unsafe_allow_html=True)
-
-
+# --- Configuração Inicial da Página ---
+st.set_page_config(page_title="Simulador Telemetria Principal", layout="wide")
 print(f"INFO_LOG (Simulador_Comercial.py): Página configurada. Streamlit version: {st.__version__}")
 
-# --- Importação Segura de Módulos Essenciais ---
-umdb = None 
+# --- Inicialização das variáveis de módulo ---
+umdb = None
+stauth = None
+stauth_Hasher_class = None # Explicitamente para a classe Hasher
+
+# --- Importação Segura do Módulo de Banco de Dados ---
 try:
     import user_management_db as umdb_module
     umdb = umdb_module 
     print("INFO_LOG (Simulador_Comercial.py): Módulo user_management_db importado com sucesso.")
 except ModuleNotFoundError:
     st.error("ERRO CRÍTICO: O arquivo 'user_management_db.py' não foi encontrado.")
+    st.info("Verifique se 'user_management_db.py' está na mesma pasta que 'Simulador_Comercial.py'.")
     print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): user_management_db.py não encontrado.")
     st.stop() 
 except ImportError as ie_umdb:
@@ -79,37 +30,52 @@ except Exception as e_umdb_general:
     print(f"UNEXPECTED_IMPORT_ERROR_LOG (Simulador_Comercial.py): user_management_db: {e_umdb_general}")
     st.stop()
 
-stauth = None 
-stauth_Hasher_class = None 
+# --- Importação Segura do Streamlit Authenticator e seu Hasher ---
 try:
     import streamlit_authenticator as stauth_module 
     stauth = stauth_module 
-    from streamlit_authenticator.utilities.hasher import Hasher as AuthHasher 
-    stauth_Hasher_class = AuthHasher 
     if hasattr(stauth, '__version__'):
         print(f"INFO_LOG (Simulador_Comercial.py): streamlit_authenticator importado. Versão: {stauth.__version__}")
     else:
-        print(f"INFO_LOG (Simulador_Comercial.py): streamlit_authenticator importado, mas sem atributo __version__.")
+        # Isso pode acontecer se a importação principal falhar parcialmente, mas não levantar ModuleNotFoundError
+        print(f"WARN_LOG (Simulador_Comercial.py): streamlit_authenticator importado, mas sem atributo __version__ (Tipo: {type(stauth)}). Isso pode indicar um problema de instalação.")
+    
+    # Tenta importar Hasher especificamente
+    from streamlit_authenticator.utilities.hasher import Hasher
+    stauth_Hasher_class = Hasher # Atribui a classe Hasher
+    print(f"INFO_LOG (Simulador_Comercial.py): streamlit_authenticator.utilities.hasher.Hasher importado com sucesso.")
+
 except ModuleNotFoundError:
-    st.error("ERRO CRÍTICO: A biblioteca 'streamlit-authenticator' não está instalada.")
-    print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): streamlit-authenticator NÃO ENCONTRADO.")
-    st.stop()
+    st.error("ERRO CRÍTICO: A biblioteca 'streamlit-authenticator' não foi encontrada. Verifique 'requirements.txt' e os logs de build do Streamlit Cloud.")
+    print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): streamlit-authenticator NÃO ENCONTRADO (ModuleNotFoundError).")
+    # stauth e stauth_Hasher_class permanecerão None
 except ImportError as ie_stauth: 
-    st.error(f"ERRO CRÍTICO AO IMPORTAR 'streamlit-authenticator' ou Hasher: {ie_stauth}.")
+    st.error(f"ERRO CRÍTICO AO IMPORTAR 'streamlit-authenticator' ou seus componentes (como Hasher): {ie_stauth}. Verifique a instalação da biblioteca e suas dependências (bcrypt, passlib).")
     print(f"CRITICAL_IMPORT_ERROR_LOG (Simulador_Comercial.py): streamlit_authenticator/Hasher (ImportError): {ie_stauth}")
-    st.stop()
+    # stauth e stauth_Hasher_class permanecerão None
 except Exception as e_stauth_general: 
     st.error(f"ERRO INESPERADO AO IMPORTAR streamlit_authenticator ou Hasher: {e_stauth_general}")
     print(f"UNEXPECTED_IMPORT_ERROR_LOG (Simulador_Comercial.py): streamlit_authenticator/Hasher (Exception): {e_stauth_general}")
-    st.stop()
+    # stauth e stauth_Hasher_class permanecerão None
 
-if umdb is None or stauth is None or stauth_Hasher_class is None:
-    st.error("ERRO CRÍTICO: Falha ao carregar módulos essenciais. App não pode continuar.")
-    print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): umdb, stauth ou stauth_Hasher_class é None.")
+# Verificação final IMEDIATAMENTE APÓS as tentativas de importação
+# E ANTES de qualquer uso de umdb, stauth, ou stauth_Hasher_class
+if umdb is None:
+    st.error("ERRO FATAL: Módulo de banco de dados (umdb) não carregado. Aplicativo parado.")
+    print("FATAL_ERROR_LOG (Simulador_Comercial.py): umdb é None.")
+    st.stop()
+if stauth is None:
+    st.error("ERRO FATAL: Módulo de autenticação (stauth) não carregado. Aplicativo parado.")
+    print("FATAL_ERROR_LOG (Simulador_Comercial.py): stauth é None.")
+    st.stop()
+if stauth_Hasher_class is None: 
+    st.error("ERRO FATAL: Componente Hasher da autenticação não carregado. Verifique os logs de build do Streamlit Cloud para erros na instalação de 'streamlit-authenticator' ou suas dependências (como bcrypt, passlib). O aplicativo não pode continuar.")
+    print("FATAL_ERROR_LOG (Simulador_Comercial.py): stauth_Hasher_class é None. A importação de streamlit_authenticator.utilities.hasher.Hasher falhou.")
     st.stop()
 
 
 # --- Carregamento de Credenciais e Configuração do Autenticador ---
+# Estas linhas só serão executadas se as importações acima forem bem-sucedidas.
 print("INFO_LOG (Simulador_Comercial.py): Buscando credenciais...")
 credentials = umdb.fetch_all_users_for_auth() 
 client_available = umdb.get_mongo_client() is not None 
@@ -148,11 +114,11 @@ if not credentials.get("usernames"):
     st.title("Bem-vindo ao Simulador Telemetria! 🚀")
     st.subheader("Configuração Inicial: Criar Conta de Administrador")
     print("INFO_LOG (Simulador_Comercial.py): Nenhum usuário. Exibindo formulário de criação do primeiro admin.")
-    with st.form("FormCriarPrimeiroAdmin_v18_main"): 
-        admin_name = st.text_input("Nome Completo", key="init_admin_name_v18_main")
-        admin_username = st.text_input("Nome de Usuário (login)", key="init_admin_uname_v18_main")
-        admin_email = st.text_input("Email", key="init_admin_email_v18_main")
-        admin_password = st.text_input("Senha", type="password", key="init_admin_pass_v18_main")
+    with st.form("FormCriarPrimeiroAdmin_v17_main"): 
+        admin_name = st.text_input("Nome Completo", key="init_admin_name_v17_main")
+        admin_username = st.text_input("Nome de Usuário (login)", key="init_admin_uname_v17_main")
+        admin_email = st.text_input("Email", key="init_admin_email_v17_main")
+        admin_password = st.text_input("Senha", type="password", key="init_admin_pass_v17_main")
         submit_admin = st.form_submit_button("Criar Administrador")
         if submit_admin:
             if all([admin_name, admin_username, admin_email, admin_password]):
@@ -166,6 +132,7 @@ if not credentials.get("usernames"):
 # --- Processo de Login ---
 print("INFO_LOG (Simulador_Comercial.py): Chamando authenticator.login()...")
 print(f"DEBUG_LOG (Simulador_Comercial.py): st.session_state ANTES do login: {st.session_state.to_dict()}")
+
 
 name, authentication_status, username = None, None, None 
 login_attempted_flag = False 
@@ -211,7 +178,7 @@ elif authentication_status:
     print(f"INFO_LOG (Simulador_Comercial.py): Usuário '{username}' logado. Role: '{st.session_state.role}'.")
 
     st.sidebar.title(f"Bem-vindo(a), {st.session_state.name}!") 
-    authenticator.logout("Logout", "sidebar")
+    authenticator.logout("Sair", "sidebar")
 
     # --- SEÇÕES DE USUÁRIO E ADMIN ---
     if st.session_state.role == "user":
@@ -219,10 +186,11 @@ elif authentication_status:
         print(f"DEBUG_LOG (Simulador_Comercial.py): Usuário '{st.session_state.username}' na seção de usuário.")
         
         with st.sidebar.expander("Alterar Minha Senha", expanded=False):
-            with st.form("form_user_change_password_v18", clear_on_submit=True): 
-                current_password = st.text_input("Senha Atual", type="password", key="user_current_pass_v18")
-                new_password = st.text_input("Nova Senha", type="password", key="user_new_pass_v18")
-                confirm_new_password = st.text_input("Confirmar Nova Senha", type="password", key="user_confirm_new_pass_v18")
+            # A chave do form foi atualizada para garantir unicidade
+            with st.form("form_user_change_password_v17", clear_on_submit=True): 
+                current_password = st.text_input("Senha Atual", type="password", key="user_current_pass_v17")
+                new_password = st.text_input("Nova Senha", type="password", key="user_new_pass_v17")
+                confirm_new_password = st.text_input("Confirmar Nova Senha", type="password", key="user_confirm_new_pass_v17")
                 submit_change_pass_btn = st.form_submit_button("Salvar Nova Senha")
 
                 if submit_change_pass_btn:
@@ -232,27 +200,26 @@ elif authentication_status:
                     elif new_password != confirm_new_password:
                         st.error("A nova senha e a confirmação não coincidem.")
                     else:
-                        if stauth_Hasher_class is None: 
-                            st.error("ERRO INTERNO: Componente de hashing não carregado.")
-                            print("CRITICAL_ERROR_LOG (Simulador_Comercial.py): stauth_Hasher_class é None ao tentar alterar senha.")
-                        else:
-                            stored_hashed_password = umdb.get_user_hashed_password(st.session_state.username)
-                            if stored_hashed_password and stauth_Hasher_class([current_password]).verify(stored_hashed_password): 
-                                if umdb.update_user_password_manual(st.session_state.username, new_password):
-                                    st.success("Senha alterada com sucesso! Para aplicar, faça logout e login novamente.")
-                                    print(f"INFO_LOG (Simulador_Comercial.py): Senha alterada para '{st.session_state.username}'.")
-                                else:
-                                    st.error("Falha ao atualizar a senha no banco de dados.")
+                        # stauth_Hasher_class é a classe Hasher importada e verificada no início do script
+                        # A verificação if stauth_Hasher_class is None: já deve ter parado o script se falhou
+                        stored_hashed_password = umdb.get_user_hashed_password(st.session_state.username)
+                        if stored_hashed_password and stauth_Hasher_class([current_password]).verify(stored_hashed_password): # Linha 206 (ou perto)
+                            if umdb.update_user_password_manual(st.session_state.username, new_password):
+                                st.success("Senha alterada com sucesso! Para aplicar a alteração, por favor, faça logout e login novamente.")
+                                print(f"INFO_LOG (Simulador_Comercial.py): Senha alterada para '{st.session_state.username}'.")
                             else:
-                                st.error("Senha atual incorreta.")
+                                st.error("Falha ao atualizar a senha no banco de dados.")
+                        else:
+                            st.error("Senha atual incorreta.")
         
         st.sidebar.info("Acesso de visualização aos simuladores.")
 
     elif st.session_state.role == "admin":
         st.sidebar.subheader("Painel de Administração")
+        # ... (código do painel admin como na última versão completa, com chaves únicas _v17_main) ...
         admin_action_options = ["Ver Usuários", "Cadastrar Novo Usuário", "Editar Usuário",
                                 "Excluir Usuário", "Redefinir Senha de Usuário"]
-        admin_action = st.sidebar.selectbox("Gerenciar Usuários", admin_action_options, key="admin_action_sb_v18_main")
+        admin_action = st.sidebar.selectbox("Gerenciar Usuários", admin_action_options, key="admin_action_sb_v17_main")
         
         current_db_users_dict = umdb.fetch_all_users_for_auth().get("usernames", {})
         
@@ -267,13 +234,12 @@ elif authentication_status:
 
         elif admin_action == "Cadastrar Novo Usuário":
             st.subheader("Cadastrar Novo Usuário")
-            with st.form("form_admin_cadastrar_usuario_v18_main", clear_on_submit=True):
-                reg_name_adm = st.text_input("Nome Completo", key="adm_reg_name_v18_main")
-                # ... (resto do formulário de cadastro com chaves _v18_main)
-                reg_uname_adm = st.text_input("Nome de Usuário (login)", key="adm_reg_uname_v18_main")
-                reg_email_adm = st.text_input("Email", key="adm_reg_email_v18_main")
-                reg_pass_adm = st.text_input("Senha", type="password", key="adm_reg_pass_v18_main")
-                reg_role_adm = st.selectbox("Papel", ["user", "admin"], key="adm_reg_role_v18_main")
+            with st.form("form_admin_cadastrar_usuario_v17_main", clear_on_submit=True):
+                reg_name_adm = st.text_input("Nome Completo", key="adm_reg_name_v17_main")
+                reg_uname_adm = st.text_input("Nome de Usuário (login)", key="adm_reg_uname_v17_main")
+                reg_email_adm = st.text_input("Email", key="adm_reg_email_v17_main")
+                reg_pass_adm = st.text_input("Senha", type="password", key="adm_reg_pass_v17_main")
+                reg_role_adm = st.selectbox("Papel", ["user", "admin"], key="adm_reg_role_v17_main")
                 if st.form_submit_button("Cadastrar Usuário"):
                     if all([reg_name_adm, reg_uname_adm, reg_email_adm, reg_pass_adm, reg_role_adm]):
                         if umdb.add_user(reg_uname_adm, reg_name_adm, reg_email_adm, reg_pass_adm, reg_role_adm):
@@ -287,21 +253,20 @@ elif authentication_status:
                 st.info("Nenhum usuário disponível para edição.")
             else:
                 usernames_list_edit = list(current_db_users_dict.keys())
-                user_to_edit_uname = st.selectbox("Usuário a editar:", usernames_list_edit, key="adm_edit_sel_user_v18_main")
+                user_to_edit_uname = st.selectbox("Usuário a editar:", usernames_list_edit, key="adm_edit_sel_user_v17_main")
                 
                 if user_to_edit_uname:
                     user_data_for_form = current_db_users_dict.get(user_to_edit_uname)
                     if user_data_for_form:
-                        with st.form(f"form_edit_user_{user_to_edit_uname}_v18_main", clear_on_submit=False): 
-                            # ... (resto do formulário de edição com chaves _v18_main)
+                        with st.form(f"form_edit_user_{user_to_edit_uname}_v17_main", clear_on_submit=False): 
                             st.write(f"Editando dados para: **{user_to_edit_uname}**")
-                            edit_name = st.text_input("Nome Completo:", value=user_data_for_form.get('name', ''), key=f"adm_edit_name_val_{user_to_edit_uname}_v18_main")
-                            edit_email = st.text_input("Email:", value=user_data_for_form.get('email', ''), key=f"adm_edit_email_val_{user_to_edit_uname}_v18_main")
+                            edit_name = st.text_input("Nome Completo:", value=user_data_for_form.get('name', ''), key=f"adm_edit_name_val_{user_to_edit_uname}_v17_main")
+                            edit_email = st.text_input("Email:", value=user_data_for_form.get('email', ''), key=f"adm_edit_email_val_{user_to_edit_uname}_v17_main")
                             roles_options = ["user", "admin"]
                             current_role = user_data_for_form.get('role', 'user')
                             try: current_role_idx_edit = roles_options.index(current_role)
                             except ValueError: current_role_idx_edit = 0 
-                            edit_role = st.selectbox("Novo Papel:", roles_options, index=current_role_idx_edit, key=f"adm_edit_role_val_{user_to_edit_uname}_v18_main")
+                            edit_role = st.selectbox("Novo Papel:", roles_options, index=current_role_idx_edit, key=f"adm_edit_role_val_{user_to_edit_uname}_v17_main")
                             if st.form_submit_button("Salvar Alterações"):
                                 if umdb.update_user_details(user_to_edit_uname, edit_name, edit_email, edit_role):
                                     st.rerun() 
@@ -314,13 +279,12 @@ elif authentication_status:
                 st.info("Nenhum usuário disponível para redefinir senha.")
             else:
                 usernames_list_reset = list(current_db_users_dict.keys())
-                user_to_reset_uname = st.selectbox("Usuário:", usernames_list_reset, key="adm_reset_sel_user_v18_main")
+                user_to_reset_uname = st.selectbox("Usuário:", usernames_list_reset, key="adm_reset_sel_user_v17_main")
                 if user_to_reset_uname:
-                    with st.form(f"form_reset_pass_{user_to_reset_uname}_v18_main", clear_on_submit=True):
-                        # ... (resto do formulário de redefinir senha com chaves _v18_main)
+                    with st.form(f"form_reset_pass_{user_to_reset_uname}_v17_main", clear_on_submit=True):
                         st.write(f"Redefinindo senha para: **{user_to_reset_uname}**")
-                        new_pass = st.text_input("Nova Senha:", type="password", key=f"adm_reset_new_pass_{user_to_reset_uname}_v18_main")
-                        confirm_pass = st.text_input("Confirmar Nova Senha:", type="password", key=f"adm_reset_conf_pass_{user_to_reset_uname}_v18_main")
+                        new_pass = st.text_input("Nova Senha:", type="password", key=f"adm_reset_new_pass_{user_to_reset_uname}_v17_main")
+                        confirm_pass = st.text_input("Confirmar Nova Senha:", type="password", key=f"adm_reset_conf_pass_{user_to_reset_uname}_v17_main")
                         if st.form_submit_button("Redefinir Senha"):
                             if not new_pass: st.warning("O campo 'Nova Senha' não pode ser vazio.")
                             elif new_pass != confirm_pass: st.warning("As senhas não coincidem.")
@@ -330,14 +294,13 @@ elif authentication_status:
                         
         elif admin_action == "Excluir Usuário": 
             st.subheader("🗑️ Excluir Usuário")
-            # ... (código como antes, com chaves únicas _v18_main)
             if not current_db_users_dict:
                 st.info("Nenhum usuário para excluir.")
             else:
-                user_to_delete_uname = st.selectbox("Usuário a excluir:", list(current_db_users_dict.keys()), key="adm_del_sel_user_v18_main")
+                user_to_delete_uname = st.selectbox("Usuário a excluir:", list(current_db_users_dict.keys()), key="adm_del_sel_user_v17_main")
                 if user_to_delete_uname:
                     st.warning(f"Confirma a exclusão de '{user_to_delete_uname}'?")
-                    if st.button(f"Excluir {user_to_delete_uname}", type="primary", key=f"adm_del_btn_{user_to_delete_uname}_v18_main"):
+                    if st.button(f"Excluir {user_to_delete_uname}", type="primary", key=f"adm_del_btn_{user_to_delete_uname}_v17_main"):
                         if umdb.delete_user(user_to_delete_uname):
                             st.rerun()
         st.sidebar.info("Acesso de administrador.")
