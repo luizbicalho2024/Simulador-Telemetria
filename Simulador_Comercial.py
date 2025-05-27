@@ -55,8 +55,8 @@ custom_css = f"""
 """
 
 # --- Configuração Inicial da Página ---
-st.set_page_config(page_title="Simulador Telemetria Principal", layout="wide")
-print(f"INFO_LOG (Simulador_Comercial.py): Página configurada. Streamlit version: {st.__version__}")
+#st.set_page_config(page_title="Simulador Telemetria Principal", layout="wide")
+#print(f"INFO_LOG (Simulador_Comercial.py): Página configurada. Streamlit version: {st.__version__}")
 
 # --- Inicialização das variáveis de módulo ---
 umdb = None
