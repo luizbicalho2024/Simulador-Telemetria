@@ -2,6 +2,58 @@
 import streamlit as st
 import pandas as pd
 
+# --- Configuração Inicial da Página com o Novo Tema ---
+st.set_page_config(
+    page_title="Simulador Telemetria Principal", 
+    layout="wide",
+    # page_icon="imgs/v-c.png", # Mantenha se o caminho estiver correto
+    initial_sidebar_state="expanded",
+    theme={
+        "primaryColor": "#27ff82", # Verde vibrante para elementos interativos principais
+        "backgroundColor": "#001e2b", # Azul bem escuro para o fundo principal
+        "secondaryBackgroundColor": "#112733", # Azul um pouco mais claro para fundos secundários (ex: sidebar, expanders)
+        "textColor": "#ffffff", # Branco para o texto principal
+        "font": "sans serif" # ou "serif" ou "monospace"
+    }
+)
+
+# CSS Customizado para ajustes finos (opcional, mas pode ser necessário)
+# Para aplicar a secondaryBackgroundColor em mais lugares, ou para outros ajustes.
+custom_css = f"""
+<style>
+    /* Aplicar a cor de fundo secundária à barra lateral */
+    /* Streamlit pode usar diferentes seletores dependendo da versão, inspecione se necessário */
+    div[data-testid="stSidebarNav"] {{
+        background-color: #112733; 
+    }}
+    div[data-testid="stSidebarUserContent"] {{
+        background-color: #112733;
+    }}
+    /* Cor de fundo para expanders */
+    div[data-testid="stExpander"] {{
+        background-color: #112733;
+        border-radius: 0.5rem; /* Exemplo de borda arredondada */
+    }}
+    /* Cor do texto dentro de expanders (se não herdar corretamente) */
+    div[data-testid="stExpander"] p, 
+    div[data-testid="stExpander"] label,
+    div[data-testid="stExpander"] div[data-testid="stMarkdownContainer"] {{
+        color: #ffffff !important; /* Força a cor do texto se necessário */
+    }}
+
+    /* Cor de botões (Streamlit usa primaryColor, mas pode ser ajustado) */
+    /* div[data-testid="stButton"] > button {{
+        background-color: #27ff82;
+        color: #001e2b; /* Cor do texto do botão para contraste */
+        border: none;
+    }} */
+
+    /* Cor do texto em st.info, st.success, st.warning, st.error se necessário */
+    /* Pode ser que o tema padrão já lide bem com isso com a textColor principal */
+
+</style>
+"""
+
 # --- Configuração Inicial da Página ---
 st.set_page_config(page_title="Simulador Telemetria Principal", layout="wide")
 print(f"INFO_LOG (Simulador_Comercial.py): Página configurada. Streamlit version: {st.__version__}")
