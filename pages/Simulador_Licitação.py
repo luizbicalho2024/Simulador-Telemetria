@@ -87,18 +87,16 @@ with col2:
     incluir_instalacao = st.toggle(f"Incluir Instalação", key="lic_toggle_instalacao")
     
     incluir_manutencao = st.toggle(f"Incluir Manutenção", key="lic_toggle_manutencao")
-    # NOVO: Campo de quantidade para manutenção, aparece se o toggle estiver ativo
     if incluir_manutencao:
         qtd_manutencao = Decimal(st.number_input("Quantidade de Manutenções", min_value=1, value=1, step=1, key="lic_qtd_manutencao"))
     else:
-        qtd_manutencao = Decimal("0") # Zera se não for incluído
+        qtd_manutencao = Decimal("0")
 
     incluir_desinstalacao = st.toggle(f"Incluir Desinstalação", key="lic_toggle_desinstalacao")
-    # NOVO: Campo de quantidade para desinstalação, aparece se o toggle estiver ativo
     if incluir_desinstalacao:
         qtd_desinstalacao = Decimal(st.number_input("Quantidade de Desinstalações", min_value=1, value=1, step=1, key="lic_qtd_desinstalacao"))
     else:
-        qtd_desinstalacao = Decimal("0") # Zera se não for incluído
+        qtd_desinstalacao = Decimal("0")
 
 st.markdown("---")
 
@@ -177,22 +175,29 @@ if itens_selecionados or incluir_instalacao or incluir_manutencao or incluir_des
         st.markdown("### 📊 Detalhamento da Proposta")
         df = pd.DataFrame(detalhamento_proposta)
         
+        # Na linha de total, use None ou um valor não numérico para células que não devem ser formatadas como número
         total_row = pd.DataFrame([{
-            "SERVIÇO/PRODUTO": "VALOR TOTAL GERAL", "QUANTIDADE": "", "VALOR UNITÁRIO": "", "VALOR TOTAL": valor_total_contrato_global
+            "SERVIÇO/PRODUTO": "VALOR TOTAL GERAL", "QUANTIDADE": "", "VALOR UNITÁRIO": None, "VALOR TOTAL": valor_total_contrato_global
         }])
         df_final = pd.concat([df, total_row], ignore_index=True)
 
+        # **** CÓDIGO CORRIGIDO AQUI ****
+        # Removido o .style.format() e usando apenas o column_config que lida melhor com tipos mistos.
         st.dataframe(
-            df_final.style.format({
-                'VALOR UNITÁRIO': 'R$ {:,.2f}'.format,
-                'VALOR TOTAL': 'R$ {:,.2f}'.format,
-            }).hide(axis="index"),
+            df_final,
             use_container_width=True,
+            hide_index=True,
             column_config={
                 "SERVIÇO/PRODUTO": st.column_config.TextColumn("Serviço/Produto"),
                 "QUANTIDADE": st.column_config.TextColumn("Quantidade"),
-                "VALOR UNITÁRIO": st.column_config.NumberColumn("Valor Unitário (R$)", format="%.2f"),
-                "VALOR TOTAL": st.column_config.NumberColumn("Valor Total (R$)", format="%.2f"),
+                "VALOR UNITÁRIO": st.column_config.NumberColumn(
+                    "Valor Unitário (R$)",
+                    format="R$ %.2f"
+                ),
+                "VALOR TOTAL": st.column_config.NumberColumn(
+                    "Valor Total (R$)",
+                    format="R$ %.2f"
+                ),
             }
         )
 
