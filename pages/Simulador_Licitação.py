@@ -11,29 +11,27 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 2. BLOCO DE VERIFICAÇÃO DE AUTENTICAÇÃO
-# Este bloco está comentado para permitir testes sem login.
-# Descomente para usar o sistema de autenticação real.
-# auth_status = st.session_state.get("authentication_status", False)
-# if auth_status is not True:
-#     st.error("🔒 Acesso Negado! Por favor, faça login na página principal para continuar.")
-#     print(f"ACCESS_DENIED_LOG (Simulador_Licitação.py): User not authenticated. Status: {auth_status}")
-#     try:
-#         st.page_link("Simulador_Comercial.py", label="Ir para Login", icon="🏠")
-#     except AttributeError:
-#         st.info("Retorne à página principal para efetuar o login.")
-#     st.stop()
+# 2. BLOCO DE VERIFICAÇÃO DE AUTENTICAÇÃO (CORRIGIDO)
+# Este bloco agora busca o usuário real do st.session_state
+auth_status = st.session_state.get("authentication_status", False)
+if auth_status is not True:
+    st.error("🔒 Acesso Negado! Por favor, faça login na página principal para continuar.")
+    print(f"ACCESS_DENIED_LOG (Simulador_Licitação.py): User not authenticated. Status: {auth_status}")
+    try:
+        # Garante que o usuário seja redirecionado para a página de login correta
+        st.page_link("Simulador_Comercial.py", label="Ir para Login", icon="🏠")
+    except Exception:
+        st.info("Retorne à página principal para efetuar o login.")
+    st.stop()
 
-# # Se chegou aqui, o usuário está autenticado.
-# current_username = st.session_state.get('username', 'N/A')
-# current_role = st.session_state.get('role', 'Indefinido')
-# current_name = st.session_state.get('name', 'N/A')
+# Se chegou aqui, o usuário está autenticado.
+# Buscando os dados do usuário do session_state
+current_username = st.session_state.get('username', 'N/A')
+current_role = st.session_state.get('role', 'Indefinido')
+current_name = st.session_state.get('name', 'N/A')
 
-# --- Bloco de Autenticação Mock (para teste) ---
-current_name = "Usuário Teste"
-current_username = "teste"
-current_role = "Admin"
-# --- Fim do Bloco Mock ---
+# Log para verificar se os dados foram pegos corretamente
+print(f"INFO_LOG (Simulador_Licitação.py): User '{current_username}' authenticated. Name: '{current_name}', Role: '{current_role}'")
 
 
 # 3. Restante do código da sua página
@@ -46,6 +44,7 @@ except Exception as e:
 st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador para Licitações e Editais</h1>", unsafe_allow_html=True)
 st.markdown("---")
 
+# Exibe os dados do usuário que fez o login
 st.write(f"Usuário: {current_name} ({current_username})")
 st.write(f"Nível de Acesso: {current_role}")
 st.markdown("---")
@@ -175,14 +174,11 @@ if itens_selecionados or incluir_instalacao or incluir_manutencao or incluir_des
         st.markdown("### 📊 Detalhamento da Proposta")
         df = pd.DataFrame(detalhamento_proposta)
         
-        # Na linha de total, use None ou um valor não numérico para células que não devem ser formatadas como número
         total_row = pd.DataFrame([{
             "SERVIÇO/PRODUTO": "VALOR TOTAL GERAL", "QUANTIDADE": "", "VALOR UNITÁRIO": None, "VALOR TOTAL": valor_total_contrato_global
         }])
         df_final = pd.concat([df, total_row], ignore_index=True)
 
-        # **** CÓDIGO CORRIGIDO AQUI ****
-        # Removido o .style.format() e usando apenas o column_config que lida melhor com tipos mistos.
         st.dataframe(
             df_final,
             use_container_width=True,
@@ -207,4 +203,3 @@ else:
 st.markdown("---")
 if st.button("🔄 Limpar Campos e Recalcular", key="lic_btn_limpar_recalcular"):
     st.rerun()
-
