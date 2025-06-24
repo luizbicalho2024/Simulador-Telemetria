@@ -6,91 +6,120 @@ import io
 
 def processar_planilha(uploaded_file):
     """
-    Processa um arquivo de planilha (Excel ou CSV) para extrair e limpar os dados dos clientes.
-    A função detecta o tipo de arquivo e tenta encontrar o início da tabela de dados.
+    Processa um arquivo de planilha (Excel ou CSV) de forma mais robusta.
+    1. Encontra dinamicamente a linha do cabeçalho.
+    2. Limpa e padroniza os dados.
+    3. Retorna um DataFrame com as colunas de interesse.
     """
+    st.info(f"Iniciando processamento do arquivo: `{uploaded_file.name}`")
+    
+    # Tenta ler como Excel ou CSV
     try:
-        # Tenta ler o arquivo como Excel. Se falhar, tenta como CSV.
+        # Usamos uma cópia em memória para não consumir o arquivo original
+        file_buffer = io.BytesIO(uploaded_file.getvalue())
+        is_excel = True
         try:
-            # O parâmetro `header` começa a procurar o cabeçalho a partir da linha 9 (índice 8).
-            # Isso é útil para pular as linhas de cabeçalho iniciais que não são os nomes das colunas.
-            df = pd.read_excel(uploaded_file, header=9)
+            # Tenta carregar como Excel para ver se é válido
+            pd.ExcelFile(file_buffer)
         except Exception:
-            # Se não for um Excel válido ou der erro, volta ao início do arquivo para ler como CSV.
-            uploaded_file.seek(0)
-            df = pd.read_csv(uploaded_file, header=9)
+            is_excel = False
+        
+        file_buffer.seek(0) # Retorna ao início do buffer
 
-        # Remove colunas que são completamente vazias
+        # --- 1. Detecção automática da linha do cabeçalho ---
+        header_row = None
+        for i in range(15):  # Tenta encontrar o cabeçalho nas primeiras 15 linhas
+            try:
+                if is_excel:
+                    df_test = pd.read_excel(file_buffer, header=i, nrows=5)
+                else:
+                    df_test = pd.read_csv(file_buffer, header=i, nrows=5, sep=None, engine='python')
+                
+                file_buffer.seek(0) # Sempre retorna ao início após a leitura
+
+                # Converte os nomes das colunas para minúsculas para uma busca mais fácil
+                potential_cols = [str(c).lower().strip() for c in df_test.columns]
+                
+                # Critérios para identificar um cabeçalho válido (presença de colunas chave)
+                if any(key in ' '.join(potential_cols) for key in ['nome', 'razão', 'cpf', 'cnpj', 'mail', 'email']):
+                    header_row = i
+                    st.write(f"✔️ Cabeçalho encontrado na linha {i + 1} do arquivo.")
+                    break
+            except Exception:
+                file_buffer.seek(0)
+                continue
+        
+        if header_row is None:
+            st.warning(f"⚠️ Não foi possível encontrar um cabeçalho com colunas conhecidas (Nome, CPF, CNPJ, etc.) no arquivo `{uploaded_file.name}`. O arquivo será ignorado.")
+            return pd.DataFrame()
+
+        # --- 2. Leitura completa do arquivo com o cabeçalho correto ---
+        if is_excel:
+            df = pd.read_excel(file_buffer, header=header_row)
+        else:
+            df = pd.read_csv(file_buffer, header=header_row, sep=None, engine='python')
+
+        # --- 3. Limpeza do DataFrame ---
         df.dropna(axis='columns', how='all', inplace=True)
-        # Remove linhas que são completamente vazias
         df.dropna(axis='rows', how='all', inplace=True)
+        
+        # Armazena os nomes originais para diagnóstico
+        original_columns = df.columns.tolist()
+        
+        # Padroniza os nomes das colunas (minúsculas, sem espaços extras)
+        df.columns = df.columns.str.strip().str.lower()
 
-        # --- Padronização das Colunas ---
-        # Renomeia as colunas para um formato padrão e consistente.
-        # Adicione ou modifique este dicionário conforme a necessidade das suas planilhas.
+        # --- 4. Mapeamento e Renomeação das Colunas ---
         rename_map = {
-            'Nome': 'Nome / Razão Social',
-            'Razão Social': 'Nome / Razão Social',
-            'CPF': 'CPF / CNPJ',
-            'CNPJ': 'CPF / CNPJ',
-            'E-mail': 'Email',
-            'Telefone': 'Telefone',
-            'Endereço': 'Endereço',
-            'Cidade': 'Cidade',
-            'UF': 'Estado'
+            'nome': 'Nome / Razão Social', 'razão social': 'Nome / Razão Social',
+            'nome fantasia': 'Nome Fantasia',
+            'cpf': 'CPF / CNPJ', 'cnpj': 'CPF / CNPJ',
+            'e-mail': 'Email', 'email': 'Email', 'mail': 'Email',
+            'fone': 'Telefone', 'telefone': 'Telefone', 'celular': 'Telefone',
+            'endereço': 'Endereço', 'logradouro': 'Endereço',
+            'cidade': 'Cidade',
+            'uf': 'Estado', 'estado': 'Estado'
         }
+        
+        df.rename(columns=rename_map, inplace=True)
 
-        # Filtra o rename_map para conter apenas as colunas que existem no DataFrame
-        existing_rename_map = {k: v for k, v in rename_map.items() if k in df.columns}
-        df.rename(columns=existing_rename_map, inplace=True)
+        st.write(f"Colunas Originais Encontradas: `{original_columns}`")
 
-        # --- Seleção e Ordem das Colunas ---
-        # Define a lista de colunas que queremos no resultado final e a ordem delas.
+        # --- 5. Seleção e Ordem das Colunas Finais ---
         colunas_finais = [
-            'Nome / Razão Social',
-            'CPF / CNPJ',
-            'Email',
-            'Telefone',
-            'Endereço',
-            'Cidade',
-            'Estado'
+            'Nome / Razão Social', 'Nome Fantasia', 'CPF / CNPJ',
+            'Email', 'Telefone', 'Endereço', 'Cidade', 'Estado'
         ]
-
-        # Retorna um DataFrame apenas com as colunas desejadas que existem na planilha processada.
-        return df[[col for col in colunas_finais if col in df.columns]]
+        
+        colunas_existentes = [col for col in colunas_finais if col in df.columns]
+        
+        if not colunas_existentes:
+            st.warning(f"Nenhuma das colunas esperadas foi encontrada em `{uploaded_file.name}` após a padronização.")
+            return pd.DataFrame()
+            
+        return df[colunas_existentes]
 
     except Exception as e:
-        st.error(f"Erro ao processar o arquivo {uploaded_file.name}: {e}")
+        st.error(f"Ocorreu um erro inesperado ao processar o arquivo {uploaded_file.name}: {e}")
         return pd.DataFrame()
 
 
 def to_excel(df: pd.DataFrame):
-    """
-    Converte um DataFrame do Pandas para um arquivo Excel em memória, pronto para download.
-    """
+    """Converte um DataFrame para um arquivo Excel em memória."""
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df.to_excel(writer, index=False, sheet_name='Clientes_Organizados')
-    processed_data = output.getvalue()
-    return processed_data
+    return output.getvalue()
 
 # --- Configuração da Página do Streamlit ---
-
-st.set_page_config(
-    page_title="Organizador de Planilhas de Clientes",
-    page_icon="📊",
-    layout="wide"
-)
-
-st.title("📊 Organizador de Planilhas de Clientes")
-
+st.set_page_config(page_title="Organizador de Planilhas", page_icon="📊", layout="wide")
+st.title("📊 Organizador e Consolidador de Planilhas")
 st.write(
-    "Faça o upload das suas planilhas de clientes (PF e/ou PJ) nos formatos XLSX ou CSV. "
-    "A aplicação irá organizar os dados, padronizar as colunas e apresentar uma tabela consolidada."
+    "Faça o upload de suas planilhas de clientes (XLSX ou CSV). "
+    "A aplicação irá encontrar os dados, padronizar as colunas e consolidar tudo em um único arquivo."
 )
 
 # --- Upload dos Arquivos ---
-
 uploaded_files = st.file_uploader(
     "Selecione os arquivos",
     type=['xlsx', 'csv'],
@@ -98,34 +127,24 @@ uploaded_files = st.file_uploader(
 )
 
 if uploaded_files:
-    # Lista para armazenar os DataFrames processados de cada arquivo
-    lista_dfs = []
-
-    # Processa cada arquivo que o usuário subiu
-    for file in uploaded_files:
-        st.info(f"Processando o arquivo: `{file.name}`...")
-        df_processado = processar_planilha(file)
-        if not df_processado.empty:
-            lista_dfs.append(df_processado)
-
-    # Se a lista de DataFrames não estiver vazia, consolida tudo em um único DataFrame
-    if lista_dfs:
-        df_final = pd.concat(lista_dfs, ignore_index=True)
-
-        st.success("✅ Processamento concluído! Veja os dados organizados abaixo.")
-
-        # --- Visualização dos Dados ---
+    lista_dfs = [processar_planilha(file) for file in uploaded_files]
+    
+    # Filtra DataFrames que possam estar vazios após o processamento
+    lista_dfs_validos = [df for df in lista_dfs if not df.empty]
+    
+    if lista_dfs_validos:
+        df_final = pd.concat(lista_dfs_validos, ignore_index=True)
+        st.success("✅ Processamento concluído! Veja os dados consolidados abaixo.")
         st.dataframe(df_final)
-
-        # --- Botão de Download ---
+        
         st.download_button(
-            label="📥 Baixar Planilha Organizada (.xlsx)",
+            label="📥 Baixar Planilha Consolidada (.xlsx)",
             data=to_excel(df_final),
-            file_name='relatorio_clientes_organizado.xlsx',
+            file_name='relatorio_clientes_consolidado.xlsx',
             mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
     else:
-        st.warning("Nenhum dado válido foi encontrado nos arquivos. Verifique o formato das planilhas.")
+        st.error("Nenhum dado válido foi extraído dos arquivos. Por favor, verifique se as planilhas contêm colunas como 'Nome', 'CPF', 'CNPJ', etc.")
 
 else:
     st.info("Aguardando o upload de planilhas...")
