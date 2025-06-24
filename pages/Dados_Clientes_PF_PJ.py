@@ -1,7 +1,11 @@
+# --- Importações das Bibliotecas ---
 import streamlit as st
 import pandas as pd
 import io
 import re  # Módulo para validação com Expressões Regulares (Regex)
+
+
+# --- Funções de Apoio (Lógica de Processamento da Planilha) ---
 
 def is_valid_email(email_text):
     """
@@ -51,7 +55,6 @@ def processar_planilha_final(uploaded_file):
             
         # ETAPA 3: Agrupamento por Marcador 'JURÍDICA' OU 'FÍSICA'
         df['tipo_cliente'] = df['tipo_cliente'].astype(str).str.strip()
-        # A regra agora inclui 'Física' como um iniciador de novo cliente
         is_new_client = df['tipo_cliente'].str.contains('Jurídica|Jurídico|Física', case=False)
         
         if not is_new_client.any():
@@ -61,7 +64,7 @@ def processar_planilha_final(uploaded_file):
         df['client_group_id'] = is_new_client.cumsum()
         
         client_groups = df[df['client_group_id'] > 0].groupby('client_group_id')
-        st.success(f"Análise completa. Encontrados {len(client_groups)} blocos de clientes para processar.")
+        st.success(f"Análise inicial completa. Encontrados {len(client_groups)} blocos de clientes para processar.")
         
         all_clients_data = []
 
@@ -72,7 +75,6 @@ def processar_planilha_final(uploaded_file):
 
             main_row = group_df.iloc[0]
             
-            # Determina o tipo de cliente (Física ou Jurídica) com base no marcador da linha
             client_type_from_row = str(main_row.get('tipo_cliente')).lower()
             if 'física' in client_type_from_row:
                 final_type = 'Pessoa Física'
@@ -82,7 +84,7 @@ def processar_planilha_final(uploaded_file):
             client_data = {
                 'nome_cliente': main_row.get('nome_cliente'),
                 'cpf_cnpj': main_row.get('cpf_cnpj'),
-                'tipo_cliente': final_type, # Usa o tipo determinado
+                'tipo_cliente': final_type,
                 'telefone': main_row.get('telefone')
             }
             
@@ -92,9 +94,7 @@ def processar_planilha_final(uploaded_file):
             for _, user_row in user_rows.iterrows():
                 user_name_check = user_row.get('nome_cliente')
                 if pd.notna(user_name_check) and str(user_name_check).strip() != '':
-                    
                     potential_email = user_row.get('cpf_cnpj')
-                    
                     if is_valid_email(potential_email):
                         valid_emails.append(potential_email.strip())
             
@@ -104,7 +104,6 @@ def processar_planilha_final(uploaded_file):
             all_clients_data.append(client_data)
 
         if not all_clients_data:
-            st.warning("O processamento terminou, mas nenhum dado de cliente foi extraído.")
             return None
 
         final_df = pd.DataFrame(all_clients_data)
@@ -119,7 +118,6 @@ def processar_planilha_final(uploaded_file):
         final_df.rename(columns=final_rename_map, inplace=True)
         
         cols_principais = ['Nome do Cliente', 'CPF/CNPJ', 'Tipo Cliente', 'Telefone']
-        
         email_cols = [col for col in final_df.columns if col.startswith('Email Usuário')]
         cols_usuarios_ordenados = sorted(email_cols, key=lambda col: int(col.split(' ')[-1]))
         
@@ -135,11 +133,60 @@ def to_excel(df: pd.DataFrame):
         df.to_excel(writer, index=False, sheet_name='Clientes_Organizados')
     return output.getvalue()
 
-# --- Interface do Streamlit ---
-st.set_page_config(page_title="Organizador de Planilhas", page_icon="🏆", layout="wide")
-st.title("🏆 Organizador de Planilhas de Clientes (PF e PJ)")
+
+# --------------------------------------------------------------------------
+# --- INÍCIO DA ESTRUTURA DA PÁGINA (BASEADO NO SEU EXEMPLO) ---
+# --------------------------------------------------------------------------
+
+# 1. st.set_page_config() - Deve ser o primeiro comando Streamlit
+st.set_page_config(
+    layout="wide",
+    page_title="Organizador de Planilhas",  # Título específico para esta página
+    page_icon="imgs/v-c.png", # ATENÇÃO: Verifique se o caminho para a imagem está correto
+    initial_sidebar_state="expanded"
+)
+
+# 2. Bloco de Verificação de Autenticação
+auth_status = st.session_state.get("authentication_status", False)
+if auth_status is not True:
+    st.error("🔒 Acesso Negado! Por favor, faça login na página principal para continuar.")
+    print(f"ACCESS_DENIED_LOG (Organizador_de_Planilhas.py): User not authenticated. Status: {auth_status}")
+    try:
+        # IMPORTANTE: Mantenha o nome do seu arquivo de login principal aqui
+        st.page_link("Simulador_Comercial.py", label="Ir para Login", icon="🏠")
+    except Exception:
+        st.info("Retorne à página principal para efetuar o login.")
+    st.stop()
+
+# Se chegou aqui, o usuário está autenticado.
+current_username = st.session_state.get('username', 'N/A')
+current_role = st.session_state.get('role', 'Indefinido')
+current_name = st.session_state.get('name', 'N/A')
+
+print(f"INFO_LOG (Organizador_de_Planilhas.py): User '{current_username}' authenticated. Role: '{current_role}'")
+
+
+# 3. Restante do Código - Identidade Visual e Conteúdo da Página
+# Logotipo e cabeçalho estilizado
+try:
+    # ATENÇÃO: Verifique se a pasta 'imgs' e o arquivo 'logo.png' existem no seu projeto
+    st.image("imgs/logo.png", width=250) 
+except Exception as e:
+    print(f"WARN_LOG (Organizador_de_Planilhas.py): Não foi possível carregar a imagem do logo: {e}")
+    # st.warning("Arquivo de logo não encontrado.") # Opcional
+
+st.markdown("<h1 style='text-align: center; color: #54A033;'>Organizador de Planilhas de Clientes</h1>", unsafe_allow_html=True)
+st.markdown("---")
+
+# Informações do usuário logado
+st.write(f"Usuário: {current_name} ({current_username})")
+st.write(f"Nível de Acesso: {current_role}")
+st.markdown("---")
+
+
+# 4. Conteúdo Principal do Organizador de Planilhas
 st.write(
-    "Versão Final: Lê os dados **a partir da linha 11**, agrupa por 'Jurídica' ou 'Física', valida cada e-mail e ordena as colunas de usuário."
+    "Faça o upload da sua planilha. A aplicação irá ler os dados a partir da linha 11, agrupar por 'Jurídica' ou 'Física', validar cada e-mail e ordenar as colunas de usuário."
 )
 
 uploaded_file = st.file_uploader(
@@ -160,6 +207,6 @@ if uploaded_file:
             mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
     else:
-        st.error("O processamento falhou ou não encontrou dados válidos. Verifique o arquivo de origem.")
+        st.error("O processamento falhou ou não encontrou dados válidos. Verifique as mensagens de erro e o arquivo de origem.")
 else:
     st.info("Aguardando o upload de um arquivo...")
