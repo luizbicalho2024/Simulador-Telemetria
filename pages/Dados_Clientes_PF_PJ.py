@@ -2,44 +2,27 @@ import streamlit as st
 import pandas as pd
 import io
 
-def processar_planilha_final(uploaded_file):
+def processar_planilha_com_cabecalho_fixo(uploaded_file):
     """
-    Script definitivo para processar a planilha. Inclui detecção automática de cabeçalho
-    e uma lógica de agrupamento robusta baseada em marcadores.
+    Script definitivo que lê o cabeçalho da linha 11, conforme solicitado,
+    e processa os dados usando o marcador 'Jurídica'.
     """
     try:
-        # --- ETAPA 1: DETECÇÃO AUTOMÁTICA DE CABEÇALHO ---
-        st.info("Iniciando... Tentando encontrar o cabeçalho da planilha.")
-        file_buffer = io.BytesIO(uploaded_file.getvalue())
-        header_row = None
-        
-        for i in range(15):  # Tenta encontrar o cabeçalho nas primeiras 15 linhas
-            try:
-                df_test = pd.read_excel(file_buffer, header=i, nrows=1)
-                file_buffer.seek(0)
-                # Um cabeçalho válido deve ter várias colunas com nomes em formato de texto
-                if len([col for col in df_test.columns if isinstance(col, str)]) > 3:
-                    header_row = i
-                    st.success(f"Cabeçalho encontrado na linha {i + 1}.")
-                    break
-            except Exception:
-                file_buffer.seek(0)
-                continue
-        
-        if header_row is None:
-            st.error("ERRO CRÍTICO: Não foi possível encontrar um cabeçalho válido nas primeiras 15 linhas do arquivo.")
-            return None
-
-        df = pd.read_excel(file_buffer, header=header_row)
+        # --- ETAPA 1: LEITURA COM CABEÇALHO FIXO ---
+        st.info("Iniciando... Lendo o arquivo com o cabeçalho fixo na linha 11.")
+        # O parâmetro header=10 significa que a linha 11 da planilha será usada como cabeçalho (a contagem começa em 0)
+        df = pd.read_excel(uploaded_file, header=10)
         
         # --- ETAPA 2: LIMPEZA E PADRONIZAÇÃO INTERNA ---
+        # Remove colunas vazias "Unnamed" que o Excel às vezes cria
         df = df.loc[:, ~df.columns.str.contains('^Unnamed', na=False)]
         df.dropna(axis='rows', how='all', inplace=True)
         
-        st.markdown("#### Diagnóstico 1: Dados Brutos Lidos (10 Primeiras Linhas)")
+        st.markdown("#### Diagnóstico 1: Dados Brutos Lidos a Partir da Linha 11")
         st.dataframe(df.head(10).fillna(''))
 
         original_columns = df.columns.tolist()
+        # Padroniza nomes de colunas para um formato interno estável (minúsculas)
         df.columns = df.columns.str.strip().str.lower()
         
         rename_map = {
@@ -52,28 +35,24 @@ def processar_planilha_final(uploaded_file):
         }
         df.rename(columns=rename_map, inplace=True)
 
-        st.markdown("#### Diagnóstico 2: Nomes das Colunas")
-        st.write("**Colunas Originais Lidas:**", original_columns)
-        st.write("**Colunas Padronizadas para Processamento:**", df.columns.tolist())
+        st.markdown("#### Diagnóstico 2: Nomes das Colunas Após Padronização")
+        st.write(df.columns.tolist())
 
+        # Verificação crítica da coluna que serve como marcador
         if 'tipo_cliente' not in df.columns:
-            st.error("ERRO CRÍTICO: A coluna 'Tipo Cliente' é essencial e não foi encontrada após a padronização.")
+            st.error("ERRO CRÍTICO: A coluna 'Tipo Cliente' não foi encontrada na linha 11. Verifique o arquivo Excel.")
             return None
             
         # --- ETAPA 3: AGRUPAMENTO POR MARCADOR 'JURÍDICA' ---
         df['tipo_cliente'] = df['tipo_cliente'].astype(str).str.strip()
-        is_new_client = df['tipo_cliente'].str.contains('Jurídica|Jurídico', case=False, na=False)
+        is_new_client = df['tipo_cliente'].str.contains('Jurídica|Jurídico', case=False)
         
         if not is_new_client.any():
-            st.error("ERRO CRÍTICO: Nenhum marcador 'Jurídica' ou 'Jurídico' foi encontrado na coluna 'Tipo Cliente'. Não é possível agrupar os dados.")
+            st.error("ERRO CRÍTICO: Nenhum marcador 'Jurídica' foi encontrado na coluna 'Tipo Cliente'. Não é possível agrupar os dados.")
             return None
 
         df['client_group_id'] = is_new_client.cumsum()
         
-        st.markdown("#### Diagnóstico 3: Agrupamento de Clientes")
-        st.write("A coluna 'client_group_id' mostra como as linhas foram agrupadas. Cada número representa um cliente.")
-        st.dataframe(df[df['client_group_id'] > 0][['nome_cliente', 'tipo_cliente', 'client_group_id']].head(20).fillna(''))
-
         client_groups = df[df['client_group_id'] > 0].groupby('client_group_id')
         st.success(f"Análise inicial completa. Encontrados {len(client_groups)} blocos de clientes para processar.")
         
@@ -106,7 +85,7 @@ def processar_planilha_final(uploaded_file):
 
         final_df = pd.DataFrame(all_clients_data)
 
-        # --- ETAPA 5: FORMATAÇÃO FINAL ---
+        # --- ETAPA 5: FORMATAÇÃO FINAL PARA EXIBIÇÃO ---
         final_rename_map = {
             'nome_cliente': 'Nome do Cliente',
             'cpf_cnpj': 'CPF/CNPJ',
@@ -122,7 +101,7 @@ def processar_planilha_final(uploaded_file):
 
     except Exception as e:
         st.error(f"UM ERRO INESPERADO OCORREU: {e}")
-        st.error("Verifique se o arquivo enviado é um Excel (.xlsx) válido e não está protegido por senha.")
+        st.error("Verifique se o arquivo é um Excel (.xlsx) válido e se a linha 11 realmente contém os cabeçalhos corretos.")
         return None
 
 def to_excel(df: pd.DataFrame):
@@ -132,10 +111,10 @@ def to_excel(df: pd.DataFrame):
     return output.getvalue()
 
 # --- Interface do Streamlit ---
-st.set_page_config(page_title="Organizador de Planilhas", page_icon="🚀", layout="wide")
-st.title("🚀 Organizador de Planilhas de Clientes (Versão de Alta Robustez)")
+st.set_page_config(page_title="Organizador de Planilhas", page_icon="✅", layout="wide")
+st.title("✅ Organizador de Planilhas de Clientes")
 st.write(
-    "Faça o upload da sua planilha. Esta versão avançada detecta o cabeçalho automaticamente e usa o marcador 'Jurídica' na coluna 'Tipo Cliente' para estruturar os dados."
+    "Este script está configurado para ler os dados **a partir da linha 11** da sua planilha e usar o marcador 'Jurídica' na coluna 'Tipo Cliente' para estruturar os dados."
 )
 
 uploaded_file = st.file_uploader(
@@ -143,7 +122,7 @@ uploaded_file = st.file_uploader(
 )
 
 if uploaded_file:
-    final_df = processar_planilha_final(uploaded_file)
+    final_df = processar_planilha_com_cabecalho_fixo(uploaded_file)
     
     if final_df is not None and not final_df.empty:
         st.success("✅ Processamento concluído com sucesso!")
@@ -156,6 +135,6 @@ if uploaded_file:
             mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
     else:
-        st.error("O processamento falhou. Verifique as mensagens de erro e os diagnósticos acima para identificar a causa.")
+        st.error("O processamento falhou. Verifique as mensagens de erro e os diagnósticos acima.")
 else:
     st.info("Aguardando o upload de um arquivo...")
