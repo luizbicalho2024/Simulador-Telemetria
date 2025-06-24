@@ -15,3 +15,5 @@ streamlit_folium==0.16.0
 # Adicione explicitamente as dependências do Hasher:
 passlib>=1.7.4
 bcrypt>=3.2.0
+
+openpyxl
