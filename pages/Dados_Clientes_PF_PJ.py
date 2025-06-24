@@ -2,26 +2,20 @@ import streamlit as st
 import pandas as pd
 import io
 
-def processar_planilha_final(uploaded_file):
+def processar_planilha_ajustada(uploaded_file):
     """
-    Script definitivo que lê o cabeçalho da linha 11 e entende que os dados de usuário
-    estão nas mesmas colunas que os dados do cliente, mas em linhas subsequentes.
+    Versão final ajustada: lê da linha 11, remove nomes de usuário, ignora '0'
+    e compacta os e-mails para a esquerda.
     """
     try:
         # --- ETAPA 1: LEITURA COM CABEÇALHO FIXO NA LINHA 11 ---
         st.info("Iniciando... Lendo o arquivo com o cabeçalho fixo na linha 11.")
-        # header=10 significa que a linha 11 da planilha será usada como cabeçalho
         df = pd.read_excel(uploaded_file, header=10)
         
         # --- ETAPA 2: LIMPEZA E PADRONIZAÇÃO INTERNA ---
         df = df.loc[:, ~df.columns.str.contains('^Unnamed', na=False)]
         df.dropna(axis='rows', how='all', inplace=True)
         
-        st.markdown("#### Diagnóstico 1: Dados Brutos Lidos a Partir da Linha 11")
-        st.dataframe(df.head(10).fillna(''))
-
-        # Padroniza nomes de colunas para um formato interno estável (minúsculas)
-        # Importante: Mantemos apenas os nomes que sabemos que existem.
         df.columns = df.columns.str.strip().str.lower()
         rename_map = {
             'razão social': 'nome_cliente', 'nome do cliente': 'nome_cliente',
@@ -31,10 +25,6 @@ def processar_planilha_final(uploaded_file):
         }
         df.rename(columns=rename_map, inplace=True)
 
-        st.markdown("#### Diagnóstico 2: Colunas Após Padronização")
-        st.write(df.columns.tolist())
-
-        # Verificação crítica da coluna que serve como marcador
         if 'tipo_cliente' not in df.columns:
             st.error("ERRO CRÍTICO: A coluna 'Tipo Cliente' não foi encontrada na linha 11. Verifique o arquivo Excel.")
             return None
@@ -50,16 +40,15 @@ def processar_planilha_final(uploaded_file):
         df['client_group_id'] = is_new_client.cumsum()
         
         client_groups = df[df['client_group_id'] > 0].groupby('client_group_id')
-        st.success(f"Análise inicial completa. Encontrados {len(client_groups)} blocos de clientes para processar.")
+        st.success(f"Análise completa. Encontrados {len(client_groups)} blocos de clientes para processar.")
         
         all_clients_data = []
 
-        # --- ETAPA 4: PROCESSAMENTO DE CADA GRUPO COM A LÓGICA CORRETA ---
+        # --- ETAPA 4: PROCESSAMENTO AJUSTADO DE CADA GRUPO ---
         for group_id, group_df in client_groups:
             if group_df.empty:
                 continue
 
-            # A primeira linha do grupo contém os dados do cliente
             main_row = group_df.iloc[0]
             
             client_data = {
@@ -69,22 +58,24 @@ def processar_planilha_final(uploaded_file):
                 'telefone': main_row.get('telefone')
             }
             
-            # As linhas SEGUINTES (a partir da segunda) contêm os dados dos usuários
+            # Coleta todos os emails válidos do grupo
+            valid_emails = []
             user_rows = group_df.iloc[1:]
             
-            user_num = 1
             for _, user_row in user_rows.iterrows():
-                # A MÁGICA ACONTECE AQUI:
-                # O nome do usuário está na coluna 'nome_cliente' desta linha
-                # O email do usuário está na coluna 'cpf_cnpj' desta linha
-                user_name = user_row.get('nome_cliente')
-                user_email = user_row.get('cpf_cnpj')
-                
-                # Adiciona o usuário apenas se um nome de usuário for encontrado
-                if pd.notna(user_name) and user_name.strip() != '':
-                    client_data[f'Nome Usuário {user_num}'] = user_name
-                    client_data[f'Email Usuário {user_num}'] = user_email
-                    user_num += 1
+                # A linha é de um usuário se tiver algo na coluna 'nome_cliente'
+                user_name_check = user_row.get('nome_cliente')
+                if pd.notna(user_name_check) and str(user_name_check).strip() != '':
+                    
+                    email = user_row.get('cpf_cnpj')
+                    
+                    # Verifica se o email é válido (não é nulo, vazio ou '0')
+                    if pd.notna(email) and str(email).strip() not in ['', '0']:
+                        valid_emails.append(email)
+            
+            # Adiciona os emails coletados em colunas sequenciais
+            for i, email in enumerate(valid_emails):
+                client_data[f'Email Usuário {i + 1}'] = email
                 
             all_clients_data.append(client_data)
 
@@ -94,7 +85,7 @@ def processar_planilha_final(uploaded_file):
 
         final_df = pd.DataFrame(all_clients_data)
 
-        # --- ETAPA 5: FORMATAÇÃO FINAL PARA EXIBIÇÃO ---
+        # --- ETAPA 5: FORMATAÇÃO FINAL ---
         final_rename_map = {
             'nome_cliente': 'Nome do Cliente',
             'cpf_cnpj': 'CPF/CNPJ',
@@ -104,7 +95,8 @@ def processar_planilha_final(uploaded_file):
         final_df.rename(columns=final_rename_map, inplace=True)
         
         cols_principais = ['Nome do Cliente', 'CPF/CNPJ', 'Tipo Cliente', 'Telefone']
-        cols_usuarios = sorted([col for col in final_df.columns if col.startswith('Nome Usuário') or col.startswith('Email Usuário')])
+        # A ordenação agora pega apenas as colunas de Email
+        cols_usuarios = sorted([col for col in final_df.columns if col.startswith('Email Usuário')])
         
         return final_df[cols_principais + cols_usuarios]
 
@@ -123,7 +115,7 @@ def to_excel(df: pd.DataFrame):
 st.set_page_config(page_title="Organizador de Planilhas", page_icon="✅", layout="wide")
 st.title("✅ Organizador de Planilhas de Clientes")
 st.write(
-    "Este script está configurado para ler os dados **a partir da linha 11** da sua planilha e usar o marcador 'Jurídica' na coluna 'Tipo Cliente' para estruturar os dados."
+    "Versão final: Lê os dados **a partir da linha 11**, usa o marcador 'Jurídica' para agrupar, e exibe apenas os e-mails dos usuários, ignorando valores '0'."
 )
 
 uploaded_file = st.file_uploader(
@@ -131,7 +123,7 @@ uploaded_file = st.file_uploader(
 )
 
 if uploaded_file:
-    final_df = processar_planilha_final(uploaded_file)
+    final_df = processar_planilha_ajustada(uploaded_file)
     
     if final_df is not None and not final_df.empty:
         st.success("✅ Processamento concluído com sucesso!")
@@ -144,6 +136,6 @@ if uploaded_file:
             mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
     else:
-        st.error("O processamento falhou. Verifique as mensagens de erro e os diagnósticos acima.")
+        st.error("O processamento falhou. Verifique as mensagens de erro e o arquivo de origem.")
 else:
     st.info("Aguardando o upload de um arquivo...")
