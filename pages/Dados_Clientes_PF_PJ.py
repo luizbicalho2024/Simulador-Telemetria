@@ -7,31 +7,25 @@ def is_valid_email(email_text):
     """
     Função robusta para validar se uma string tem o formato de um e-mail.
     """
-    # Se a entrada não for um texto (ex: número, data, nulo), não é um e-mail.
     if not isinstance(email_text, str):
         return False
     
-    # Remove espaços em branco no início e no fim. Se sobrar nada, não é um e-mail.
     email_text = email_text.strip()
     if not email_text:
         return False
         
-    # Rejeita textos que são claramente cabeçalhos de colunas.
     if email_text.lower() in ['e-mail', 'email', 'cpf/cnpj']:
         return False
 
-    # Usa Regex para verificar o padrão "algo@algo.algo".
-    # Esta é uma forma eficiente e segura de validar o formato.
     email_regex = re.compile(r'[^@\s]+@[^@\s]+\.[^@\s]+')
     
-    # Retorna True se o texto corresponde ao padrão de e-mail, False caso contrário.
     return re.fullmatch(email_regex, email_text) is not None
 
 
-def processar_planilha_com_validacao(uploaded_file):
+def processar_planilha_final(uploaded_file):
     """
-    Versão final com validação de e-mail. Lê da linha 11, usa o marcador 'Jurídica',
-    valida cada e-mail e os compacta à esquerda.
+    Versão final: lê da linha 11, agrupa por 'Jurídica', valida e-mails,
+    e ordena as colunas de usuário numericamente.
     """
     try:
         # ETAPA 1: Leitura com cabeçalho fixo na linha 11
@@ -70,7 +64,7 @@ def processar_planilha_com_validacao(uploaded_file):
         
         all_clients_data = []
 
-        # ETAPA 4: Processamento de cada grupo com a nova validação
+        # ETAPA 4: Processamento de cada grupo com a validação
         for group_id, group_df in client_groups:
             if group_df.empty:
                 continue
@@ -93,11 +87,9 @@ def processar_planilha_com_validacao(uploaded_file):
                     
                     potential_email = user_row.get('cpf_cnpj')
                     
-                    # Usa a nova função de validação
                     if is_valid_email(potential_email):
                         valid_emails.append(potential_email.strip())
             
-            # Adiciona os emails validados em colunas sequenciais
             for i, email in enumerate(valid_emails):
                 client_data[f'Email Usuário {i + 1}'] = email
                 
@@ -109,7 +101,7 @@ def processar_planilha_com_validacao(uploaded_file):
 
         final_df = pd.DataFrame(all_clients_data)
 
-        # ETAPA 5: Formatação final
+        # ETAPA 5: Formatação final e ordenação numérica correta
         final_rename_map = {
             'nome_cliente': 'Nome do Cliente',
             'cpf_cnpj': 'CPF/CNPJ',
@@ -119,9 +111,13 @@ def processar_planilha_com_validacao(uploaded_file):
         final_df.rename(columns=final_rename_map, inplace=True)
         
         cols_principais = ['Nome do Cliente', 'CPF/CNPJ', 'Tipo Cliente', 'Telefone']
-        cols_usuarios = sorted([col for col in final_df.columns if col.startswith('Email Usuário')])
         
-        return final_df[cols_principais + cols_usuarios]
+        # Lógica de ordenação numérica para as colunas de Email
+        email_cols = [col for col in final_df.columns if col.startswith('Email Usuário')]
+        # A chave de ordenação 'key' extrai o número do final do nome da coluna e o converte para inteiro
+        cols_usuarios_ordenados = sorted(email_cols, key=lambda col: int(col.split(' ')[-1]))
+        
+        return final_df[cols_principais + cols_usuarios_ordenados]
 
     except Exception as e:
         st.error(f"UM ERRO INESPERADO OCORREU: {e}")
@@ -134,10 +130,10 @@ def to_excel(df: pd.DataFrame):
     return output.getvalue()
 
 # --- Interface do Streamlit ---
-st.set_page_config(page_title="Organizador de Planilhas", page_icon="✉️", layout="wide")
-st.title("✉️ Organizador de Planilhas com Validação de E-mail")
+st.set_page_config(page_title="Organizador de Planilhas", page_icon="🏆", layout="wide")
+st.title("🏆 Organizador de Planilhas de Clientes (Versão Final)")
 st.write(
-    "Versão Final: Lê os dados **a partir da linha 11**, agrupa por 'Jurídica', e valida rigorosamente cada e-mail antes de exibi-lo."
+    "Este script lê os dados **a partir da linha 11**, agrupa por 'Jurídica', valida cada e-mail e ordena as colunas de usuário numericamente."
 )
 
 uploaded_file = st.file_uploader(
@@ -145,7 +141,7 @@ uploaded_file = st.file_uploader(
 )
 
 if uploaded_file:
-    final_df = processar_planilha_com_validacao(uploaded_file)
+    final_df = processar_planilha_final(uploaded_file)
     
     if final_df is not None and not final_df.empty:
         st.success("✅ Processamento concluído com sucesso!")
