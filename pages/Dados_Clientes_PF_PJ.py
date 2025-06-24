@@ -24,8 +24,8 @@ def is_valid_email(email_text):
 
 def processar_planilha_final(uploaded_file):
     """
-    Versão final: lê da linha 11, agrupa por 'Jurídica', valida e-mails,
-    e ordena as colunas de usuário numericamente.
+    Versão final que processa tanto clientes Pessoa Jurídica quanto Física,
+    usando seus respectivos marcadores para agrupamento.
     """
     try:
         # ETAPA 1: Leitura com cabeçalho fixo na linha 11
@@ -49,12 +49,13 @@ def processar_planilha_final(uploaded_file):
             st.error("ERRO CRÍTICO: A coluna 'Tipo Cliente' não foi encontrada na linha 11.")
             return None
             
-        # ETAPA 3: Agrupamento por marcador 'Jurídica'
+        # ETAPA 3: Agrupamento por Marcador 'JURÍDICA' OU 'FÍSICA'
         df['tipo_cliente'] = df['tipo_cliente'].astype(str).str.strip()
-        is_new_client = df['tipo_cliente'].str.contains('Jurídica|Jurídico', case=False)
+        # A regra agora inclui 'Física' como um iniciador de novo cliente
+        is_new_client = df['tipo_cliente'].str.contains('Jurídica|Jurídico|Física', case=False)
         
         if not is_new_client.any():
-            st.error("ERRO CRÍTICO: Nenhum marcador 'Jurídica' foi encontrado na coluna 'Tipo Cliente'.")
+            st.error("ERRO CRÍTICO: Nenhum marcador ('Jurídica' ou 'Física') foi encontrado na coluna 'Tipo Cliente'.")
             return None
 
         df['client_group_id'] = is_new_client.cumsum()
@@ -64,17 +65,24 @@ def processar_planilha_final(uploaded_file):
         
         all_clients_data = []
 
-        # ETAPA 4: Processamento de cada grupo com a validação
+        # ETAPA 4: Processamento de cada grupo
         for group_id, group_df in client_groups:
             if group_df.empty:
                 continue
 
             main_row = group_df.iloc[0]
             
+            # Determina o tipo de cliente (Física ou Jurídica) com base no marcador da linha
+            client_type_from_row = str(main_row.get('tipo_cliente')).lower()
+            if 'física' in client_type_from_row:
+                final_type = 'Pessoa Física'
+            else:
+                final_type = 'Pessoa Jurídica'
+            
             client_data = {
                 'nome_cliente': main_row.get('nome_cliente'),
                 'cpf_cnpj': main_row.get('cpf_cnpj'),
-                'tipo_cliente': 'Pessoa Jurídica',
+                'tipo_cliente': final_type, # Usa o tipo determinado
                 'telefone': main_row.get('telefone')
             }
             
@@ -101,7 +109,7 @@ def processar_planilha_final(uploaded_file):
 
         final_df = pd.DataFrame(all_clients_data)
 
-        # ETAPA 5: Formatação final e ordenação numérica correta
+        # ETAPA 5: Formatação final e ordenação
         final_rename_map = {
             'nome_cliente': 'Nome do Cliente',
             'cpf_cnpj': 'CPF/CNPJ',
@@ -112,9 +120,7 @@ def processar_planilha_final(uploaded_file):
         
         cols_principais = ['Nome do Cliente', 'CPF/CNPJ', 'Tipo Cliente', 'Telefone']
         
-        # Lógica de ordenação numérica para as colunas de Email
         email_cols = [col for col in final_df.columns if col.startswith('Email Usuário')]
-        # A chave de ordenação 'key' extrai o número do final do nome da coluna e o converte para inteiro
         cols_usuarios_ordenados = sorted(email_cols, key=lambda col: int(col.split(' ')[-1]))
         
         return final_df[cols_principais + cols_usuarios_ordenados]
@@ -131,9 +137,9 @@ def to_excel(df: pd.DataFrame):
 
 # --- Interface do Streamlit ---
 st.set_page_config(page_title="Organizador de Planilhas", page_icon="🏆", layout="wide")
-st.title("🏆 Organizador de Planilhas de Clientes (Versão Final)")
+st.title("🏆 Organizador de Planilhas de Clientes (PF e PJ)")
 st.write(
-    "Este script lê os dados **a partir da linha 11**, agrupa por 'Jurídica', valida cada e-mail e ordena as colunas de usuário numericamente."
+    "Versão Final: Lê os dados **a partir da linha 11**, agrupa por 'Jurídica' ou 'Física', valida cada e-mail e ordena as colunas de usuário."
 )
 
 uploaded_file = st.file_uploader(
