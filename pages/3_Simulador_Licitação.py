@@ -25,7 +25,7 @@ AMORTIZACAO_HARDWARE_MESES = Decimal("12")
 
 # --- 3. INTERFACE ---
 try:
-    st.image("imgs/logo.png", width=250) # Caminho para a sua imagem de logo
+    st.image("imgs/logo.png", width=250)
 except Exception as e:
     st.warning("Logo não encontrado. Verifique se o caminho 'imgs/logo.png' está correto.")
 
@@ -101,11 +101,26 @@ if proposta:
     
     m1, m2 = st.columns(2)
     m1.metric("Mensalidade por Veículo (Locação)", f"R$ {mensalidade_total_veiculo:,.2f}")
-    m2.metric("💰 Valor Total do Contrato", f"R$ {valor_global:,.2f}")
+    m2.metric("💰 Valor Total Estimado do Contrato", f"R$ {valor_global:,.2f}")
     
     st.markdown("### 📊 Detalhamento da Proposta")
     df = pd.DataFrame(proposta)
-    st.dataframe(df, use_container_width=True, hide_index=True, column_config={
+
+    # ***** CORREÇÃO PRINCIPAL AQUI *****
+    # Cria a linha de total
+    total_row = pd.DataFrame([{
+        "Serviço/Produto": "VALOR TOTAL GERAL",
+        "Qtd": "",
+        # Somar a coluna de valor unitário não é financeiramente significativo, então deixamos em branco
+        "Valor Unit. Mensal": None, 
+        "Total": valor_global
+    }])
+
+    # Concatena o DataFrame original com a linha de total
+    df_final = pd.concat([df, total_row], ignore_index=True)
+
+    # Exibe o DataFrame final com a linha de totais
+    st.dataframe(df_final, use_container_width=True, hide_index=True, column_config={
         "Valor Unit. Mensal": st.column_config.NumberColumn("Valor Unitário (R$)", format="R$ %.2f"),
         "Total": st.column_config.NumberColumn("Valor Total (R$)", format="R$ %.2f"),
     })
