@@ -34,8 +34,13 @@ PRODUTOS_DESCRICAO = {
 
 # --- 3. FUNÇÃO AUXILIAR PARA GERAR O DOCX ---
 def gerar_proposta_docx(context):
+    """Gera uma proposta DOCX preenchida usando docxtpl e retorna um buffer de memória."""
     try:
-        doc = DocxTemplate("Proposta Comercial e Intenção - Verdio.docx")
+        # ***** PONTO CENTRAL: ESTA É A LINHA QUE DEFINE O TEMPLATE *****
+        # Ela aponta para o ficheiro na pasta raiz do projeto.
+        template_path = "Proposta Comercial e Intenção - Verdio.docx"
+        doc = DocxTemplate(template_path)
+        
         doc.render(context)
         buffer = BytesIO()
         doc.save(buffer)
@@ -43,7 +48,7 @@ def gerar_proposta_docx(context):
         return buffer
     except Exception as e:
         st.error(f"Erro ao gerar o template DOCX: {e}")
-        st.info("Verifique se o ficheiro 'Proposta Comercial e Intenção - Verdio.docx' está na pasta raiz e se os placeholders (ex: {{ NOME_EMPRESA }}) estão corretos.")
+        st.info(f"Verifique se o ficheiro '{template_path}' existe na pasta principal do seu projeto.")
         return None
 
 # --- 4. INTERFACE PRINCIPAL ---
@@ -99,12 +104,9 @@ if produtos_selecionados:
                     'SOMA_TOTAL_MENSAL_VEICULO': f"R$ {soma_mensal_veiculo:,.2f}"
                 }
                 
-                # Guarda o buffer e o nome do ficheiro na sessão
                 st.session_state.proposal_buffer = gerar_proposta_docx(context)
                 st.session_state.proposal_filename = f"Proposta_{empresa.replace(' ', '_')}.docx"
     
-    # ***** CORREÇÃO PRINCIPAL AQUI *****
-    # O botão de download é exibido FORA do formulário, se um ficheiro tiver sido gerado.
     if st.session_state.proposal_buffer is not None:
         st.download_button(
             label="📥 Baixar Proposta Gerada",
@@ -112,7 +114,6 @@ if produtos_selecionados:
             file_name=st.session_state.proposal_filename,
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
-        # Opcional: Adicionar um botão para limpar o buffer e esconder o botão de download
         if st.button("Limpar Proposta Gerada"):
             st.session_state.proposal_buffer = None
             st.rerun()
