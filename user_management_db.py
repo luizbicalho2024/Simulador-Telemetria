@@ -5,35 +5,28 @@ from passlib.context import CryptContext
 
 # --- 1. CONFIGURAÇÃO DE SEGURANÇA E CONEXÃO ---
 
-# Cria um contexto de criptografia usando bcrypt, um algoritmo forte e padrão.
+# Cria um contexto de criptografia usando bcrypt.
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 @st.cache_resource(show_spinner="A ligar à base de dados...")
 def get_mongo_client():
-    """
-    Estabelece e armazena em cache a conexão com o MongoDB.
-    Mostra um spinner na interface durante a primeira conexão.
-    """
+    """Estabelece e armazena em cache a conexão com o MongoDB."""
     try:
         connection_string = st.secrets["MONGO_CONNECTION_STRING"]
         client = pymongo.MongoClient(connection_string)
-        # O comando 'ping' é uma forma leve de verificar se a conexão foi bem-sucedida.
         client.admin.command('ping')
         return client
     except Exception as e:
-        # Este erro será visível nos logs do Streamlit Cloud
         print(f"CRITICAL: Erro de conexão com o MongoDB: {e}")
         return None
 
 @st.cache_resource
 def get_users_collection():
-    """
-    Obtém a coleção de 'users' da base de dados.
-    A coleção também é armazenada em cache para performance.
-    """
+    """Obtém a coleção de 'users' da base de dados."""
     client = get_mongo_client()
-    if client:
-        db = client["simulador_db"] # Pode alterar o nome da base de dados aqui se desejar
+    # CORREÇÃO: Usa 'is not None' para verificar o cliente
+    if client is not None:
+        db = client["simulador_db"]
         return db["users"]
     return None
 
@@ -52,33 +45,31 @@ def get_password_hash(password):
 # --- 3. FUNÇÕES DE GESTÃO DE UTILIZADORES (CRUD) ---
 
 def fetch_all_users_for_auth():
-    """
-    Busca todos os utilizadores e formata-os para o streamlit-authenticator.
-    """
+    """Busca todos os utilizadores e formata-os para o streamlit-authenticator."""
     users_collection = get_users_collection()
     credentials = {"usernames": {}}
-    if users_collection:
-        for user in users_collection.find({}, {"_id": 0}): # Projeção para excluir o _id
+    
+    # ***** A CORREÇÃO PRINCIPAL ESTÁ AQUI *****
+    # Em vez de 'if users_collection:', usamos 'if users_collection is not None:'
+    if users_collection is not None:
+        for user in users_collection.find({}, {"_id": 0}):
             username = user.get("username")
             if username:
                 credentials["usernames"][username] = {
                     "name": user.get("name"),
                     "email": user.get("email"),
-                    "password": user.get("hashed_password"), # O authenticator espera a chave 'password'
+                    "password": user.get("hashed_password"),
                     "role": user.get("role")
                 }
     return credentials
 
 def add_user(username, name, email, password, role):
-    """
-    Adiciona um novo utilizador à base de dados, com a senha já encriptada.
-    """
+    """Adiciona um novo utilizador à base de dados."""
     users_collection = get_users_collection()
     if users_collection is None:
         st.error("A base de dados não está disponível.")
         return False
         
-    # Verifica se o utilizador já existe para evitar duplicados
     if users_collection.find_one({"username": username}):
         st.warning(f"O nome de utilizador '{username}' já existe.")
         return False
@@ -87,7 +78,7 @@ def add_user(username, name, email, password, role):
         "username": username,
         "name": name,
         "email": email,
-        "hashed_password": get_password_hash(password), # Encripta a senha antes de guardar
+        "hashed_password": get_password_hash(password),
         "role": role
     })
     return True
@@ -95,7 +86,7 @@ def add_user(username, name, email, password, role):
 def get_user_role(username):
     """Busca o papel (role) de um utilizador específico."""
     users_collection = get_users_collection()
-    if users_collection:
+    if users_collection is not None:
         user_data = users_collection.find_one({"username": username})
         return user_data.get("role") if user_data else None
     return None
@@ -128,7 +119,6 @@ def delete_user(username):
     users_collection = get_users_collection()
     if users_collection is None: return False
     
-    # Prevenção: não permitir que o último admin se apague
     if get_user_role(username) == "admin":
         if users_collection.count_documents({"role": "admin"}) <= 1:
             st.error("Não é possível excluir o único administrador do sistema.")
@@ -140,7 +130,6 @@ def delete_user(username):
 def get_all_users_for_admin_display():
     """Retorna uma lista de todos os utilizadores (sem a senha) para exibição segura."""
     users_collection = get_users_collection()
-    if users_collection:
-        # A projeção {"hashed_password": 0} garante que a senha nunca sai da base de dados
+    if users_collection is not None:
         return list(users_collection.find({}, {"_id": 0, "hashed_password": 0}))
     return []
