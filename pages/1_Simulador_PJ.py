@@ -42,7 +42,7 @@ def gerar_proposta_docx(context):
         return buffer
     except Exception as e:
         st.error(f"Erro ao gerar o template DOCX: {e}")
-        st.info(f"Verifique se o ficheiro '{template_path}' existe e se os placeholders (ex: {{% for... %}}) estão corretos.")
+        st.info(f"Verifique se o ficheiro '{template_path}' existe e se os placeholders (ex: {{%tr for... %}}) estão corretos.")
         return None
 
 # --- 4. INTERFACE PRINCIPAL ---
