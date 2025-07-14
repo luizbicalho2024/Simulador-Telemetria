@@ -105,12 +105,9 @@ if proposta:
     
     st.markdown("### 📊 Detalhamento da Proposta")
     df = pd.DataFrame(proposta)
-
-    # ***** CORREÇÃO PRINCIPAL AQUI *****
-    # 1. Calcula a soma da coluna de Valor Unitário
+    
     soma_valor_unitario = df["Valor Unit. Mensal"].sum()
     
-    # 2. Cria a linha de total, agora incluindo a soma do valor unitário
     total_row = pd.DataFrame([{
         "Serviço/Produto": "VALOR TOTAL GERAL",
         "Qtd": "",
@@ -118,11 +115,20 @@ if proposta:
         "Total": valor_global
     }])
 
-    # 3. Concatena o DataFrame original com a linha de total
     df_final = pd.concat([df, total_row], ignore_index=True)
 
-    # 4. Exibe o DataFrame final com a linha de totais
-    st.dataframe(df_final, use_container_width=True, hide_index=True, column_config={
+    # ***** CORREÇÃO PRINCIPAL AQUI *****
+    # Função para aplicar o estilo de negrito à última linha
+    def highlight_last_row(row):
+        if row["Serviço/Produto"] == "VALOR TOTAL GERAL":
+            return ['font-weight: bold'] * len(row)
+        else:
+            return [''] * len(row)
+
+    # Aplica o estilo ao DataFrame e depois exibe com st.dataframe
+    styled_df = df_final.style.apply(highlight_last_row, axis=1)
+    
+    st.dataframe(styled_df, use_container_width=True, hide_index=True, column_config={
         "Valor Unit. Mensal": st.column_config.NumberColumn("Valor Unitário (R$)", format="R$ %.2f"),
         "Total": st.column_config.NumberColumn("Valor Total (R$)", format="R$ %.2f"),
     })
