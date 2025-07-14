@@ -7,7 +7,7 @@ import streamlit as st
 st.set_page_config(
     layout="wide",
     page_title="Simulador Licitações",
-    page_icon="imgs/v-c.png" # Caminho para o seu favicon
+    page_icon="imgs/v-c.png"
 )
 
 if not st.session_state.get("authentication_status"):
@@ -107,19 +107,21 @@ if proposta:
     df = pd.DataFrame(proposta)
 
     # ***** CORREÇÃO PRINCIPAL AQUI *****
-    # Cria a linha de total
+    # 1. Calcula a soma da coluna de Valor Unitário
+    soma_valor_unitario = df["Valor Unit. Mensal"].sum()
+    
+    # 2. Cria a linha de total, agora incluindo a soma do valor unitário
     total_row = pd.DataFrame([{
         "Serviço/Produto": "VALOR TOTAL GERAL",
         "Qtd": "",
-        # Somar a coluna de valor unitário não é financeiramente significativo, então deixamos em branco
-        "Valor Unit. Mensal": None, 
+        "Valor Unit. Mensal": soma_valor_unitario, 
         "Total": valor_global
     }])
 
-    # Concatena o DataFrame original com a linha de total
+    # 3. Concatena o DataFrame original com a linha de total
     df_final = pd.concat([df, total_row], ignore_index=True)
 
-    # Exibe o DataFrame final com a linha de totais
+    # 4. Exibe o DataFrame final com a linha de totais
     st.dataframe(df_final, use_container_width=True, hide_index=True, column_config={
         "Valor Unit. Mensal": st.column_config.NumberColumn("Valor Unitário (R$)", format="R$ %.2f"),
         "Total": st.column_config.NumberColumn("Valor Total (R$)", format="R$ %.2f"),
