@@ -4,8 +4,20 @@ import pandas as pd
 import user_management_db as umdb
 import streamlit_authenticator as stauth
 
-# --- 1. CONFIGURAÇÃO INICIAL DA PÁGINA ---
-st.set_page_config(page_title="Simulador Telemetria", layout="wide")
+# --- 1. CONFIGURAÇÃO INICIAL DA PÁGINA (COM LOGO E FAVICON) ---
+st.set_page_config(
+    page_title="Simulador Telemetria",
+    layout="wide",
+    page_icon="imgs/v-c.png"  # Caminho para o seu favicon
+)
+
+# --- Exibe o logo no topo da página ---
+try:
+    st.image("imgs/logo.png", width=250)  # Caminho para a sua imagem de logo
+except Exception as e:
+    # Este erro não impede a execução, apenas avisa nos logs se o logo não for encontrado
+    print(f"WARN: Logo não encontrado em 'imgs/logo.png': {e}")
+
 
 # --- 2. VERIFICAÇÃO DA CONEXÃO COM A BASE DE DADOS ---
 if not umdb.get_mongo_client():
@@ -18,14 +30,12 @@ if not umdb.get_mongo_client():
     st.stop()
 
 # --- 3. CONFIGURAÇÃO DO AUTENTICADOR ---
-# CORREÇÃO: Removido o @st.cache_resource daqui.
-# As funções do umdb que buscam dados já são cacheadas, então não há perda de performance.
 credentials = umdb.fetch_all_users_for_auth()
 authenticator = stauth.Authenticate(
     credentials,
     st.secrets["AUTH_COOKIE_NAME"],
     st.secrets["AUTH_COOKIE_KEY"],
-    cookie_expiry_days=st.secrets["AUTH_COOKIE_EXPIRY_DAYS"],
+    cookie_expiry_days=st.secrets.get("AUTH_COOKIE_EXPIRY_DAYS", 30),
     preauthorized=None
 )
 
@@ -51,6 +61,7 @@ if not credentials.get("usernames"):
 
 
 # B. Processo de Login
+# A função login desenha os campos na tela.
 authenticator.login(location='main')
 
 if st.session_state["authentication_status"]:
@@ -128,13 +139,15 @@ if st.session_state["authentication_status"]:
         else:
              st.info("Nenhum utilizador para gerir.")
 
-    # E. Conteúdo Principal da Página
+    # E. Conteúdo Principal da Página (visível para todos os logados)
     st.markdown("---")
     st.header("Análises e Simuladores")
     st.write("Navegue pelas ferramentas disponíveis no menu lateral esquerdo.")
     st.success("Login realizado com sucesso. Bem-vindo(a) à plataforma!")
 
+
 elif st.session_state["authentication_status"] is False:
     st.error('❌ Nome de utilizador ou senha incorreto(s).')
 elif st.session_state["authentication_status"] is None:
+    st.title("Simulador de Telemetria")
     st.info('👋 Por favor, insira o seu nome de utilizador e senha para aceder.')
