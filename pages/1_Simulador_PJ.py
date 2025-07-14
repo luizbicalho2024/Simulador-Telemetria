@@ -13,7 +13,6 @@ if not st.session_state.get("authentication_status"):
     st.page_link("Simulador_Comercial.py", label="Ir para Login", icon="🏠")
     st.stop()
 
-# Inicializa o buffer da proposta na sessão se não existir
 if 'proposal_buffer' not in st.session_state:
     st.session_state.proposal_buffer = None
 if 'proposal_filename' not in st.session_state:
@@ -49,11 +48,11 @@ def gerar_proposta_docx(context):
 # --- 4. INTERFACE PRINCIPAL ---
 st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador de Venda - Pessoa Jurídica</h1>", unsafe_allow_html=True)
 st.markdown("---")
-
 st.write(f"Usuário: {st.session_state.get('name', 'N/A')} ({st.session_state.get('username', 'N/A')})")
 st.write(f"Nível de Acesso: {st.session_state.get('role', 'Indefinido').capitalize()}")
 st.markdown("---")
 
+# ... O resto do código da interface e dos cálculos permanece o mesmo ...
 st.sidebar.header("📝 Configurações PJ")
 qtd_veiculos = st.sidebar.number_input("Quantidade de Veículos 🚗", min_value=1, value=1, step=1)
 tempo_contrato = st.sidebar.selectbox("Tempo de Contrato ⏳", list(PLANOS.keys()))
@@ -66,7 +65,6 @@ for i, (produto, preco) in enumerate(PLANOS[tempo_contrato].items()):
     if target_col.toggle(f"{produto} - R$ {preco:,.2f}", key=f"pj_toggle_{i}"):
         produtos_selecionados[produto] = preco
 
-# --- 5. CÁLCULOS E FORMULÁRIO DE GERAÇÃO ---
 if produtos_selecionados:
     soma_mensal_veiculo = sum(produtos_selecionados.values())
     valor_mensal_frota = soma_mensal_veiculo * qtd_veiculos
