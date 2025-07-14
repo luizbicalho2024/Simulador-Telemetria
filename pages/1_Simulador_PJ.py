@@ -32,23 +32,17 @@ PRODUTOS_DESCRICAO = {
 
 # --- 3. FUNÇÃO AUXILIAR PARA GERAR O DOCX ---
 def gerar_proposta_docx(context):
-    """Gera uma proposta DOCX preenchida usando docxtpl e retorna um buffer de memória."""
     try:
         template_path = "Proposta Comercial e Intenção - Verdio.docx"
         doc = DocxTemplate(template_path)
-        
-        # ***** A CORREÇÃO PRINCIPAL ESTÁ AQUI *****
-        # A chamada à função render deve ser simples, apenas com o contexto.
-        # A biblioteca docxtpl lida com o ambiente e os sub-templates automaticamente.
         doc.render(context)
-        
         buffer = BytesIO()
         doc.save(buffer)
         buffer.seek(0)
         return buffer
     except Exception as e:
         st.error(f"Erro ao gerar o template DOCX: {e}")
-        st.info(f"Verifique se os ficheiros '{template_path}' e 'tabela_produtos.docx' existem na pasta raiz do projeto.")
+        st.info(f"Verifique se o ficheiro '{template_path}' existe e se os placeholders (ex: {{%tr for... %}}) estão corretos.")
         return None
 
 # --- 4. INTERFACE PRINCIPAL ---
