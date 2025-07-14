@@ -1,115 +1,150 @@
-# pages/1_Simulador_PJ.py
-from io import BytesIO
-from datetime import datetime
-from decimal import Decimal, ROUND_DOWN
+# Simulador_Comercial.py (Versão Final Otimizada)
 import streamlit as st
-import requests
-import time
-from docxtpl import DocxTemplate # Biblioteca recomendada para templates
+import pandas as pd
 
-# --- Bloco de Autenticação (essencial para todas as páginas) ---
-st.set_page_config(layout="wide", page_title="Simulador Pessoa Jurídica")
+# --- Configuração da Página ---
+st.set_page_config(page_title="Simulador Telemetria", layout="wide")
 
-if not st.session_state.get("authentication_status"):
-    st.error("🔒 Acesso Negado! Por favor, faça login.")
-    st.page_link("Simulador_Comercial.py", label="Ir para Login", icon="🏠")
+# --- Importação Segura e Inicialização de Módulos ---
+# Usando a estrutura exata do seu user_management_db.py
+try:
+    import user_management_db as umdb
+    import streamlit_authenticator as stauth
+    from streamlit_authenticator.utilities.hasher import Hasher
+    print("INFO_LOG: Módulos de autenticação e DB importados.")
+except (ModuleNotFoundError, ImportError) as e:
+    st.error(f"ERRO CRÍTICO: Biblioteca essencial não encontrada ({e}). Verifique o 'requirements.txt'.")
     st.stop()
 
-# --- Constantes e Configurações da Página ---
-API_KEY_CLOUDCONVERT = st.secrets.get("API_KEY_CLOUDCONVERT")
+# --- Verificação da Conexão com o Banco de Dados ---
+# A função get_mongo_client já mostra erros na tela se falhar.
+if not umdb.get_mongo_client():
+    st.title("Simulador Telemetria")
+    st.error("FALHA CRÍTICA NA CONEXÃO COM O BANCO DE DADOS. Verifique os 'Secrets' no Streamlit Cloud.")
+    st.stop()
 
-PLANOS = {
-    "12 Meses": {"GPRS / Gsm": Decimal("80.88"), "Satélite": Decimal("193.80"), "Identificador de Motorista / RFID": Decimal("19.25"), "Leitor de Rede CAN / Telemetria": Decimal("75.25"), "Videomonitoramento + DMS + ADAS": Decimal("409.11")},
-    "24 Meses": {"GPRS / Gsm": Decimal("53.92"), "Satélite": Decimal("129.20"), "Identificador de Motorista / RFID": Decimal("12.83"), "Leitor de Rede CAN / Telemetria": Decimal("50.17"), "Videomonitoramento + DMS + ADAS": Decimal("272.74")},
-    "36 Meses": {"GPRS / Gsm": Decimal("44.93"), "Satélite": Decimal("107.67"), "Identificador de Motorista / RFID": Decimal("10.69"), "Leitor de Rede CAN / Telemetria": Decimal("41.81"), "Videomonitoramento + DMS + ADAS": Decimal("227.28")}
-}
+# --- Carregamento de Credenciais e Configuração do Autenticador ---
+credentials = umdb.fetch_all_users_for_auth()
+auth_cookie_name = st.secrets.get("AUTH_COOKIE_NAME", "default_cookie_name")
+auth_cookie_key = st.secrets.get("AUTH_COOKIE_KEY", "default_secret_key")
+auth_cookie_expiry = st.secrets.get("AUTH_COOKIE_EXPIRY_DAYS", 30)
 
-PRODUTOS_DESCRICAO = {
-    "GPRS / Gsm": "Equipamento de rastreamento GSM/GPRS 2G ou 4G.",
-    "Satélite": "Equipamento de rastreamento via satélite para cobertura total.",
-    "Identificador de Motorista / RFID": "Identificação automática de motoristas via RFID.",
-    "Leitor de Rede CAN / Telemetria": "Leitura de dados avançados de telemetria via rede CAN do veículo.",
-    "Videomonitoramento + DMS + ADAS": "Sistema de videomonitoramento com câmeras, alertas de fadiga (DMS) e assistência ao motorista (ADAS)."
-}
+authenticator = stauth.Authenticate(
+    credentials,
+    auth_cookie_name,
+    auth_cookie_key,
+    cookie_expiry_days=auth_cookie_expiry
+)
 
-# --- Funções Auxiliares ---
+# --- Lógica Principal da Aplicação ---
 
-def gerar_proposta_docx(context):
-    """Gera uma proposta DOCX preenchida usando docxtpl e retorna um buffer."""
-    try:
-        template_path = "Proposta Comercial e Intenção - Verdio.docx"
-        doc = DocxTemplate(template_path)
-        doc.render(context)
-        
-        buffer = BytesIO()
-        doc.save(buffer)
-        buffer.seek(0)
-        return buffer
-    except Exception as e:
-        st.error(f"Erro ao gerar o template DOCX: {e}")
-        return None
-
-# --- Interface Principal ---
-st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador de Venda - Pessoa Jurídica</h1>", unsafe_allow_html=True)
-st.markdown("---")
-
-st.sidebar.header("📝 Configurações PJ")
-qtd_veiculos = st.sidebar.number_input("Quantidade de Veículos 🚗", min_value=1, value=1, step=1)
-tempo_contrato = st.sidebar.selectbox("Tempo de Contrato ⏳", list(PLANOS.keys()))
-
-st.markdown("### 🛠️ Selecione os Produtos:")
-produtos_selecionados = {}
-col1, col2 = st.columns(2)
-for i, (produto, preco) in enumerate(PLANOS[tempo_contrato].items()):
-    target_col = col1 if i % 2 == 0 else col2
-    if target_col.toggle(f"{produto} - R$ {preco:,.2f}", key=f"pj_toggle_{i}"):
-        produtos_selecionados[produto] = preco
-
-# --- Cálculos ---
-soma_mensal_veiculo = sum(produtos_selecionados.values())
-valor_mensal_frota = soma_mensal_veiculo * qtd_veiculos
-meses_contrato = int(tempo_contrato.split()[0])
-valor_total_contrato = valor_mensal_frota * meses_contrato
-
-st.markdown("---")
-if produtos_selecionados:
-    st.success(f"**Valor Mensal por Veículo:** R$ {soma_mensal_veiculo:,.2f}")
-    st.info(f"**Valor Mensal Total (Frota):** R$ {valor_mensal_frota:,.2f}")
-    st.info(f"**Valor Total do Contrato:** R$ {valor_total_contrato:,.2f}")
-    
-    st.markdown("---")
-    st.subheader("📄 Gerar Proposta")
-    with st.form("form_proposta_pj", clear_on_submit=False):
-        empresa = st.text_input("Nome da Empresa")
-        responsavel = st.text_input("Nome do Responsável")
-        consultor = st.text_input("Nome do Consultor", value=st.session_state.get('name', ''))
-        validade = st.date_input("Validade da Proposta", value=datetime.today())
-        
-        submitted = st.form_submit_button("Gerar Proposta em DOCX")
-        if submitted:
-            if not all([empresa, responsavel, consultor]):
-                st.warning("Preencha todos os campos do formulário.")
+# 1. Criação do Primeiro Administrador (se o DB estiver vazio)
+if not credentials.get("usernames"):
+    st.title("Bem-vindo ao Simulador Telemetria! 🚀")
+    st.subheader("Configuração Inicial: Criar Conta de Administrador")
+    with st.form("FormCriarPrimeiroAdmin"):
+        admin_name = st.text_input("Nome Completo")
+        admin_username = st.text_input("Nome de Usuário (login)")
+        admin_email = st.text_input("Email")
+        admin_password = st.text_input("Senha", type="password")
+        if st.form_submit_button("Criar Administrador"):
+            if all([admin_name, admin_username, admin_email, admin_password]):
+                # A função add_user agora lida com o hashing internamente
+                if umdb.add_user(admin_username, admin_name, admin_email, admin_password, "admin"):
+                    st.success("Conta de administrador criada! A página será recarregada.")
+                    st.rerun()
             else:
-                context = {
-                    'NOME_EMPRESA': empresa,
-                    'NOME_RESPONSAVEL': responsavel,
-                    'NOME_CONSULTOR': consultor,
-                    'DATA_VALIDADE': validade.strftime("%d/%m/%Y"),
-                    'QTD_VEICULOS': str(qtd_veiculos),
-                    'TEMPO_CONTRATO': tempo_contrato,
-                    'VALOR_MENSAL_FROTA': f"R$ {valor_mensal_frota:,.2f}",
-                    'VALOR_TOTAL_CONTRATO': f"R$ {valor_total_contrato:,.2f}",
-                    'itens_proposta': [{'nome': k, 'desc': PRODUTOS_DESCRICAO.get(k, ''), 'preco': f"R$ {v:,.2f}"} for k, v in produtos_selecionados.items()],
-                    'SOMA_TOTAL_MENSAL_VEICULO': f"R$ {soma_mensal_veiculo:,.2f}"
-                }
-                
-                doc_buffer = gerar_proposta_docx(context)
-                if doc_buffer:
-                    st.download_button(
-                        label="📥 Baixar Proposta em DOCX",
-                        data=doc_buffer,
-                        file_name=f"Proposta_{empresa.replace(' ', '_')}.docx",
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    )
-else:
-    st.info("Selecione produtos para ver o cálculo e gerar a proposta.")
+                st.warning("Preencha todos os campos.")
+    st.stop()
+
+# 2. Processo de Login
+name, authentication_status, username = authenticator.login(location='main')
+
+if authentication_status is False:
+    st.error("Nome de usuário ou senha incorreto(s).")
+elif authentication_status is None:
+    st.info("Por favor, insira seu nome de usuário e senha.")
+elif authentication_status:
+    # --- Login bem-sucedido ---
+    st.session_state.name = name
+    st.session_state.username = username
+    st.session_state.authentication_status = authentication_status
+    st.session_state.role = umdb.get_user_role(username)
+
+    if st.session_state.role is None:
+        st.error("ERRO PÓS-LOGIN: Não foi possível determinar seu nível de acesso.")
+        authenticator.logout("Logout", "sidebar")
+        st.stop()
+
+    st.sidebar.title(f"Bem-vindo(a), {name}!")
+    authenticator.logout("Sair", "sidebar")
+
+    # --- Lógica de Interface Pós-Login ---
+    # Painel do Usuário Comum
+    if st.session_state.role == "user":
+        st.sidebar.subheader("Minha Conta")
+        with st.sidebar.expander("Alterar Minha Senha"):
+            with st.form("form_user_change_password", clear_on_submit=True):
+                current_password = st.text_input("Senha Atual", type="password")
+                new_password = st.text_input("Nova Senha", type="password")
+                if st.form_submit_button("Salvar Nova Senha"):
+                    stored_hash = umdb.get_user_hashed_password(username)
+                    if stored_hash and Hasher([current_password]).verify(stored_hash):
+                        if umdb.update_user_password_manual(username, new_password):
+                            st.success("Senha alterada com sucesso!")
+                        else:
+                            st.error("Falha ao atualizar a senha.")
+                    else:
+                        st.error("Senha atual incorreta.")
+
+    # Painel de Administração (com st.tabs para melhor UX)
+    elif st.session_state.role == "admin":
+        st.sidebar.subheader("Painel de Admin")
+        tab_ver, tab_cad, tab_edit, tab_reset, tab_del = st.tabs(["Ver", "Cadastrar", "Editar", "Resetar Senha", "Excluir"])
+
+        with tab_ver:
+            st.dataframe(umdb.get_all_users_for_admin_display(), use_container_width=True, hide_index=True)
+
+        with tab_cad:
+            with st.form("form_cadastrar", clear_on_submit=True):
+                uname = st.text_input("Username")
+                nome = st.text_input("Nome Completo")
+                mail = st.text_input("Email")
+                pwd = st.text_input("Senha", type="password")
+                role = st.selectbox("Papel", ["user", "admin"])
+                if st.form_submit_button("Cadastrar"):
+                    umdb.add_user(uname, nome, mail, pwd, role)
+                    st.rerun()
+
+        users_dict = {u['username']: u for u in umdb.get_all_users_for_admin_display()}
+        if users_dict:
+            user_to_manage = st.selectbox("Selecione um usuário para gerenciar:", list(users_dict.keys()))
+
+            with tab_edit:
+                user_data = users_dict.get(user_to_manage)
+                if user_data:
+                    with st.form(f"form_edit_{user_to_manage}"):
+                        new_name = st.text_input("Nome", value=user_data.get('name', ''))
+                        new_email = st.text_input("Email", value=user_data.get('email', ''))
+                        new_role = st.selectbox("Papel", ["user", "admin"], index=["user", "admin"].index(user_data.get('role', 'user')))
+                        if st.form_submit_button("Salvar Alterações"):
+                            umdb.update_user_details(user_to_manage, new_name, new_email, new_role)
+                            st.rerun()
+            with tab_reset:
+                with st.form(f"form_reset_{user_to_manage}", clear_on_submit=True):
+                    new_pwd = st.text_input("Nova Senha", type="password")
+                    if st.form_submit_button("Resetar Senha"):
+                        umdb.update_user_password_by_admin(user_to_manage, new_pwd)
+                        st.rerun()
+            with tab_del:
+                if st.button(f"Excluir '{user_to_manage}'", type="primary"):
+                    if umdb.delete_user(user_to_manage):
+                        st.rerun()
+        else:
+            st.info("Nenhum usuário cadastrado para gerenciar.")
+
+
+    # --- Conteúdo Principal da Página ---
+    st.markdown("---")
+    st.header("Simulador de Telemetria Principal")
+    st.write("Navegue pelas funcionalidades usando o menu lateral.")
