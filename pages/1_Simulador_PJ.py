@@ -1,44 +1,36 @@
-# pages/1_Simulador_PJ.py
+# pages/Simulador_PJ.py
 from io import BytesIO
 from datetime import datetime
-from decimal import Decimal, ROUND_DOWN
+from decimal import Decimal
 import streamlit as st
-import requests
-import time
-from docxtpl import DocxTemplate # Biblioteca recomendada para templates
+from docxtpl import DocxTemplate
 
-# --- Bloco de Autenticação (essencial para todas as páginas) ---
+# --- 1. CONFIGURAÇÃO DA PÁGINA E VERIFICAÇÃO DE AUTENTICAÇÃO ---
 st.set_page_config(layout="wide", page_title="Simulador Pessoa Jurídica")
 
 if not st.session_state.get("authentication_status"):
-    st.error("🔒 Acesso Negado! Por favor, faça login.")
+    st.error("🔒 Acesso Negado! Por favor, faça login na página principal para continuar.")
     st.page_link("Simulador_Comercial.py", label="Ir para Login", icon="🏠")
     st.stop()
 
-# --- Constantes e Configurações da Página ---
-API_KEY_CLOUDCONVERT = st.secrets.get("API_KEY_CLOUDCONVERT")
-
+# --- 2. CONSTANTES E DADOS ---
 PLANOS = {
     "12 Meses": {"GPRS / Gsm": Decimal("80.88"), "Satélite": Decimal("193.80"), "Identificador de Motorista / RFID": Decimal("19.25"), "Leitor de Rede CAN / Telemetria": Decimal("75.25"), "Videomonitoramento + DMS + ADAS": Decimal("409.11")},
     "24 Meses": {"GPRS / Gsm": Decimal("53.92"), "Satélite": Decimal("129.20"), "Identificador de Motorista / RFID": Decimal("12.83"), "Leitor de Rede CAN / Telemetria": Decimal("50.17"), "Videomonitoramento + DMS + ADAS": Decimal("272.74")},
     "36 Meses": {"GPRS / Gsm": Decimal("44.93"), "Satélite": Decimal("107.67"), "Identificador de Motorista / RFID": Decimal("10.69"), "Leitor de Rede CAN / Telemetria": Decimal("41.81"), "Videomonitoramento + DMS + ADAS": Decimal("227.28")}
 }
-
 PRODUTOS_DESCRICAO = {
-    "GPRS / Gsm": "Equipamento de rastreamento GSM/GPRS 2G ou 4G.",
-    "Satélite": "Equipamento de rastreamento via satélite para cobertura total.",
-    "Identificador de Motorista / RFID": "Identificação automática de motoristas via RFID.",
-    "Leitor de Rede CAN / Telemetria": "Leitura de dados avançados de telemetria via rede CAN do veículo.",
+    "GPRS / Gsm": "Equipamento de rastreamento GSM/GPRS 2G ou 4G.", "Satélite": "Equipamento de rastreamento via satélite para cobertura total.",
+    "Identificador de Motorista / RFID": "Identificação automática de motoristas via RFID.", "Leitor de Rede CAN / Telemetria": "Leitura de dados avançados de telemetria via rede CAN do veículo.",
     "Videomonitoramento + DMS + ADAS": "Sistema de videomonitoramento com câmeras, alertas de fadiga (DMS) e assistência ao motorista (ADAS)."
 }
 
-# --- Funções Auxiliares ---
-
+# --- 3. FUNÇÃO AUXILIAR PARA GERAR O DOCX ---
 def gerar_proposta_docx(context):
-    """Gera uma proposta DOCX preenchida usando docxtpl e retorna um buffer."""
+    """Gera uma proposta DOCX preenchida usando docxtpl e retorna um buffer de memória."""
     try:
-        template_path = "Proposta Comercial e Intenção - Verdio.docx"
-        doc = DocxTemplate(template_path)
+        # Garante que o template é lido corretamente
+        doc = DocxTemplate("Proposta Comercial e Intenção - Verdio.docx")
         doc.render(context)
         
         buffer = BytesIO()
@@ -47,10 +39,17 @@ def gerar_proposta_docx(context):
         return buffer
     except Exception as e:
         st.error(f"Erro ao gerar o template DOCX: {e}")
+        st.info("Verifique se o ficheiro 'Proposta Comercial e Intenção - Verdio.docx' está na pasta raiz e se os placeholders (ex: {{ NOME_EMPRESA }}) estão corretos.")
         return None
 
-# --- Interface Principal ---
+# --- 4. INTERFACE PRINCIPAL ---
 st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador de Venda - Pessoa Jurídica</h1>", unsafe_allow_html=True)
+
+# Bloco para exibir dados do utilizador logado
+st.markdown("---")
+col1, col2 = st.columns([1,1])
+col1.metric("Utilizador", st.session_state.get('name', 'N/A'))
+col2.metric("Nível de Acesso", st.session_state.get('role', 'N/A').capitalize())
 st.markdown("---")
 
 st.sidebar.header("📝 Configurações PJ")
@@ -59,20 +58,20 @@ tempo_contrato = st.sidebar.selectbox("Tempo de Contrato ⏳", list(PLANOS.keys(
 
 st.markdown("### 🛠️ Selecione os Produtos:")
 produtos_selecionados = {}
-col1, col2 = st.columns(2)
+col_a, col_b = st.columns(2)
 for i, (produto, preco) in enumerate(PLANOS[tempo_contrato].items()):
-    target_col = col1 if i % 2 == 0 else col2
+    target_col = col_a if i % 2 == 0 else col_b
     if target_col.toggle(f"{produto} - R$ {preco:,.2f}", key=f"pj_toggle_{i}"):
         produtos_selecionados[produto] = preco
 
-# --- Cálculos ---
-soma_mensal_veiculo = sum(produtos_selecionados.values())
-valor_mensal_frota = soma_mensal_veiculo * qtd_veiculos
-meses_contrato = int(tempo_contrato.split()[0])
-valor_total_contrato = valor_mensal_frota * meses_contrato
-
-st.markdown("---")
+# --- 5. CÁLCULOS E FORMULÁRIO DE GERAÇÃO ---
 if produtos_selecionados:
+    soma_mensal_veiculo = sum(produtos_selecionados.values())
+    valor_mensal_frota = soma_mensal_veiculo * qtd_veiculos
+    meses_contrato = int(tempo_contrato.split()[0])
+    valor_total_contrato = valor_mensal_frota * meses_contrato
+
+    st.markdown("---")
     st.success(f"**Valor Mensal por Veículo:** R$ {soma_mensal_veiculo:,.2f}")
     st.info(f"**Valor Mensal Total (Frota):** R$ {valor_mensal_frota:,.2f}")
     st.info(f"**Valor Total do Contrato:** R$ {valor_total_contrato:,.2f}")
@@ -85,19 +84,15 @@ if produtos_selecionados:
         consultor = st.text_input("Nome do Consultor", value=st.session_state.get('name', ''))
         validade = st.date_input("Validade da Proposta", value=datetime.today())
         
-        submitted = st.form_submit_button("Gerar Proposta em DOCX")
-        if submitted:
+        if st.form_submit_button("Gerar Proposta em DOCX"):
             if not all([empresa, responsavel, consultor]):
                 st.warning("Preencha todos os campos do formulário.")
             else:
+                # Contexto com os dados para o template
                 context = {
-                    'NOME_EMPRESA': empresa,
-                    'NOME_RESPONSAVEL': responsavel,
-                    'NOME_CONSULTOR': consultor,
-                    'DATA_VALIDADE': validade.strftime("%d/%m/%Y"),
-                    'QTD_VEICULOS': str(qtd_veiculos),
-                    'TEMPO_CONTRATO': tempo_contrato,
-                    'VALOR_MENSAL_FROTA': f"R$ {valor_mensal_frota:,.2f}",
+                    'NOME_EMPRESA': empresa, 'NOME_RESPONSAVEL': responsavel, 'NOME_CONSULTOR': consultor,
+                    'DATA_VALIDADE': validade.strftime("%d/%m/%Y"), 'QTD_VEICULOS': str(qtd_veiculos),
+                    'TEMPO_CONTRATO': tempo_contrato, 'VALOR_MENSAL_FROTA': f"R$ {valor_mensal_frota:,.2f}",
                     'VALOR_TOTAL_CONTRATO': f"R$ {valor_total_contrato:,.2f}",
                     'itens_proposta': [{'nome': k, 'desc': PRODUTOS_DESCRICAO.get(k, ''), 'preco': f"R$ {v:,.2f}"} for k, v in produtos_selecionados.items()],
                     'SOMA_TOTAL_MENSAL_VEICULO': f"R$ {soma_mensal_veiculo:,.2f}"
@@ -106,8 +101,7 @@ if produtos_selecionados:
                 doc_buffer = gerar_proposta_docx(context)
                 if doc_buffer:
                     st.download_button(
-                        label="📥 Baixar Proposta em DOCX",
-                        data=doc_buffer,
+                        label="📥 Baixar Proposta em DOCX", data=doc_buffer,
                         file_name=f"Proposta_{empresa.replace(' ', '_')}.docx",
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                     )
