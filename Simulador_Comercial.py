@@ -4,29 +4,23 @@ import pandas as pd
 import user_management_db as umdb
 import streamlit_authenticator as stauth
 
-# --- 1. CONFIGURAÇÃO INICIAL DA PÁGINA (COM LOGO E FAVICON) ---
+# --- 1. CONFIGURAÇÃO INICIAL DA PÁGINA ---
 st.set_page_config(
     page_title="Simulador Telemetria",
     layout="wide",
-    page_icon="imgs/v-c.png"  # Caminho para o seu favicon
+    page_icon="imgs/v-c.png"
 )
 
 # --- Exibe o logo no topo da página ---
 try:
-    st.image("imgs/logo.png", width=250)  # Caminho para a sua imagem de logo
+    st.image("imgs/logo.png", width=250)
 except Exception as e:
-    # Este erro não impede a execução, apenas avisa nos logs se o logo não for encontrado
     print(f"WARN: Logo não encontrado em 'imgs/logo.png': {e}")
 
 
 # --- 2. VERIFICAÇÃO DA CONEXÃO COM A BASE DE DADOS ---
 if not umdb.get_mongo_client():
     st.error("🚨 FALHA CRÍTICA NA CONEXÃO COM A BASE DE DADOS.")
-    st.info("""
-        **Possíveis Causas e Soluções:**
-        1.  **Segredos (Secrets) Incorretos:** Verifique se a `MONGO_CONNECTION_STRING` nos segredos da sua aplicação no Streamlit Cloud está correta.
-        2.  **IP Não Autorizado:** No seu MongoDB Atlas, vá a "Network Access" e certifique-se de que o acesso de qualquer IP está autorizado (`0.0.0.0/0`).
-    """)
     st.stop()
 
 # --- 3. CONFIGURAÇÃO DO AUTENTICADOR ---
@@ -61,7 +55,6 @@ if not credentials.get("usernames"):
 
 
 # B. Processo de Login
-# A função login desenha os campos na tela.
 authenticator.login(location='main')
 
 if st.session_state["authentication_status"]:
@@ -70,9 +63,14 @@ if st.session_state["authentication_status"]:
     username = st.session_state["username"]
     st.session_state.role = umdb.get_user_role(username)
 
+    # ***** AJUSTE PRINCIPAL AQUI *****
+    # Adiciona a imagem circular no topo da sidebar
+    st.sidebar.image("imgs/v-c.png", width=120)
+    
     st.sidebar.title(f"Olá, {name}! 👋")
     authenticator.logout("Sair", "sidebar")
 
+    # (O resto do código para o painel de admin e utilizador permanece o mesmo)
     # C. Painel do Utilizador Comum
     if st.session_state.role == "user":
         st.sidebar.subheader("Minha Conta")
