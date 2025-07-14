@@ -21,6 +21,7 @@ if 'proposal_filename' not in st.session_state:
 
 
 # --- 2. CONSTANTES E DADOS ---
+# (O resto das constantes permanece igual)
 PLANOS = {
     "12 Meses": {"GPRS / Gsm": Decimal("80.88"), "Satélite": Decimal("193.80"), "Identificador de Motorista / RFID": Decimal("19.25"), "Leitor de Rede CAN / Telemetria": Decimal("75.25"), "Videomonitoramento + DMS + ADAS": Decimal("409.11")},
     "24 Meses": {"GPRS / Gsm": Decimal("53.92"), "Satélite": Decimal("129.20"), "Identificador de Motorista / RFID": Decimal("12.83"), "Leitor de Rede CAN / Telemetria": Decimal("50.17"), "Videomonitoramento + DMS + ADAS": Decimal("272.74")},
@@ -32,13 +33,14 @@ PRODUTOS_DESCRICAO = {
     "Videomonitoramento + DMS + ADAS": "Sistema de videomonitoramento com câmeras, alertas de fadiga (DMS) e assistência ao motorista (ADAS)."
 }
 
+
 # --- 3. FUNÇÃO AUXILIAR PARA GERAR O DOCX ---
 def gerar_proposta_docx(context):
     """Gera uma proposta DOCX preenchida usando docxtpl e retorna um buffer de memória."""
     try:
-        # ***** PONTO CENTRAL: ESTA É A LINHA QUE DEFINE O TEMPLATE *****
-        # Ela aponta para o ficheiro na pasta raiz do projeto.
-        template_path = "Proposta Comercial e Intenção - Verdio.docx"
+        # ***** CORREÇÃO PRINCIPAL AQUI (Se escolher a Opção 2) *****
+        # Aponta explicitamente para o ficheiro dentro da pasta 'pages'.
+        template_path = "pages/Proposta Comercial e Intenção - Verdio.docx"
         doc = DocxTemplate(template_path)
         
         doc.render(context)
@@ -48,9 +50,10 @@ def gerar_proposta_docx(context):
         return buffer
     except Exception as e:
         st.error(f"Erro ao gerar o template DOCX: {e}")
-        st.info(f"Verifique se o ficheiro '{template_path}' existe na pasta principal do seu projeto.")
+        st.info(f"Verifique se o ficheiro no caminho '{template_path}' existe e se os placeholders estão corretos.")
         return None
 
+# --- O resto do código (Interface, Cálculos, etc.) permanece exatamente o mesmo ---
 # --- 4. INTERFACE PRINCIPAL ---
 st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador de Venda - Pessoa Jurídica</h1>", unsafe_allow_html=True)
 st.markdown("---")
