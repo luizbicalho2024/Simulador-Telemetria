@@ -27,12 +27,9 @@ PRODUTOS_DESCRICAO = {
 
 # --- 3. FUNÇÃO AUXILIAR PARA GERAR O DOCX ---
 def gerar_proposta_docx(context):
-    """Gera uma proposta DOCX preenchida usando docxtpl e retorna um buffer de memória."""
     try:
-        # Garante que o template é lido corretamente
         doc = DocxTemplate("Proposta Comercial e Intenção - Verdio.docx")
         doc.render(context)
-        
         buffer = BytesIO()
         doc.save(buffer)
         buffer.seek(0)
@@ -44,12 +41,11 @@ def gerar_proposta_docx(context):
 
 # --- 4. INTERFACE PRINCIPAL ---
 st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador de Venda - Pessoa Jurídica</h1>", unsafe_allow_html=True)
-
-# Bloco para exibir dados do utilizador logado
 st.markdown("---")
-col1, col2 = st.columns([1,1])
-col1.metric("Utilizador", st.session_state.get('name', 'N/A'))
-col2.metric("Nível de Acesso", st.session_state.get('role', 'N/A').capitalize())
+
+# ***** Bloco de visualização de utilizador ATUALIZADO *****
+st.write(f"Usuário: {st.session_state.get('name', 'N/A')} ({st.session_state.get('username', 'N/A')})")
+st.write(f"Nível de Acesso: {st.session_state.get('role', 'Indefinido').capitalize()}")
 st.markdown("---")
 
 st.sidebar.header("📝 Configurações PJ")
@@ -88,7 +84,6 @@ if produtos_selecionados:
             if not all([empresa, responsavel, consultor]):
                 st.warning("Preencha todos os campos do formulário.")
             else:
-                # Contexto com os dados para o template
                 context = {
                     'NOME_EMPRESA': empresa, 'NOME_RESPONSAVEL': responsavel, 'NOME_CONSULTOR': consultor,
                     'DATA_VALIDADE': validade.strftime("%d/%m/%Y"), 'QTD_VEICULOS': str(qtd_veiculos),
