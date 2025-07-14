@@ -3,10 +3,14 @@ from io import BytesIO
 from datetime import datetime
 from decimal import Decimal
 import streamlit as st
-import docx # Usando a biblioteca python-docx
+from docxtpl import DocxTemplate
 
-# --- 1. CONFIGURAÇÃO DA PÁGINA E VERIFICAÇÃO DE AUTENTICAÇÃO ---
-st.set_page_config(layout="wide", page_title="Simulador Pessoa Jurídica")
+# --- 1. CONFIGURAÇÃO DA PÁGINA (COM FAVICON) E AUTENTICAÇÃO ---
+st.set_page_config(
+    layout="wide",
+    page_title="Simulador Pessoa Jurídica",
+    page_icon="imgs/v-c.png" # Caminho para o seu favicon
+)
 
 if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login na página principal para continuar.")
@@ -32,64 +36,28 @@ PRODUTOS_DESCRICAO = {
 
 # --- 3. FUNÇÃO AUXILIAR PARA GERAR O DOCX ---
 def gerar_proposta_docx(context):
-    """Gera uma proposta DOCX preenchida usando python-docx."""
     try:
         template_path = "Proposta Comercial e Intenção - Verdio.docx"
-        doc = docx.Document(template_path)
-
-        # 1. Substitui os placeholders de texto simples em todo o documento
-        placeholders = {
-            '{{NOME_EMPRESA}}': context.get('NOME_EMPRESA', ''),
-            '{{NOME_RESPONSAVEL}}': context.get('NOME_RESPONSAVEL', ''),
-            '{{NOME_CONSULTOR}}': context.get('NOME_CONSULTOR', ''),
-            '{{DATA_VALIDADE}}': context.get('DATA_VALIDADE', ''),
-            '{{QTD_VEICULOS}}': context.get('QTD_VEICULOS', ''),
-            '{{TEMPO_CONTRATO}}': context.get('TEMPO_CONTRATO', ''),
-            '{{VALOR_MENSAL_FROTA}}': context.get('VALOR_MENSAL_FROTA', ''),
-            '{{VALOR_TOTAL_CONTRATO}}': context.get('VALOR_TOTAL_CONTRATO', ''),
-            '{{SOMA_TOTAL_MENSAL_VEICULO}}': context.get('SOMA_TOTAL_MENSAL_VEICULO', '')
-        }
-
-        for p in doc.paragraphs:
-            for key, value in placeholders.items():
-                if key in p.text:
-                    # Usa .runs para preservar a formatação
-                    inline = p.runs
-                    for i in range(len(inline)):
-                        if key in inline[i].text:
-                            text = inline[i].text.replace(key, value)
-                            inline[i].text = text
-
-        # 2. Encontra a tabela de produtos (assumindo que é a primeira tabela do doc)
-        # Se houver outras tabelas antes, pode ser necessário ajustar o índice, ex: doc.tables[1]
-        tabela_produtos = doc.tables[0]
-
-        # 3. Adiciona os produtos selecionados à tabela
-        for item in context.get('itens_proposta', []):
-            cells = tabela_produtos.add_row().cells
-            cells[0].text = item.get('nome', '')
-            cells[1].text = item.get('desc', '')
-            cells[2].text = item.get('preco', '')
-        
-        # 4. Adiciona a linha de total
-        total_cells = tabela_produtos.add_row().cells
-        total_cells[0].text = "Total Mensal por Veículo"
-        total_cells[2].text = context.get('SOMA_TOTAL_MENSAL_VEICULO', '')
-        
-        # Salva o documento em memória
+        doc = DocxTemplate(template_path)
+        doc.render(context)
         buffer = BytesIO()
         doc.save(buffer)
         buffer.seek(0)
         return buffer
     except Exception as e:
         st.error(f"Erro ao gerar o template DOCX: {e}")
-        st.info(f"Verifique se o ficheiro '{template_path}' existe e se os placeholders (ex: {{NOME_EMPRESA}}) estão corretos.")
+        st.info(f"Verifique se o ficheiro '{template_path}' existe e se os placeholders estão corretos.")
         return None
 
-
 # --- 4. INTERFACE PRINCIPAL ---
+try:
+    st.image("imgs/logo.png", width=250) # Caminho para a sua imagem de logo
+except Exception as e:
+    st.warning("Logo não encontrado. Verifique se o caminho 'imgs/logo.png' está correto.")
+
 st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador de Venda - Pessoa Jurídica</h1>", unsafe_allow_html=True)
 st.markdown("---")
+
 st.write(f"Usuário: {st.session_state.get('name', 'N/A')} ({st.session_state.get('username', 'N/A')})")
 st.write(f"Nível de Acesso: {st.session_state.get('role', 'Indefinido').capitalize()}")
 st.markdown("---")
