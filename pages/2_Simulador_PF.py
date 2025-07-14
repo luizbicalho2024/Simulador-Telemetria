@@ -1,9 +1,13 @@
-# pages/Simulador_PF.py
+# pages/2_Simulador_PF.py
 from decimal import Decimal, ROUND_DOWN
 import streamlit as st
 
 # --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
-st.set_page_config(layout="wide", page_title="Simulador Pessoa Física")
+st.set_page_config(
+    layout="wide",
+    page_title="Simulador Pessoa Física",
+    page_icon="imgs/v-c.png" # Caminho para o seu favicon
+)
 
 if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login.")
@@ -22,10 +26,14 @@ TAXAS_PARCELAMENTO = {
 }
 
 # --- 3. INTERFACE PRINCIPAL ---
+try:
+    st.image("imgs/logo.png", width=250) # Caminho para a sua imagem de logo
+except Exception as e:
+    st.warning("Logo não encontrado. Verifique se o caminho 'imgs/logo.png' está correto.")
+
 st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador de Venda - Pessoa Física</h1>", unsafe_allow_html=True)
 st.markdown("---")
 
-# ***** Bloco de visualização de utilizador ATUALIZADO *****
 st.write(f"Usuário: {st.session_state.get('name', 'N/A')} ({st.session_state.get('username', 'N/A')})")
 st.write(f"Nível de Acesso: {st.session_state.get('role', 'Indefinido').capitalize()}")
 st.markdown("---")
