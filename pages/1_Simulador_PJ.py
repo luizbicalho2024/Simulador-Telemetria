@@ -52,7 +52,6 @@ st.write(f"Usuário: {st.session_state.get('name', 'N/A')} ({st.session_state.ge
 st.write(f"Nível de Acesso: {st.session_state.get('role', 'Indefinido').capitalize()}")
 st.markdown("---")
 
-# ... O resto do código da interface e dos cálculos permanece o mesmo ...
 st.sidebar.header("📝 Configurações PJ")
 qtd_veiculos = st.sidebar.number_input("Quantidade de Veículos 🚗", min_value=1, value=1, step=1)
 tempo_contrato = st.sidebar.selectbox("Tempo de Contrato ⏳", list(PLANOS.keys()))
@@ -65,6 +64,7 @@ for i, (produto, preco) in enumerate(PLANOS[tempo_contrato].items()):
     if target_col.toggle(f"{produto} - R$ {preco:,.2f}", key=f"pj_toggle_{i}"):
         produtos_selecionados[produto] = preco
 
+# --- 5. CÁLCULOS E FORMULÁRIO DE GERAÇÃO ---
 if produtos_selecionados:
     soma_mensal_veiculo = sum(produtos_selecionados.values())
     valor_mensal_frota = soma_mensal_veiculo * qtd_veiculos
