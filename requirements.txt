@@ -6,11 +6,7 @@ passlib>=1.7.4
 bcrypt>=3.2.0
 pandas
 numpy
-plotly
-requests
-streamlit_option_menu
-streamlit_extras
-Pillow
-docxtpl # Substitui python-docx para preenchimento de templates
+python-docx # Use esta biblioteca
 XlsxWriter
 openpyxl
+# Remova a linha 'docxtpl' se ela existir
