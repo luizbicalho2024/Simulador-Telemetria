@@ -35,14 +35,19 @@ def gerar_proposta_docx(context):
     try:
         template_path = "Proposta Comercial e Intenção - Verdio.docx"
         doc = DocxTemplate(template_path)
-        doc.render(context)
+        
+        # Para que a tag 'sub' funcione, o Jinja precisa de saber onde encontrar os templates.
+        # Ao passar o próprio objeto 'doc' para o contexto, ele consegue resolver os sub-templates.
+        jinja_env = doc.jinja_env
+        doc.render(context, jinja_env)
+        
         buffer = BytesIO()
         doc.save(buffer)
         buffer.seek(0)
         return buffer
     except Exception as e:
         st.error(f"Erro ao gerar o template DOCX: {e}")
-        st.info(f"Verifique se o ficheiro '{template_path}' existe e se os placeholders (ex: {{%tr for... %}}) estão corretos.")
+        st.info(f"Verifique se o ficheiro '{template_path}' e o sub-template 'tabela_produtos.docx' existem e se os placeholders estão corretos.")
         return None
 
 # --- 4. INTERFACE PRINCIPAL ---
