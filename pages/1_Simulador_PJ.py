@@ -1,4 +1,4 @@
-# pages/Simulador_PJ.py
+# pages/1_Simulador_PJ.py
 from io import BytesIO
 from datetime import datetime
 from decimal import Decimal
@@ -12,6 +12,13 @@ if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login na página principal para continuar.")
     st.page_link("Simulador_Comercial.py", label="Ir para Login", icon="🏠")
     st.stop()
+
+# Inicializa o buffer da proposta na sessão se não existir
+if 'proposal_buffer' not in st.session_state:
+    st.session_state.proposal_buffer = None
+if 'proposal_filename' not in st.session_state:
+    st.session_state.proposal_filename = ""
+
 
 # --- 2. CONSTANTES E DADOS ---
 PLANOS = {
@@ -43,7 +50,6 @@ def gerar_proposta_docx(context):
 st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador de Venda - Pessoa Jurídica</h1>", unsafe_allow_html=True)
 st.markdown("---")
 
-# ***** Bloco de visualização de utilizador ATUALIZADO *****
 st.write(f"Usuário: {st.session_state.get('name', 'N/A')} ({st.session_state.get('username', 'N/A')})")
 st.write(f"Nível de Acesso: {st.session_state.get('role', 'Indefinido').capitalize()}")
 st.markdown("---")
@@ -74,7 +80,7 @@ if produtos_selecionados:
     
     st.markdown("---")
     st.subheader("📄 Gerar Proposta")
-    with st.form("form_proposta_pj", clear_on_submit=False):
+    with st.form("form_proposta_pj", clear_on_submit=True):
         empresa = st.text_input("Nome da Empresa")
         responsavel = st.text_input("Nome do Responsável")
         consultor = st.text_input("Nome do Consultor", value=st.session_state.get('name', ''))
@@ -93,12 +99,23 @@ if produtos_selecionados:
                     'SOMA_TOTAL_MENSAL_VEICULO': f"R$ {soma_mensal_veiculo:,.2f}"
                 }
                 
-                doc_buffer = gerar_proposta_docx(context)
-                if doc_buffer:
-                    st.download_button(
-                        label="📥 Baixar Proposta em DOCX", data=doc_buffer,
-                        file_name=f"Proposta_{empresa.replace(' ', '_')}.docx",
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    )
+                # Guarda o buffer e o nome do ficheiro na sessão
+                st.session_state.proposal_buffer = gerar_proposta_docx(context)
+                st.session_state.proposal_filename = f"Proposta_{empresa.replace(' ', '_')}.docx"
+    
+    # ***** CORREÇÃO PRINCIPAL AQUI *****
+    # O botão de download é exibido FORA do formulário, se um ficheiro tiver sido gerado.
+    if st.session_state.proposal_buffer is not None:
+        st.download_button(
+            label="📥 Baixar Proposta Gerada",
+            data=st.session_state.proposal_buffer,
+            file_name=st.session_state.proposal_filename,
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+        # Opcional: Adicionar um botão para limpar o buffer e esconder o botão de download
+        if st.button("Limpar Proposta Gerada"):
+            st.session_state.proposal_buffer = None
+            st.rerun()
+
 else:
     st.info("Selecione produtos para ver o cálculo e gerar a proposta.")
