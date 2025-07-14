@@ -1,12 +1,28 @@
 # requirements.txt
+
+# Core do Streamlit
 streamlit>=1.33.0
-pymongo[srv]>=4.6.0
+
+# Autenticação
 streamlit-authenticator>=0.3.2
 passlib>=1.7.4
 bcrypt>=3.2.0
+
+# Base de Dados
+pymongo[srv]>=4.6.0
+
+# Manipulação de Dados e Documentos
 pandas
 numpy
-python-docx # Use esta biblioteca
-XlsxWriter
 openpyxl
-# Remova a linha 'docxtpl' se ela existir
+XlsxWriter
+python-docx # Para o simulador de licitação
+
+# ADICIONADO: Biblioteca para gerar o template DOCX no Simulador PJ
+docxtpl
+
+# Outras dependências úteis
+streamlit-option-menu
+streamlit_extras
+Pillow
+requests
