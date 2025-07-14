@@ -1,5 +1,5 @@
 # pages/Simulador_Licitação.py
-from decimal import Decimal, ROUND_DOWN
+from decimal import Decimal, ROUND_DOWN, ROUND_HALF_UP # Importa o arredondamento padrão
 import pandas as pd
 import streamlit as st
 
@@ -23,7 +23,6 @@ AMORTIZACAO_HARDWARE_MESES = Decimal("12")
 st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador para Licitações e Editais</h1>", unsafe_allow_html=True)
 st.markdown("---")
 
-# ***** Bloco de visualização de utilizador ATUALIZADO *****
 st.write(f"Usuário: {st.session_state.get('name', 'N/A')} ({st.session_state.get('username', 'N/A')})")
 st.write(f"Nível de Acesso: {st.session_state.get('role', 'Indefinido').capitalize()}")
 st.markdown("---")
@@ -60,8 +59,13 @@ mensalidade_total_veiculo = Decimal("0")
 if itens_selecionados:
     for item in itens_selecionados:
         custo_hw_item = PRECO_CUSTO[item]
-        mensalidade_custo_item = (custo_hw_item / AMORTIZACAO_HARDWARE_MESES).quantize(Decimal("0.01"), ROUND_DOWN)
-        mensalidade_venda_item = (mensalidade_custo_item * (1 + margem)).quantize(Decimal("0.01"), ROUND_DOWN)
+        
+        # O custo interno continua com arredondamento para baixo, como solicitado
+        mensalidade_custo_item = (custo_hw_item / AMORTIZACAO_HARDWARE_MESES).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
+        
+        # ***** CORREÇÃO PRINCIPAL AQUI *****
+        # O preço final de venda agora usa o arredondamento padrão (5 para cima)
+        mensalidade_venda_item = (mensalidade_custo_item * (1 + margem)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         
         mensalidade_total_veiculo += mensalidade_venda_item
         
