@@ -21,12 +21,11 @@ AMORTIZACAO_HARDWARE_MESES = Decimal("12")
 
 # --- 3. INTERFACE ---
 st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador para Licitações e Editais</h1>", unsafe_allow_html=True)
-
-# Bloco para exibir dados do utilizador logado
 st.markdown("---")
-# Informações do usuário logado (exemplo)
+
+# ***** Bloco de visualização de utilizador ATUALIZADO *****
 st.write(f"Usuário: {st.session_state.get('name', 'N/A')} ({st.session_state.get('username', 'N/A')})")
-st.write(f"Nível de Acesso: {st.session_state.get('role', 'Indefinido')}") # "Indefinido" aqui ainda é um problema se o login foi bem sucedido.
+st.write(f"Nível de Acesso: {st.session_state.get('role', 'Indefinido').capitalize()}")
 st.markdown("---")
 
 st.sidebar.header("📝 Configurações da Licitação")
@@ -58,15 +57,13 @@ proposta = []
 valor_total_locacao = Decimal("0")
 mensalidade_total_veiculo = Decimal("0")
 
-# ***** CORREÇÃO PRINCIPAL AQUI *****
-# Itera sobre cada item selecionado para adicioná-lo como uma linha separada
 if itens_selecionados:
     for item in itens_selecionados:
         custo_hw_item = PRECO_CUSTO[item]
         mensalidade_custo_item = (custo_hw_item / AMORTIZACAO_HARDWARE_MESES).quantize(Decimal("0.01"), ROUND_DOWN)
         mensalidade_venda_item = (mensalidade_custo_item * (1 + margem)).quantize(Decimal("0.01"), ROUND_DOWN)
         
-        mensalidade_total_veiculo += mensalidade_venda_item # Soma para o total mensal por veículo
+        mensalidade_total_veiculo += mensalidade_venda_item
         
         proposta.append({
             "Serviço/Produto": f"Locação - {item}",
