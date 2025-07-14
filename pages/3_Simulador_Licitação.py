@@ -24,9 +24,9 @@ st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador para Lici
 
 # Bloco para exibir dados do utilizador logado
 st.markdown("---")
-col1, col2 = st.columns([1,1])
-col1.metric("Utilizador", st.session_state.get('name', 'N/A'))
-col2.metric("Nível de Acesso", st.session_state.get('role', 'N/A').capitalize())
+# Informações do usuário logado (exemplo)
+st.write(f"Usuário: {st.session_state.get('name', 'N/A')} ({st.session_state.get('username', 'N/A')})")
+st.write(f"Nível de Acesso: {st.session_state.get('role', 'Indefinido')}") # "Indefinido" aqui ainda é um problema se o login foi bem sucedido.
 st.markdown("---")
 
 st.sidebar.header("📝 Configurações da Licitação")
