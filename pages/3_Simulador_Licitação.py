@@ -1,10 +1,14 @@
-# pages/Simulador_Licitação.py
-from decimal import Decimal, ROUND_DOWN, ROUND_HALF_UP # Importa o arredondamento padrão
+# pages/3_Simulador_Licitação.py
+from decimal import Decimal, ROUND_DOWN, ROUND_HALF_UP
 import pandas as pd
 import streamlit as st
 
 # --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
-st.set_page_config(layout="wide", page_title="Simulador Licitações")
+st.set_page_config(
+    layout="wide",
+    page_title="Simulador Licitações",
+    page_icon="imgs/v-c.png" # Caminho para o seu favicon
+)
 
 if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login.")
@@ -20,6 +24,11 @@ PRECO_CUSTO = {
 AMORTIZACAO_HARDWARE_MESES = Decimal("12")
 
 # --- 3. INTERFACE ---
+try:
+    st.image("imgs/logo.png", width=250) # Caminho para a sua imagem de logo
+except Exception as e:
+    st.warning("Logo não encontrado. Verifique se o caminho 'imgs/logo.png' está correto.")
+
 st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador para Licitações e Editais</h1>", unsafe_allow_html=True)
 st.markdown("---")
 
@@ -59,12 +68,7 @@ mensalidade_total_veiculo = Decimal("0")
 if itens_selecionados:
     for item in itens_selecionados:
         custo_hw_item = PRECO_CUSTO[item]
-        
-        # O custo interno continua com arredondamento para baixo, como solicitado
         mensalidade_custo_item = (custo_hw_item / AMORTIZACAO_HARDWARE_MESES).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
-        
-        # ***** CORREÇÃO PRINCIPAL AQUI *****
-        # O preço final de venda agora usa o arredondamento padrão (5 para cima)
         mensalidade_venda_item = (mensalidade_custo_item * (1 + margem)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         
         mensalidade_total_veiculo += mensalidade_venda_item
@@ -97,7 +101,7 @@ if proposta:
     
     m1, m2 = st.columns(2)
     m1.metric("Mensalidade por Veículo (Locação)", f"R$ {mensalidade_total_veiculo:,.2f}")
-    m2.metric("💰 Valor Total Estimado do Contrato", f"R$ {valor_global:,.2f}")
+    m2.metric("💰 Valor Total do Contrato", f"R$ {valor_global:,.2f}")
     
     st.markdown("### 📊 Detalhamento da Proposta")
     df = pd.DataFrame(proposta)
