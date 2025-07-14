@@ -27,6 +27,17 @@ TAXAS_PARCELAMENTO = {
 st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador de Venda - Pessoa Física</h1>", unsafe_allow_html=True)
 st.markdown("---")
 
+# No início do ficheiro, depois do st.stop() para utilizadores não logados
+
+st.markdown("<h1 style='text-align: center; color: #54A033;'>Título da Página</h1>", unsafe_allow_html=True)
+
+# Bloco para exibir dados do utilizador logado
+st.markdown("---")
+col1, col2 = st.columns([1,1])
+col1.metric("Utilizador", st.session_state.get('name', 'N/A'))
+col2.metric("Nível de Acesso", st.session_state.get('role', 'N/A').capitalize())
+st.markdown("---")
+
 st.sidebar.header("📝 Configurações PF")
 modelo = st.sidebar.selectbox("Tipo de Rastreador 📡", list(PRECOS.keys()))
 preco_base = PRECOS[modelo]
