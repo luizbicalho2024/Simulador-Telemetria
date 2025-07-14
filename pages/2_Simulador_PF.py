@@ -1,8 +1,8 @@
-# pages/2_Simulador_PF.py
+# pages/Simulador_PF.py
 from decimal import Decimal, ROUND_DOWN
 import streamlit as st
 
-# --- Bloco de Autenticação ---
+# --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
 st.set_page_config(layout="wide", page_title="Simulador Pessoa Física")
 
 if not st.session_state.get("authentication_status"):
@@ -10,38 +10,30 @@ if not st.session_state.get("authentication_status"):
     st.page_link("Simulador_Comercial.py", label="Ir para Login", icon="🏠")
     st.stop()
 
-# --- Constantes e Configurações ---
+# --- 2. CONSTANTES E DADOS ---
 PRECOS = {
     "GPRS / Gsm": Decimal("970.56"),
     "Satelital": Decimal("2325.60")
 }
-
-# Tabela de taxas de juros por parcela (mais realista)
 TAXAS_PARCELAMENTO = {
     2: Decimal("0.05"), 3: Decimal("0.065"), 4: Decimal("0.08"), 5: Decimal("0.09"),
     6: Decimal("0.10"), 7: Decimal("0.11"), 8: Decimal("0.12"), 9: Decimal("0.13"),
     10: Decimal("0.15"), 11: Decimal("0.16"), 12: Decimal("0.18")
 }
 
-# --- Interface Principal ---
+# --- 3. INTERFACE PRINCIPAL ---
 st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador de Venda - Pessoa Física</h1>", unsafe_allow_html=True)
 st.markdown("---")
 
-# No início do ficheiro, depois do st.stop() para utilizadores não logados
-
-st.markdown("<h1 style='text-align: center; color: #54A033;'>Título da Página</h1>", unsafe_allow_html=True)
-
-# Bloco para exibir dados do utilizador logado
-st.markdown("---")
-col1, col2 = st.columns([1,1])
-col1.metric("Utilizador", st.session_state.get('name', 'N/A'))
-col2.metric("Nível de Acesso", st.session_state.get('role', 'N/A').capitalize())
+# ***** Bloco de visualização de utilizador ATUALIZADO *****
+st.write(f"Usuário: {st.session_state.get('name', 'N/A')} ({st.session_state.get('username', 'N/A')})")
+st.write(f"Nível de Acesso: {st.session_state.get('role', 'Indefinido').capitalize()}")
 st.markdown("---")
 
 st.sidebar.header("📝 Configurações PF")
 modelo = st.sidebar.selectbox("Tipo de Rastreador 📡", list(PRECOS.keys()))
 preco_base = PRECOS[modelo]
-preco_final = preco_base # Inicia com o valor base
+preco_final = preco_base
 
 st.markdown(f"### 💰 Valor Anual À Vista: R$ {preco_base:,.2f}")
 
