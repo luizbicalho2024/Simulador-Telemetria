@@ -2,7 +2,6 @@
 import streamlit as st
 import pandas as pd
 import user_management_db as umdb
-from logger_config import log
 
 # --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
 st.set_page_config(layout="wide", page_title="Dashboard de Análises", page_icon="📊")
@@ -10,8 +9,6 @@ st.set_page_config(layout="wide", page_title="Dashboard de Análises", page_icon
 if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login.")
     st.stop()
-
-log.info(f"Utilizador '{st.session_state.get('name')}' acedeu ao dashboard.")
 
 # --- 2. CARREGAMENTO E PROCESSAMENTO DE DADOS ---
 st.title("📊 Dashboard de Propostas")
@@ -24,8 +21,15 @@ if not proposals_data:
     st.stop()
 
 df = pd.DataFrame(proposals_data)
-df['data_geracao'] = pd.to_datetime(df['data_geracao'])
-df['mes_ano'] = df['data_geracao'].dt.to_period('M').astype(str)
+
+# Garante que a coluna de data está no formato correto
+if 'data_geracao' in df.columns:
+    df['data_geracao'] = pd.to_datetime(df['data_geracao'])
+    df['mes_ano'] = df['data_geracao'].dt.to_period('M').astype(str)
+else:
+    st.error("Os dados das propostas não contêm a coluna 'data_geracao'.")
+    st.stop()
+
 
 # --- 3. EXIBIÇÃO DAS MÉTRICAS E GRÁFICOS ---
 total_propostas = len(df)
@@ -41,11 +45,13 @@ st.markdown("---")
 # Gráfico: Valor Gerado por Mês
 st.subheader("Valor de Propostas por Mês")
 valor_por_mes = df.groupby('mes_ano')['valor_total'].sum()
-st.bar_chart(valor_por_mes)
+if not valor_por_mes.empty:
+    st.bar_chart(valor_por_mes)
 
 # Gráfico: Propostas por Consultor
 st.subheader("Propostas por Consultor")
-st.bar_chart(propostas_por_consultor)
+if not propostas_por_consultor.empty:
+    st.bar_chart(propostas_por_consultor)
 
 # Tabela de Dados Brutos
 with st.expander("Ver todas as propostas registadas"):
