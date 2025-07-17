@@ -3,11 +3,11 @@ import streamlit as st
 import pandas as pd
 import user_management_db as umdb
 
-# --- 1. CONFIGURAÇÃO DA PÁGINA E AUTENTICAÇÃO ---
+# --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
 st.set_page_config(
     layout="wide",
     page_title="Dashboard de Análises",
-    page_icon="imgs/v-c.png"
+    page_icon="📊"
 )
 
 # Verifica se o utilizador está logado E se é um administrador
@@ -23,13 +23,13 @@ st.sidebar.markdown("---")
 st.title("📊 Dashboard de Propostas")
 st.markdown("Análise das propostas comerciais geradas pela plataforma.")
 
-logs_data = umdb.get_all_proposals()
+proposals_data = umdb.get_all_proposals()
 
-if not logs_data:
+if not proposals_data:
     st.info("Ainda não há propostas registadas para exibir no dashboard.")
     st.stop()
 
-df = pd.DataFrame(logs_data)
+df = pd.DataFrame(proposals_data)
 
 # Garante que a coluna de data está no formato correto
 if 'data_geracao' in df.columns:
