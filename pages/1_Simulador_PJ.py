@@ -5,16 +5,11 @@ from decimal import Decimal
 import streamlit as st
 from docxtpl import DocxTemplate
 
-# --- 1. CONFIGURAÇÃO DA PÁGINA (COM FAVICON) E AUTENTICAÇÃO ---
-st.set_page_config(
-    layout="wide",
-    page_title="Simulador Pessoa Jurídica",
-    page_icon="imgs/v-c.png" # Caminho para o seu favicon
-)
+# --- 1. CONFIGURAÇÃO DA PÁGINA E AUTENTICAÇÃO ---
+st.set_page_config(layout="wide", page_title="Simulador Pessoa Jurídica", page_icon="imgs/v-c.png")
 
 if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login na página principal para continuar.")
-    st.page_link("Simulador_Comercial.py", label="Ir para Login", icon="🏠")
     st.stop()
 
 if 'proposal_buffer' not in st.session_state:
@@ -46,22 +41,21 @@ def gerar_proposta_docx(context):
         return buffer
     except Exception as e:
         st.error(f"Erro ao gerar o template DOCX: {e}")
-        st.info(f"Verifique se o ficheiro '{template_path}' existe e se os placeholders estão corretos.")
         return None
 
 # --- 4. INTERFACE PRINCIPAL ---
 try:
-    st.image("imgs/logo.png", width=250) # Caminho para a sua imagem de logo
-except Exception as e:
-    st.warning("Logo não encontrado. Verifique se o caminho 'imgs/logo.png' está correto.")
+    st.image("imgs/logo.png", width=250)
+except Exception:
+    pass
 
 st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador de Venda - Pessoa Jurídica</h1>", unsafe_allow_html=True)
 st.markdown("---")
-
 st.write(f"Usuário: {st.session_state.get('name', 'N/A')} ({st.session_state.get('username', 'N/A')})")
 st.write(f"Nível de Acesso: {st.session_state.get('role', 'Indefinido').capitalize()}")
 st.markdown("---")
 
+st.sidebar.image("imgs/v-c.png", width=120)
 st.sidebar.header("📝 Configurações PJ")
 qtd_veiculos = st.sidebar.number_input("Quantidade de Veículos 🚗", min_value=1, value=1, step=1)
 tempo_contrato = st.sidebar.selectbox("Tempo de Contrato ⏳", list(PLANOS.keys()))
@@ -106,20 +100,17 @@ if produtos_selecionados:
                     'itens_proposta': [{'nome': k, 'desc': PRODUTOS_DESCRICAO.get(k, ''), 'preco': f"R$ {v:,.2f}"} for k, v in produtos_selecionados.items()],
                     'SOMA_TOTAL_MENSAL_VEICULO': f"R$ {soma_mensal_veiculo:,.2f}"
                 }
-                
                 st.session_state.proposal_buffer = gerar_proposta_docx(context)
                 st.session_state.proposal_filename = f"Proposta_{empresa.replace(' ', '_')}.docx"
     
     if st.session_state.proposal_buffer is not None:
         st.download_button(
-            label="📥 Baixar Proposta Gerada",
-            data=st.session_state.proposal_buffer,
+            label="📥 Baixar Proposta Gerada", data=st.session_state.proposal_buffer,
             file_name=st.session_state.proposal_filename,
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
         if st.button("Limpar Proposta Gerada"):
             st.session_state.proposal_buffer = None
             st.rerun()
-
 else:
     st.info("Selecione produtos para ver o cálculo e gerar a proposta.")
