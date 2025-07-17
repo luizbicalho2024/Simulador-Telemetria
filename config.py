@@ -5,6 +5,7 @@ def get_default_pricing():
     """
     Retorna a estrutura de preços padrão da aplicação.
     Estes valores são usados como fallback se a configuração não for encontrada na base de dados.
+    Os valores são guardados como float para compatibilidade com JSON/BSON no MongoDB.
     """
     return {
         "_id": "global_prices", # Identificador fixo para o documento na BD
