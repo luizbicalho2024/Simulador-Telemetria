@@ -3,6 +3,7 @@ import streamlit as st
 import pymongo
 from passlib.context import CryptContext
 from datetime import datetime
+from config import get_default_pricing
 
 # --- 1. CONFIGURAÇÃO DE SEGURANÇA E CONEXÃO ---
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -35,10 +36,7 @@ def verify_password(plain_password, hashed_password):
 def get_password_hash(password):
     return pwd_context.hash(password)
 
-# --- 3. FUNÇÕES DE GESTÃO DE UTILIZADORES (CRUD) ---
-# ... (Todas as funções de gestão de utilizadores como add_user, delete_user, etc. permanecem aqui)
-# Elas estão corretas e não precisam de ser alteradas.
-
+# --- 3. FUNÇÕES DE GESTÃO DE UTILIZADORES ---
 def fetch_all_users_for_auth():
     users_collection = get_users_collection()
     credentials = {"usernames": {}}
@@ -54,9 +52,7 @@ def fetch_all_users_for_auth():
 
 def add_user(username, name, email, password, role):
     users_collection = get_users_collection()
-    if users_collection is None:
-        st.error("A base de dados não está disponível.")
-        return False
+    if users_collection is None: return False
     if users_collection.find_one({"username": username}):
         st.warning(f"O nome de utilizador '{username}' já existe.")
         return False
@@ -101,14 +97,36 @@ def get_all_users_for_admin_display():
         return list(users_collection.find({}, {"_id": 0, "hashed_password": 0}))
     return []
 
-# --- 4. NOVAS FUNÇÕES PARA O DASHBOARD ---
+# --- 4. FUNÇÕES PARA GESTÃO DE PREÇOS ---
+@st.cache_data(ttl=300)
+def get_pricing_config():
+    pricing_collection = get_collection("pricing_config")
+    if pricing_collection is not None:
+        config = pricing_collection.find_one({"_id": "global_prices"})
+        if config:
+            return config
+    return get_default_pricing()
 
+def update_pricing_config(new_config: dict):
+    pricing_collection = get_collection("pricing_config")
+    if pricing_collection is not None:
+        try:
+            new_config.pop('_id', None)
+            pricing_collection.update_one(
+                {"_id": "global_prices"}, {"$set": new_config}, upsert=True
+            )
+            st.cache_data.clear()
+            return True
+        except Exception as e:
+            print(f"ERROR: Falha ao atualizar preços: {e}")
+            return False
+    return False
+
+# --- 5. FUNÇÕES PARA DASHBOARD ---
 def log_proposal(proposal_data: dict):
-    """Guarda os metadados de uma proposta gerada."""
     proposals_collection = get_collection("proposals")
     if proposals_collection is not None:
         try:
-            # Garante que a data é guardada no formato correto
             proposal_data["data_geracao"] = datetime.now()
             proposals_collection.insert_one(proposal_data)
             return True
@@ -118,9 +136,7 @@ def log_proposal(proposal_data: dict):
     return False
 
 def get_all_proposals():
-    """Busca todas as propostas para o dashboard."""
     proposals_collection = get_collection("proposals")
     if proposals_collection is not None:
-        # Ordena por data, da mais recente para a mais antiga
         return list(proposals_collection.find({}, {"_id": 0}).sort("data_geracao", -1))
     return []
