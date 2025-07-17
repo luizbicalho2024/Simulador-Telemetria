@@ -122,21 +122,24 @@ def update_pricing_config(new_config: dict):
             return False
     return False
 
-# --- 5. FUNÇÕES PARA DASHBOARD ---
-def log_proposal(proposal_data: dict):
-    proposals_collection = get_collection("proposals")
-    if proposals_collection is not None:
+# --- 5. FUNÇÕES PARA LOGGING DE AÇÕES ---
+def add_log(user: str, action: str, details: str = ""):
+    logs_collection = get_collection("activity_logs")
+    if logs_collection is not None:
         try:
-            proposal_data["data_geracao"] = datetime.now()
-            proposals_collection.insert_one(proposal_data)
+            log_entry = {
+                "timestamp": datetime.now(), "user": user,
+                "action": action, "details": details
+            }
+            logs_collection.insert_one(log_entry)
             return True
         except Exception as e:
-            print(f"ERROR: Falha ao registar proposta: {e}")
+            print(f"ERROR: Falha ao registar log: {e}")
             return False
     return False
 
-def get_all_proposals():
-    proposals_collection = get_collection("proposals")
-    if proposals_collection is not None:
-        return list(proposals_collection.find({}, {"_id": 0}).sort("data_geracao", -1))
+def get_all_logs():
+    logs_collection = get_collection("activity_logs")
+    if logs_collection is not None:
+        return list(logs_collection.find({}, {"_id": 0}).sort("timestamp", -1))
     return []
