@@ -4,20 +4,17 @@ from datetime import datetime
 from decimal import Decimal
 import streamlit as st
 from docxtpl import DocxTemplate
+import user_management_db as umdb # Adicionado para registar propostas
 
-# --- 1. CONFIGURAÇÃO DA PÁGINA E AUTENTICAÇÃO ---
+# ... (O topo do ficheiro e as constantes permanecem os mesmos) ...
 st.set_page_config(layout="wide", page_title="Simulador Pessoa Jurídica", page_icon="imgs/v-c.png")
-
 if not st.session_state.get("authentication_status"):
-    st.error("🔒 Acesso Negado! Por favor, faça login na página principal para continuar.")
+    st.error("🔒 Acesso Negado! Por favor, faça login.")
     st.stop()
-
 if 'proposal_buffer' not in st.session_state:
     st.session_state.proposal_buffer = None
 if 'proposal_filename' not in st.session_state:
     st.session_state.proposal_filename = ""
-
-# --- 2. CONSTANTES E DADOS ---
 PLANOS = {
     "12 Meses": {"GPRS / Gsm": Decimal("80.88"), "Satélite": Decimal("193.80"), "Identificador de Motorista / RFID": Decimal("19.25"), "Leitor de Rede CAN / Telemetria": Decimal("75.25"), "Videomonitoramento + DMS + ADAS": Decimal("409.11")},
     "24 Meses": {"GPRS / Gsm": Decimal("53.92"), "Satélite": Decimal("129.20"), "Identificador de Motorista / RFID": Decimal("12.83"), "Leitor de Rede CAN / Telemetria": Decimal("50.17"), "Videomonitoramento + DMS + ADAS": Decimal("272.74")},
@@ -28,8 +25,6 @@ PRODUTOS_DESCRICAO = {
     "Identificador de Motorista / RFID": "Identificação automática de motoristas via RFID.", "Leitor de Rede CAN / Telemetria": "Leitura de dados avançados de telemetria via rede CAN do veículo.",
     "Videomonitoramento + DMS + ADAS": "Sistema de videomonitoramento com câmeras, alertas de fadiga (DMS) e assistência ao motorista (ADAS)."
 }
-
-# --- 3. FUNÇÃO AUXILIAR PARA GERAR O DOCX ---
 def gerar_proposta_docx(context):
     try:
         template_path = "Proposta Comercial e Intenção - Verdio.docx"
@@ -42,19 +37,12 @@ def gerar_proposta_docx(context):
     except Exception as e:
         st.error(f"Erro ao gerar o template DOCX: {e}")
         return None
-
-# --- 4. INTERFACE PRINCIPAL ---
-try:
-    st.image("imgs/logo.png", width=250)
-except Exception:
-    pass
-
+st.image("imgs/logo.png", width=250)
 st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador de Venda - Pessoa Jurídica</h1>", unsafe_allow_html=True)
 st.markdown("---")
 st.write(f"Usuário: {st.session_state.get('name', 'N/A')} ({st.session_state.get('username', 'N/A')})")
 st.write(f"Nível de Acesso: {st.session_state.get('role', 'Indefinido').capitalize()}")
 st.markdown("---")
-
 st.sidebar.image("imgs/v-c.png", width=120)
 st.sidebar.header("📝 Configurações PJ")
 qtd_veiculos = st.sidebar.number_input("Quantidade de Veículos 🚗", min_value=1, value=1, step=1)
@@ -68,7 +56,6 @@ for i, (produto, preco) in enumerate(PLANOS[tempo_contrato].items()):
     if target_col.toggle(f"{produto} - R$ {preco:,.2f}", key=f"pj_toggle_{i}"):
         produtos_selecionados[produto] = preco
 
-# --- 5. CÁLCULOS E FORMULÁRIO DE GERAÇÃO ---
 if produtos_selecionados:
     soma_mensal_veiculo = sum(produtos_selecionados.values())
     valor_mensal_frota = soma_mensal_veiculo * qtd_veiculos
@@ -82,13 +69,15 @@ if produtos_selecionados:
     
     st.markdown("---")
     st.subheader("📄 Gerar Proposta")
-    with st.form("form_proposta_pj", clear_on_submit=True):
+    with st.form("form_proposta_pj", clear_on_submit=False):
         empresa = st.text_input("Nome da Empresa")
         responsavel = st.text_input("Nome do Responsável")
         consultor = st.text_input("Nome do Consultor", value=st.session_state.get('name', ''))
         validade = st.date_input("Validade da Proposta", value=datetime.today())
         
-        if st.form_submit_button("Gerar Proposta em DOCX"):
+        submitted = st.form_submit_button("Gerar Proposta e Registrar")
+        
+        if submitted:
             if not all([empresa, responsavel, consultor]):
                 st.warning("Preencha todos os campos do formulário.")
             else:
@@ -100,6 +89,20 @@ if produtos_selecionados:
                     'itens_proposta': [{'nome': k, 'desc': PRODUTOS_DESCRICAO.get(k, ''), 'preco': f"R$ {v:,.2f}"} for k, v in produtos_selecionados.items()],
                     'SOMA_TOTAL_MENSAL_VEICULO': f"R$ {soma_mensal_veiculo:,.2f}"
                 }
+                
+                # Guarda os dados para o dashboard
+                proposal_log_data = {
+                    "tipo": "PJ",
+                    "empresa": empresa,
+                    "consultor": st.session_state.get('name', 'N/A'),
+                    "valor_total": float(valor_total_contrato)
+                }
+                if umdb.log_proposal(proposal_log_data):
+                    st.toast("Proposta registrada com sucesso no dashboard!", icon="📊")
+                else:
+                    st.warning("Não foi possível registrar a proposta.")
+
+                # Gera o DOCX para download
                 st.session_state.proposal_buffer = gerar_proposta_docx(context)
                 st.session_state.proposal_filename = f"Proposta_{empresa.replace(' ', '_')}.docx"
     
@@ -109,8 +112,6 @@ if produtos_selecionados:
             file_name=st.session_state.proposal_filename,
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
-        if st.button("Limpar Proposta Gerada"):
+        if st.button("Limpar Proposta"):
             st.session_state.proposal_buffer = None
             st.rerun()
-else:
-    st.info("Selecione produtos para ver o cálculo e gerar a proposta.")
