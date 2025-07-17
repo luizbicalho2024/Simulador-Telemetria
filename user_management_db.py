@@ -1,6 +1,7 @@
 # user_management_db.py
 import streamlit as st
 import pymongo
+from bson import ObjectId # Importante para lidar com o ID do MongoDB
 from passlib.context import CryptContext
 from datetime import datetime
 from config import get_default_pricing
@@ -122,8 +123,7 @@ def update_pricing_config(new_config: dict):
             return False
     return False
 
-# --- 5. FUNÇÕES PARA DASHBOARD E LOGS (INCLUINDO AS QUE FALTAVAM) ---
-
+# --- 5. FUNÇÕES PARA DASHBOARD E LOGS ---
 def add_log(user: str, action: str, details: str = ""):
     logs_collection = get_collection("activity_logs")
     if logs_collection is not None:
@@ -158,7 +158,25 @@ def log_proposal(proposal_data: dict):
     return False
 
 def get_all_proposals():
+    """Busca todas as propostas, retornando também o _id do MongoDB."""
     proposals_collection = get_collection("proposals")
     if proposals_collection is not None:
-        return list(proposals_collection.find({}, {"_id": 0}).sort("data_geracao", -1))
+        # Retorna o cursor para ser iterado
+        return proposals_collection.find({}).sort("data_geracao", -1)
     return []
+
+def delete_proposal(proposal_id: str):
+    """Exclui uma proposta específica pelo seu _id."""
+    proposals_collection = get_collection("proposals")
+    if proposals_collection is not None:
+        try:
+            result = proposals_collection.delete_one({"_id": ObjectId(proposal_id)})
+            if result.deleted_count > 0:
+                # Adiciona log da exclusão
+                add_log(st.session_state["username"], "Excluiu Proposta", f"ID da proposta: {proposal_id}")
+                st.toast("Proposta excluída com sucesso!", icon="🗑️")
+            return result.deleted_count > 0
+        except Exception as e:
+            print(f"ERROR: Falha ao excluir proposta (ID: {proposal_id}): {e}")
+            return False
+    return False
