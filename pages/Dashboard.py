@@ -3,24 +3,33 @@ import streamlit as st
 import pandas as pd
 import user_management_db as umdb
 
-# --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
-st.set_page_config(layout="wide", page_title="Dashboard de Análises", page_icon="📊")
+# --- 1. CONFIGURAÇÃO DA PÁGINA E AUTENTICAÇÃO ---
+st.set_page_config(
+    layout="wide",
+    page_title="Dashboard de Análises",
+    page_icon="imgs/v-c.png"
+)
 
-if not st.session_state.get("authentication_status"):
-    st.error("🔒 Acesso Negado! Por favor, faça login.")
+# Verifica se o utilizador está logado E se é um administrador
+if not st.session_state.get("authentication_status") or st.session_state.get("role") != "admin":
+    st.error("🔒 Acesso Negado! Esta página é restrita a administradores.")
     st.stop()
 
-# --- 2. CARREGAMENTO E PROCESSAMENTO DE DADOS ---
+# --- 2. INTERFACE DA PÁGINA ---
+st.sidebar.image("imgs/v-c.png", width=120)
+st.sidebar.title(f"Olá, {st.session_state.get('name', 'N/A')}! 👋")
+st.sidebar.markdown("---")
+
 st.title("📊 Dashboard de Propostas")
 st.markdown("Análise das propostas comerciais geradas pela plataforma.")
 
-proposals_data = umdb.get_all_proposals()
+logs_data = umdb.get_all_proposals()
 
-if not proposals_data:
+if not logs_data:
     st.info("Ainda não há propostas registadas para exibir no dashboard.")
     st.stop()
 
-df = pd.DataFrame(proposals_data)
+df = pd.DataFrame(logs_data)
 
 # Garante que a coluna de data está no formato correto
 if 'data_geracao' in df.columns:
@@ -30,8 +39,7 @@ else:
     st.error("Os dados das propostas não contêm a coluna 'data_geracao'.")
     st.stop()
 
-
-# --- 3. EXIBIÇÃO DAS MÉTRICAS E GRÁFICOS ---
+# --- 3. FILTROS E EXIBIÇÃO ---
 total_propostas = len(df)
 valor_total_gerado = df['valor_total'].sum()
 propostas_por_consultor = df['consultor'].value_counts()
