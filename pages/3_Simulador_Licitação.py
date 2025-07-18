@@ -30,7 +30,7 @@ st.markdown("---")
 
 with st.form("form_licitacao"):
     st.sidebar.header("📝 Configurações da Licitação")
-    nome_licitacao = st.sidebar.text_input("Nome/Identificador da Licitação", key="licit_nome")
+    nome_orgao = st.sidebar.text_input("Nome do Orgão/Licitação", key="licit_nome")
     qtd = Decimal(st.sidebar.number_input("Qtd. de Veículos 🚗", min_value=1, value=1, step=1, key="licit_qtd"))
     contrato = Decimal(st.sidebar.number_input("Tempo de Contrato (meses) 📆", min_value=12, value=12, step=12, key="licit_contrato"))
     margem = Decimal(str(st.sidebar.slider("Margem de Lucro (%) 📈", 0, 100, 30, key="licit_margem"))) / 100
@@ -52,11 +52,11 @@ with st.form("form_licitacao"):
         inc_desinstalacao = st.toggle("Incluir Desinstalação", key="licit_inc_desinst")
         qtd_desinstalacao = Decimal(st.number_input("Qtd. Desinstalações", 1, value=1, step=1, key="licit_qtd_desinst")) if inc_desinstalacao else Decimal("0")
 
-    if st.form_submit_button("Calcular e Registrar Proposta"):
-        if not nome_licitacao:
-            st.warning("Por favor, insira um nome/identificador para a licitação.")
+    if st.form_submit_button("Simular e Registrar Proposta"):
+        if not nome_orgao:
+            st.warning("Por favor, insira o nome do orgão/licitação.")
         elif not (itens_selecionados or inc_instalacao or inc_manutencao or inc_desinstalacao):
-            st.warning("⚠️ Selecione pelo menos um item ou serviço para calcular a proposta.")
+            st.warning("⚠️ Selecione pelo menos um item ou serviço para calcular.")
         else:
             proposta = []
             valor_total_locacao = Decimal("0")
@@ -64,6 +64,7 @@ with st.form("form_licitacao"):
 
             if itens_selecionados:
                 for item in itens_selecionados:
+                    # ... (lógica de cálculo do item como antes) ...
                     custo_hw_item = PRECO_CUSTO.get(item, Decimal("0"))
                     mensalidade_custo_item = (custo_hw_item / AMORTIZACAO_HARDWARE_MESES).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
                     mensalidade_venda_item = (mensalidade_custo_item * (1 + margem)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
@@ -75,6 +76,7 @@ with st.form("form_licitacao"):
                 valor_total_locacao = mensalidade_total_veiculo * qtd * contrato
 
             valor_total_servicos = Decimal("0")
+            # ... (lógica de cálculo dos serviços como antes) ...
             if inc_instalacao:
                 total = c_instalacao * qtd
                 proposta.append({"Serviço/Produto": "Taxa de Instalação", "Qtd": int(qtd), "Valor Unit. Mensal": c_instalacao, "Total": total})
@@ -90,29 +92,36 @@ with st.form("form_licitacao"):
 
             valor_global = valor_total_locacao + valor_total_servicos
             
-            umdb.add_log(st.session_state["username"], "Gerou Proposta Licitação", f"Licitação: {nome_licitacao}, Valor: R$ {valor_global:,.2f}")
-            umdb.log_proposal({"tipo": "Licitação", "empresa": nome_licitacao, "consultor": st.session_state.get('name', 'N/A'), "valor_total": float(valor_global)})
-            
+            umdb.add_log(st.session_state["username"], "Simulou/Registrou Licitação", f"Orgão: {nome_orgao}, Valor: R$ {valor_global:,.2f}")
+            umdb.log_proposal({"tipo": "Licitação", "empresa": nome_orgao, "consultor": st.session_state.get('name', 'N/A'), "valor_total": float(valor_global)})
             st.toast("Proposta registrada no dashboard!", icon="📊")
             
-            st.markdown("---")
-            st.subheader("Resultados da Simulação")
-            m1, m2 = st.columns(2)
-            m1.metric("Mensalidade por Veículo (Locação)", f"R$ {mensalidade_total_veiculo:,.2f}")
-            m2.metric("💰 Valor Total Estimado do Contrato", f"R$ {valor_global:,.2f}")
-            
-            st.markdown("### 📊 Detalhamento da Proposta")
-            df = pd.DataFrame(proposta)
-            soma_valor_unitario = df["Valor Unit. Mensal"].sum()
-            total_row = pd.DataFrame([{"Serviço/Produto": "VALOR TOTAL GERAL", "Qtd": "", "Valor Unit. Mensal": soma_valor_unitario, "Total": valor_global}])
-            df_final = pd.concat([df, total_row], ignore_index=True)
+            st.session_state.licit_results = {
+                "proposta": proposta,
+                "mensalidade_total_veiculo": mensalidade_total_veiculo,
+                "valor_global": valor_global
+            }
 
-            def highlight_last_row(row):
-                return ['font-weight: bold'] * len(row) if row["Serviço/Produto"] == "VALOR TOTAL GERAL" else [''] * len(row)
+if 'licit_results' in st.session_state and st.session_state.licit_results:
+    res = st.session_state.licit_results
+    st.markdown("---")
+    st.subheader("Resultados da Simulação")
+    m1, m2 = st.columns(2)
+    m1.metric("Mensalidade por Veículo (Locação)", f"R$ {res['mensalidade_total_veiculo']:,.2f}")
+    m2.metric("💰 Valor Total Estimado do Contrato", f"R$ {res['valor_global']:,.2f}")
+    
+    st.markdown("### 📊 Detalhamento da Proposta")
+    df = pd.DataFrame(res['proposta'])
+    soma_valor_unitario = df["Valor Unit. Mensal"].sum()
+    total_row = pd.DataFrame([{"Serviço/Produto": "VALOR TOTAL GERAL", "Qtd": "", "Valor Unit. Mensal": soma_valor_unitario, "Total": res['valor_global']}])
+    df_final = pd.concat([df, total_row], ignore_index=True)
 
-            styled_df = df_final.style.apply(highlight_last_row, axis=1)
-            
-            st.dataframe(styled_df, use_container_width=True, hide_index=True, column_config={
-                "Valor Unit. Mensal": st.column_config.NumberColumn("Valor Unitário (R$)", format="R$ %.2f"),
-                "Total": st.column_config.NumberColumn("Valor Total (R$)", format="R$ %.2f"),
-            })
+    def highlight_last_row(row):
+        return ['font-weight: bold'] * len(row) if row["Serviço/Produto"] == "VALOR TOTAL GERAL" else [''] * len(row)
+
+    styled_df = df_final.style.apply(highlight_last_row, axis=1)
+    
+    st.dataframe(styled_df, use_container_width=True, hide_index=True, column_config={
+        "Valor Unit. Mensal": st.column_config.NumberColumn("Valor Unitário (R$)", format="R$ %.2f"),
+        "Total": st.column_config.NumberColumn("Valor Total (R$)", format="R$ %.2f"),
+    })
