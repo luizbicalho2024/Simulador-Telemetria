@@ -47,8 +47,10 @@ st.info(f"**Valor Final (com desconto):** R$ {preco_final:,.2f}")
 
 st.markdown("### 💳 Parcelamento:")
 if st.checkbox("Ativar Parcelamento", key="pf_parcela_check"):
-    num_parcelas = st.selectbox("Quantidade de Parcelas:", list(TAXAS_PARCELAMENTO_PF.keys()), key="pf_num_parcelas")
-    taxa_juros = TAXAS_PARCELAMENTO_PF.get(num_parcelas, Decimal("0"))
+    num_parcelas_str = st.selectbox("Quantidade de Parcelas:", list(TAXAS_PARCELAMENTO_PF.keys()), key="pf_num_parcelas")
+    taxa_juros = TAXAS_PARCELAMENTO_PF.get(num_parcelas_str, Decimal("0"))
+    num_parcelas = int(num_parcelas_str)
+
     valor_com_juros = preco_final * (Decimal(1) + taxa_juros)
     valor_parcela = (valor_com_juros / Decimal(num_parcelas)).quantize(Decimal('0.01'), ROUND_DOWN)
     total_parcelado = valor_parcela * Decimal(num_parcelas)
