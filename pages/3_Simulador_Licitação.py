@@ -4,35 +4,23 @@ import pandas as pd
 import streamlit as st
 import user_management_db as umdb
 
-# --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
-st.set_page_config(
-    layout="wide",
-    page_title="Simulador Licitações",
-    page_icon="imgs/v-c.png"
-)
-
+st.set_page_config(layout="wide", page_title="Simulador Licitações", page_icon="imgs/v-c.png")
 if not st.session_state.get("authentication_status"):
-    st.error("🔒 Acesso Negado! Por favor, faça login.")
-    st.stop()
+    st.error("🔒 Acesso Negado!"); st.stop()
 
-# --- 2. CARREGAMENTO DE PREÇOS DINÂMICOS ---
 pricing_config = umdb.get_pricing_config()
 PRECO_CUSTO = {k: Decimal(str(v)) for k, v in pricing_config.get("PRECO_CUSTO_LICITACAO", {}).items()}
 AMORTIZACAO_HARDWARE_MESES = Decimal(str(pricing_config.get("AMORTIZACAO_HARDWARE_MESES", 12)))
 
-# --- 3. INTERFACE ---
 st.sidebar.image("imgs/v-c.png", width=120)
 if st.sidebar.button("🧹 Limpar Campos", use_container_width=True, key="licit_clear"):
     keys_to_clear = [k for k in st.session_state if k.startswith("licit_")]
-    for k in keys_to_clear:
-        del st.session_state[k]
-    st.toast("Campos limpos!", icon="✨")
-    st.rerun()
+    for k in keys_to_clear: del st.session_state[k]
+    st.toast("Campos limpos!", icon="✨"); st.rerun()
 
 try:
     st.image("imgs/logo.png", width=250)
-except:
-    pass
+except: pass
 
 st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador para Licitações e Editais</h1>", unsafe_allow_html=True)
 st.markdown("---")
@@ -53,7 +41,7 @@ c_desinstalacao = Decimal(str(st.sidebar.number_input("Desinstalação", 0.0, va
 col_a, col_b = st.columns(2)
 with col_a:
     st.markdown("### 📦 Itens de Locação")
-    itens_selecionados = [item for item, preco in PRECO_CUSTO.items() if st.toggle(f"{item} - R$ {preco:,.2f}", key=f"licit_item_{item}")]
+    itens_selecionados = [item for item, preco in PRECO_CUSTO.items() if st.toggle(f"{item} - R$ {preco:,.2f}", key=f"licit_item_{item.replace(' ', '_')}")]
 with col_b:
     st.markdown("### 🛠️ Serviços Adicionais")
     inc_instalacao = st.toggle("Incluir Instalação", key="licit_inc_inst")
@@ -62,8 +50,6 @@ with col_b:
     inc_desinstalacao = st.toggle("Incluir Desinstalação", key="licit_inc_desinst")
     qtd_desinstalacao = Decimal(st.number_input("Qtd. Desinstalações", 1, value=1, step=1, key="licit_qtd_desinst")) if inc_desinstalacao else Decimal("0")
 
-# --- 4. CÁLCULOS E EXIBIÇÃO ---
-st.markdown("---")
 proposta = []
 valor_total_locacao = Decimal("0")
 mensalidade_total_veiculo = Decimal("0")
@@ -95,8 +81,9 @@ if inc_desinstalacao and qtd_desinstalacao > 0:
     valor_total_servicos += total
 
 if proposta:
+    st.markdown("---")
     valor_global = valor_total_locacao + valor_total_servicos
-    st.toast("Cálculo da proposta realizado com sucesso!", icon="✅")
+    st.toast("Cálculo da proposta realizado!", icon="✅")
     
     m1, m2 = st.columns(2)
     m1.metric("Mensalidade por Veículo (Locação)", f"R$ {mensalidade_total_veiculo:,.2f}")
@@ -117,5 +104,3 @@ if proposta:
         "Valor Unit. Mensal": st.column_config.NumberColumn("Valor Unitário (R$)", format="R$ %.2f"),
         "Total": st.column_config.NumberColumn("Valor Total (R$)", format="R$ %.2f"),
     })
-else:
-    st.warning("⚠️ Selecione pelo menos um item ou serviço para calcular a proposta.")
