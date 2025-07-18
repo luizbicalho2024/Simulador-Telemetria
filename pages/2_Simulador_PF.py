@@ -9,7 +9,7 @@ if not st.session_state.get("authentication_status"):
 
 pricing_config = umdb.get_pricing_config()
 PRECOS_PF = {k: Decimal(str(v)) for k, v in pricing_config.get("PRECOS_PF", {}).items()}
-TAXAS_PARCELAMENTO_PF = {k: Decimal(str(v)) for k, v in pricing_config.get("TAXAS_PARCELAMENTO_PF", {}).items()}
+TAXAS_PARCELAMENTO_PF = {str(k): Decimal(str(v)) for k, v in pricing_config.get("TAXAS_PARCELAMENTO_PF", {}).items()}
 
 st.sidebar.image("imgs/v-c.png", width=120)
 if st.sidebar.button("🧹 Limpar Campos", use_container_width=True, key="pf_clear"):
@@ -34,28 +34,39 @@ preco_final = preco_base
 
 st.markdown(f"### 💰 Valor Anual À Vista: R$ {preco_base:,.2f}")
 
-st.markdown("### 🎯 Aplicar Desconto:")
-col1, col2 = st.columns([1, 3])
-if col1.checkbox("Ativar Desconto", key="pf_desconto_check"):
+with st.form("form_simulacao_pf"):
+    st.markdown("#### 🎯 Aplicar Desconto:")
+    col1, col2 = st.columns([1, 3])
+    desconto_ativo = col1.checkbox("Ativar Desconto", key="pf_desconto_check")
     percent_desconto = col2.number_input("Percentual (%)", min_value=0.0, max_value=100.0, step=1.0, format="%.2f", key="pf_desconto_percent")
-    if percent_desconto > 0:
-        desconto = (preco_base * (Decimal(str(percent_desconto)) / 100)).quantize(Decimal('0.01'), ROUND_DOWN)
-        preco_final = preco_base - desconto
-        st.success(f"Desconto de R$ {desconto:,.2f} aplicado!")
-
-st.info(f"**Valor Final (com desconto):** R$ {preco_final:,.2f}")
-
-st.markdown("### 💳 Parcelamento:")
-if st.checkbox("Ativar Parcelamento", key="pf_parcela_check"):
+    
+    st.markdown("#### 💳 Parcelamento:")
+    parcelamento_ativo = st.checkbox("Ativar Parcelamento", key="pf_parcela_check")
     num_parcelas_str = st.selectbox("Quantidade de Parcelas:", list(TAXAS_PARCELAMENTO_PF.keys()), key="pf_num_parcelas")
-    taxa_juros = TAXAS_PARCELAMENTO_PF.get(num_parcelas_str, Decimal("0"))
-    num_parcelas = int(num_parcelas_str)
-
-    valor_com_juros = preco_final * (Decimal(1) + taxa_juros)
-    valor_parcela = (valor_com_juros / Decimal(num_parcelas)).quantize(Decimal('0.01'), ROUND_DOWN)
-    total_parcelado = valor_parcela * Decimal(num_parcelas)
-
-    st.success(f"✅ Parcelado em {num_parcelas}x")
-    st.markdown(f"#### {num_parcelas} Parcelas de: R$ {valor_parcela:,.2f}")
-    st.markdown(f"#### Valor Total Parcelado: R$ {total_parcelado:,.2f}")
-    st.caption(f"(Custo do parcelamento: R$ {total_parcelado - preco_final:,.2f})")
+    
+    if st.form_submit_button("Calcular e Registrar Proposta"):
+        if desconto_ativo and percent_desconto > 0:
+            desconto = (preco_base * (Decimal(str(percent_desconto)) / 100)).quantize(Decimal('0.01'), ROUND_DOWN)
+            preco_final = preco_base - desconto
+            st.success(f"Desconto de R$ {desconto:,.2f} aplicado!")
+        
+        st.info(f"**Valor Final (com desconto):** R$ {preco_final:,.2f}")
+        
+        valor_proposta = preco_final
+        
+        if parcelamento_ativo:
+            taxa_juros = TAXAS_PARCELAMENTO_PF.get(num_parcelas_str, Decimal("0"))
+            num_parcelas = int(num_parcelas_str)
+            valor_com_juros = preco_final * (Decimal(1) + taxa_juros)
+            valor_parcela = (valor_com_juros / Decimal(num_parcelas)).quantize(Decimal('0.01'), ROUND_DOWN)
+            total_parcelado = valor_parcela * Decimal(num_parcelas)
+            
+            valor_proposta = total_parcelado
+            
+            st.success(f"✅ Parcelado em {num_parcelas}x")
+            st.markdown(f"##### {num_parcelas} Parcelas de: R$ {valor_parcela:,.2f}")
+            st.markdown(f"##### Valor Total Parcelado: R$ {total_parcelado:,.2f}")
+        
+        umdb.add_log(st.session_state["username"], "Gerou Proposta PF", f"Modelo: {modelo}, Valor: R$ {valor_proposta:,.2f}")
+        umdb.log_proposal({"tipo": "PF", "empresa": f"Cliente PF - {modelo}", "consultor": st.session_state.get('name', 'N/A'), "valor_total": float(valor_proposta)})
+        st.toast("Proposta registrada no dashboard!", icon="📊")
