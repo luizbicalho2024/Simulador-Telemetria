@@ -10,9 +10,9 @@ import user_management_db as umdb
 st.set_page_config(layout="wide", page_title="Simulador Pessoa Jurídica", page_icon="imgs/v-c.png")
 
 if not st.session_state.get("authentication_status"):
-    st.error("🔒 Acesso Negado! Por favor, faça login."); st.stop()
+    st.error("🔒 Acesso Negado!"); st.stop()
 
-# --- 2. CARREGAMENTO DE PREÇOS DINÂMICOS ---
+# --- 2. CARREGAMENTO DE PREÇOS E ESTADO ---
 pricing_config = umdb.get_pricing_config()
 PLANOS_PJ = {k: {p: Decimal(str(v)) for p, v in val.items()} for k, val in pricing_config.get("PLANOS_PJ", {}).items()}
 PRODUTOS_PJ_DESCRICAO = pricing_config.get("PRODUTOS_PJ_DESCRICAO", {})
@@ -22,7 +22,23 @@ if 'proposal_buffer_pj' not in st.session_state:
 if 'proposal_filename_pj' not in st.session_state:
     st.session_state.proposal_filename_pj = ""
 
-# --- 3. INTERFACE ---
+# --- 3. FUNÇÃO AUXILIAR PARA GERAR O DOCX ---
+def gerar_proposta_docx(context):
+    """Gera uma proposta DOCX preenchida usando docxtpl e retorna um buffer de memória."""
+    try:
+        template_path = "Proposta Comercial e Intenção - Verdio.docx"
+        doc = DocxTemplate(template_path)
+        doc.render(context)
+        buffer = BytesIO()
+        doc.save(buffer)
+        buffer.seek(0)
+        return buffer
+    except Exception as e:
+        st.error(f"Erro ao gerar o template DOCX: {e}")
+        st.info(f"Verifique se o ficheiro '{template_path}' existe e se os placeholders (ex: {{%tr for... %}}) estão corretos.")
+        return None
+
+# --- 4. INTERFACE ---
 st.sidebar.image("imgs/v-c.png", width=120)
 if st.sidebar.button("🧹 Limpar Campos", use_container_width=True, key="pj_clear"):
     keys_to_clear = [k for k in st.session_state if k.startswith("pj_")]
@@ -51,7 +67,7 @@ for i, (produto, preco) in enumerate(PLANOS_PJ.get(tempo_contrato, {}).items()):
     if target_col.toggle(f"{produto} - R$ {preco:,.2f}", key=f"pj_toggle_{produto.replace(' ', '_')}"):
         produtos_selecionados[produto] = preco
 
-# --- 4. CÁLCULOS E GERAÇÃO ---
+# --- 5. CÁLCULOS E GERAÇÃO ---
 if produtos_selecionados:
     soma_mensal_veiculo = sum(produtos_selecionados.values())
     valor_mensal_frota = soma_mensal_veiculo * Decimal(qtd_veiculos)
@@ -83,9 +99,11 @@ if produtos_selecionados:
                 }
                 
                 umdb.add_log(st.session_state["username"], "Gerou Proposta PJ", f"Empresa: {empresa}, Valor: R$ {valor_total_contrato:,.2f}")
+                umdb.log_proposal({"tipo": "PJ", "empresa": empresa, "consultor": st.session_state.get('name', 'N/A'), "valor_total": float(valor_total_contrato)})
+                
                 st.session_state.proposal_buffer_pj = gerar_proposta_docx(context)
                 st.session_state.proposal_filename_pj = f"Proposta_{empresa.replace(' ', '_')}.docx"
-                st.toast("Proposta gerada com sucesso!", icon="📄")
+                st.toast("Proposta gerada e registrada com sucesso!", icon="📄")
             else:
                 st.warning("Preencha todos os campos do formulário.")
     
