@@ -17,14 +17,14 @@ pricing_config = umdb.get_pricing_config()
 PLANOS_PJ = {k: {p: Decimal(str(v)) for p, v in val.items()} for k, val in pricing_config.get("PLANOS_PJ", {}).items()}
 PRODUTOS_PJ_DESCRICAO = pricing_config.get("PRODUTOS_PJ_DESCRICAO", {})
 
-if 'proposal_buffer_pj' not in st.session_state:
-    st.session_state.proposal_buffer_pj = None
-if 'proposal_filename_pj' not in st.session_state:
-    st.session_state.proposal_filename_pj = ""
+# Inicializa o estado da página
+if 'pj_proposal_registered' not in st.session_state:
+    st.session_state.pj_proposal_registered = False
+if 'pj_context' not in st.session_state:
+    st.session_state.pj_context = None
 
 # --- 3. FUNÇÃO AUXILIAR PARA GERAR O DOCX ---
 def gerar_proposta_docx(context):
-    """Gera uma proposta DOCX preenchida usando docxtpl e retorna um buffer de memória."""
     try:
         template_path = "Proposta Comercial e Intenção - Verdio.docx"
         doc = DocxTemplate(template_path)
@@ -35,12 +35,11 @@ def gerar_proposta_docx(context):
         return buffer
     except Exception as e:
         st.error(f"Erro ao gerar o template DOCX: {e}")
-        st.info(f"Verifique se o ficheiro '{template_path}' existe e se os placeholders (ex: {{%tr for... %}}) estão corretos.")
         return None
 
 # --- 4. INTERFACE ---
 st.sidebar.image("imgs/v-c.png", width=120)
-if st.sidebar.button("🧹 Limpar Campos", use_container_width=True, key="pj_clear"):
+if st.sidebar.button("🧹 Limpar Campos e Proposta", use_container_width=True, key="pj_clear"):
     keys_to_clear = [k for k in st.session_state if k.startswith("pj_")]
     for k in keys_to_clear: del st.session_state[k]
     st.toast("Campos limpos!", icon="✨"); st.rerun()
@@ -80,16 +79,16 @@ if produtos_selecionados:
     st.info(f"**Valor Total do Contrato:** R$ {valor_total_contrato:,.2f}")
     
     st.markdown("---")
-    st.subheader("📄 Gerar Proposta")
-    with st.form("form_proposta_pj", clear_on_submit=False):
+    st.subheader("📄 Etapa 1: Registrar Proposta")
+    with st.form("form_registrar_proposta_pj"):
         empresa = st.text_input("Nome da Empresa", key="pj_empresa")
         responsavel = st.text_input("Nome do Responsável", key="pj_responsavel")
         consultor = st.text_input("Nome do Consultor", value=st.session_state.get('name', ''), key="pj_consultor")
         validade = st.date_input("Validade da Proposta", value=datetime.today(), key="pj_validade")
         
-        if st.form_submit_button("Gerar e Registrar Proposta"):
+        if st.form_submit_button("Registrar Proposta no Dashboard"):
             if all([empresa, responsavel, consultor]):
-                context = {
+                st.session_state.pj_context = {
                     'NOME_EMPRESA': empresa, 'NOME_RESPONSAVEL': responsavel, 'NOME_CONSULTOR': consultor,
                     'DATA_VALIDADE': validade.strftime("%d/%m/%Y"), 'QTD_VEICULOS': str(qtd_veiculos),
                     'TEMPO_CONTRATO': tempo_contrato, 'VALOR_MENSAL_FROTA': f"R$ {valor_mensal_frota:,.2f}",
@@ -98,18 +97,25 @@ if produtos_selecionados:
                     'SOMA_TOTAL_MENSAL_VEICULO': f"R$ {soma_mensal_veiculo:,.2f}"
                 }
                 
-                umdb.add_log(st.session_state["username"], "Gerou Proposta PJ", f"Empresa: {empresa}, Valor: R$ {valor_total_contrato:,.2f}")
+                umdb.add_log(st.session_state["username"], "Registrou Proposta PJ", f"Empresa: {empresa}, Valor: R$ {valor_total_contrato:,.2f}")
                 umdb.log_proposal({"tipo": "PJ", "empresa": empresa, "consultor": st.session_state.get('name', 'N/A'), "valor_total": float(valor_total_contrato)})
                 
-                st.session_state.proposal_buffer_pj = gerar_proposta_docx(context)
-                st.session_state.proposal_filename_pj = f"Proposta_{empresa.replace(' ', '_')}.docx"
-                st.toast("Proposta gerada e registrada com sucesso!", icon="📄")
+                st.session_state.pj_proposal_registered = True
+                st.toast("Proposta registrada com sucesso! Agora você pode gerar o documento.", icon="✅")
             else:
                 st.warning("Preencha todos os campos do formulário.")
-    
-    if st.session_state.proposal_buffer_pj is not None:
-        st.download_button(
-            label="📥 Baixar Proposta Gerada", data=st.session_state.proposal_buffer_pj,
-            file_name=st.session_state.proposal_filename_pj,
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        )
+
+    if st.session_state.pj_proposal_registered:
+        st.markdown("---")
+        st.subheader("📄 Etapa 2: Gerar Documento")
+        
+        # Gera o buffer do DOCX para o download
+        docx_buffer = gerar_proposta_docx(st.session_state.pj_context)
+        
+        if docx_buffer:
+            st.download_button(
+                label="📥 Baixar Proposta Gerada (.docx)",
+                data=docx_buffer,
+                file_name=f"Proposta_{st.session_state.pj_context['NOME_EMPRESA'].replace(' ', '_')}.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
