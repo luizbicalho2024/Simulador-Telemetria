@@ -14,7 +14,7 @@ if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. DADOS (Extraídos dos seus ficheiros) ---
+# --- 2. DADOS (Extraídos do PDF) ---
 # Dados para o gráfico de comparação de funcionalidades
 comparison_data = {
     'labels': ['VERDIO', 'Sascar', 'Omnilink', 'Onixsat', 'Autotrac', 'Veltec', 'Maxtrack', 'Getrak'],
@@ -27,7 +27,7 @@ comparison_data = {
     ]
 }
 
-# Dados para o gráfico de custo-benefício (bubble chart)
+# Dados para o gráfico de custo-benefício
 price_performance_data = {
     'labels': ['Getrak', 'VERDIO', 'Maxtrack', 'Sascar', 'Omnilink', 'Autotrac', 'Veltec', 'Onixsat'],
     'data': [
@@ -49,19 +49,32 @@ try:
 except: pass
 
 st.markdown("<h1 style='text-align: center; color: #006494;'>Análise Competitiva de Mercado</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; font-size: 1.2em;'>Inteligência para Frotas</p>", unsafe_allow_html=True)
 st.markdown("---")
 
 # --- SEÇÃO INTRODUTÓRIA E ROI ---
 st.subheader("O Desafio da Frota Moderna")
-st.write("Gerenciar uma frota hoje é um ato de equilíbrio entre reduzir custos operacionais e mitigar riscos críticos. Falhas na gestão resultam em perdas financeiras e vulnerabilidades que podem comprometer toda a operação.")
+st.write("Gerenciar uma frota hoje é um ato de equilíbrio entre reduzir custos operacionais e mitigar riscos críticos. Falhas na gestão resultam em perdas financeiras e vulnerabilidades que podem comprometer toda a operação." ,"")
 st.metric(label="Retorno sobre o Investimento (ROI) com Gestão Eficiente", value="200%")
-st.caption("Cálculo baseado na eliminação de custos invisíveis versus o investimento na plataforma Verdio.")
+st.caption("Cálculo baseado na eliminação de custos invisíveis versus o investimento na plataforma Verdio." ,"")
+st.markdown("---")
+
+# --- SEÇÃO SOLUÇÃO VERDIO ---
+st.subheader("Verdio: A Solução Integrada")
+st.write("Verdio transforma dados brutos em decisões inteligentes, conectando a tecnologia embarcada no veículo à gestão estratégica do negócio, focando em segurança, conformidade e, principalmente, rentabilidade." ,"")
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.info("🛰️ **Tecnologia Embarcada:** Hardware de ponta, incluindo rastreador, vídeo e sensor de fadiga." ,"")
+with col2:
+    st.info("📊 **Plataforma de Gestão:** Dashboards claros, relatórios financeiros e controle de jornada." ,"")
+with col3:
+    st.success("🏆 **Decisão e Resultado:** ROI comprovado, mais segurança e total conformidade legal." ,"")
 st.markdown("---")
 
 # --- SEÇÃO CENÁRIO COMPETITIVO ---
 st.subheader("Cenário Competitivo")
-col1, col2 = st.columns(2)
-with col1:
+col_a, col_b = st.columns(2)
+with col_a:
     st.markdown("##### Players Nacionais e Mundiais")
     st.markdown("""
     - Sascar (Michelin)
@@ -72,7 +85,7 @@ with col1:
     - Onixsat
     - Veltec
     """)
-with col2:
+with col_b:
     st.markdown("##### Players Regionais e de Nicho")
     st.markdown("""
     - Getrak
@@ -87,83 +100,64 @@ st.markdown("---")
 
 # --- SEÇÃO GRÁFICO DE FUNCIONALIDADES ---
 st.subheader("Verdio vs. Concorrência: A Vantagem Clara")
-st.write("Analisando as funcionalidades-chave, o Verdio se destaca por oferecer um pacote completo e tecnologicamente avançado a um preço competitivo. O nosso principal diferencial, o Sensor de Fadiga, é um recurso de segurança que a maioria dos concorrentes não oferece ou cobra um valor premium.")
+st.write("Analisando as funcionalidades-chave, o Verdio se destaca por oferecer um pacote completo e tecnologicamente avançado a um preço competitivo. O nosso principal diferencial, o Sensor de Fadiga, é um recurso de segurança que a maioria dos concorrentes não oferece ou cobra um valor premium." ,"")
 
-# Cria o gráfico de barras empilhadas com Plotly
 fig_features = go.Figure()
 for dataset in comparison_data['datasets']:
     fig_features.add_trace(go.Bar(
-        y=comparison_data['labels'],
-        x=dataset['data'],
-        name=dataset['label'],
-        orientation='h',
-        marker=dict(color=dataset['color'])
+        y=comparison_data['labels'], x=dataset['data'], name=dataset['label'],
+        orientation='h', marker=dict(color=dataset['color'])
     ))
-
 fig_features.update_layout(
-    title='Comparativo de Funcionalidades por Empresa',
-    barmode='stack',
-    yaxis_title="Empresa",
+    title='Comparativo de Funcionalidades por Empresa', barmode='stack',
+    yaxis={'categoryorder':'total ascending'}, yaxis_title="Empresa",
     xaxis_title="Funcionalidades Oferecidas (Pontuação)",
-    legend_orientation="h",
-    legend_yanchor="bottom",
-    legend_y=1.02,
-    height=500
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    height=500, margin=dict(l=20, r=20, t=50, b=20)
 )
 st.plotly_chart(fig_features, use_container_width=True)
 st.markdown("---")
 
 # --- SEÇÃO GRÁFICO DE CUSTO-BENEFÍCIO ---
 st.subheader("Custo-Benefício no Mercado")
-st.write("Ao cruzar o preço inicial com a quantidade de funcionalidades essenciais (Telemetria, Vídeo, Fadiga, Jornada, Roteirização), o Verdio se posiciona no 'quadrante de alto valor', entregando a mais completa suíte de recursos pelo preço mais competitivo.")
+st.write("Ao cruzar o preço inicial com a quantidade de funcionalidades essenciais, o Verdio se posiciona no 'quadrante de alto valor', entregando a mais completa suíte de recursos pelo preço mais competitivo." ,"")
 
-# Cria o bubble chart com Plotly
 bubble_colors = [price_performance_data['verdiocolor'] if label == 'VERDIO' else price_performance_data['competitorcolor'] for label in price_performance_data['labels']]
-
 fig_bubble = go.Figure(data=[go.Scatter(
     x=[d['x'] for d in price_performance_data['data']],
     y=[d['y'] for d in price_performance_data['data']],
-    text=price_performance_data['labels'],
-    mode='markers',
+    text=price_performance_data['labels'], mode='markers+text',
+    textposition="top center",
     marker=dict(
-        size=[d['r'] for d in price_performance_data['data']],
-        color=bubble_colors,
-        sizemode='diameter',
-        showscale=False
+        size=[d['r'] for d in price_performance_data['data']], color=bubble_colors,
+        sizemode='diameter', showscale=False
     )
 )])
-
 fig_bubble.update_layout(
-    title='Preço Mensal vs. Quantidade de Funcionalidades',
+    title='Preço Mensal vs. Quantidade de Funcionalidades Essenciais',
     xaxis_title="Preço Mensal (A partir de R$)",
     yaxis_title="Nº de Funcionalidades Essenciais",
-    height=500
+    height=500, margin=dict(l=20, r=20, t=50, b=20)
 )
 st.plotly_chart(fig_bubble, use_container_width=True)
 st.markdown("---")
 
 # --- SEÇÃO CLIENTES-ALVO ---
 st.subheader("Nossos Alvos: A Oportunidade de Mercado")
-col3, col4 = st.columns(2)
-with col3:
-    st.markdown("##### 🎯 Alvos em Locadoras")
-    st.markdown("""
-    - LOCALIZA HERTZ
-    - MOVIDA
-    - UNIDAS
-    - AS RENT A CAR
-    - FOCO ALUGUEL DE CARROS
-    - YES RENT A CAR
-    - VAMOS LOCADORA
-    """)
-with col4:
-    st.markdown("##### 🎯 Alvos em Transportadoras")
-    st.markdown("""
-    - JSL
-    - TRANSPORTE BERTOLINI
-    - ATUAL CARGAS
-    - BRASPRESS
-    - CARVALIMA
-    - COOPERCarga
-    - RODONAVES
-    """)
+col_c, col_d = st.columns(2)
+with col_c:
+    st.info("🎯 **Alvos em Locadoras:** LOCALIZA HERTZ, MOVIDA, UNIDAS, AS RENT A CAR, FOCO, YES RENT A CAR, VAMOS LOCADORA." ,"")
+with col_d:
+    st.info("🎯 **Alvos em Transportadoras:** JSL, TRANSPORTE BERTOLINI, ATUAL CARGAS, BRASPRESS, CARVALIMA, COOPERCarga, RODONAVES." ,"")
+st.markdown("---")
+
+# --- SEÇÃO IMPLANTAÇÃO ---
+st.subheader("Implantação Ágil: Do Contrato ao Valor")
+st.write("Nossa promessa é clara: frotas de até 200 veículos implantadas em 30 dias, sem paralisar a operação do cliente. O nosso processo é consultivo e pensado para gerar resultados rápidos." ,"")
+st.image("https://i.imgur.com/your-timeline-image.png") # Sugestão: Crie uma imagem para o seu timeline
+st.markdown("""
+- **1. Diagnóstico:** Análise da frota e sistemas atuais.
+- **2. Proposta Sob Medida:** Plano customizado para o seu negócio.
+- **3. Implantação:** Instalação do hardware sem parar a frota.
+- **4. Treinamento:** Capacitação das equipas operacionais.
+""")
