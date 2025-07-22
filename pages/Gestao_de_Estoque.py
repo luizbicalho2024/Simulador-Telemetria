@@ -17,8 +17,15 @@ if not st.session_state.get("authentication_status"):
 # --- 2. FUNÇÕES AUXILIARES ---
 def processar_estoque_sistema(df_sistema):
     """Processa e limpa o DataFrame do estoque do sistema."""
-    df_sistema = df_sistema.iloc[1:] # Assume que a primeira linha é um cabeçalho e a remove
+    # Encontra a primeira linha que serve de cabeçalho (procurando pela palavra 'ID')
+    header_row_index = df_sistema[df_sistema.iloc[:, 0] == 'ID'].index[0]
+    # Define o cabeçalho
+    df_sistema.columns = df_sistema.iloc[header_row_index]
+    # Remove todas as linhas acima e incluindo o cabeçalho
+    df_sistema = df_sistema.iloc[header_row_index + 1:].reset_index(drop=True)
+    # Renomeia as colunas para um formato padronizado
     df_sistema.columns = ['ID', 'Data Cadastro', 'Última Transmissão', 'Modelo', 'Versão', 'Serial', 'Status']
+    # Limpa os dados da coluna Serial
     df_sistema['Serial'] = df_sistema['Serial'].astype(str).str.strip()
     return df_sistema
 
@@ -46,7 +53,7 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.info("**1. Estoque do Sistema**")
-    st.warning("⚠️ **Importante:** Abra o ficheiro `relatorio_rastreador.xls` no Excel e guarde-o como .CSV antes de o carregar aqui.")
+    st.warning("⚠️ **Importante:** Abra o ficheiro `relatorio_rastreador.xls` no Excel e guarde-o como .CSV (separado por vírgulas) antes de o carregar aqui.")
     uploaded_sistema = st.file_uploader(
         "Carregue o ficheiro do sistema (guardado como .csv)",
         type=['csv']
@@ -64,7 +71,9 @@ st.markdown("---")
 # --- 5. ANÁLISE E COMPARAÇÃO ---
 if uploaded_sistema and uploaded_fisico:
     try:
-        df_sistema = pd.read_csv(uploaded_sistema)
+        # ***** CORREÇÃO PRINCIPAL AQUI *****
+        # Lê o CSV especificando o ponto e vírgula como delimitador e ignorando linhas com erro
+        df_sistema = pd.read_csv(uploaded_sistema, delimiter=';', on_bad_lines='skip', header=None, encoding='latin-1')
         
         try:
             df_fisico = pd.read_excel(uploaded_fisico)
