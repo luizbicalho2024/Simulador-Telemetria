@@ -56,7 +56,6 @@ if not credentials.get("usernames"):
 # B. Processo de Login
 authenticator.login(location='main')
 
-# Regista o evento de login apenas uma vez por sessão
 if "logged_in_log" not in st.session_state:
     st.session_state.logged_in_log = False
 if st.session_state["authentication_status"] and not st.session_state.logged_in_log:
@@ -64,7 +63,6 @@ if st.session_state["authentication_status"] and not st.session_state.logged_in_
     st.session_state.logged_in_log = True
 elif not st.session_state["authentication_status"]:
     st.session_state.logged_in_log = False
-
 
 if st.session_state["authentication_status"]:
     # --- PÓS-LOGIN ---
@@ -100,12 +98,23 @@ if st.session_state["authentication_status"]:
         st.markdown("---")
         st.subheader("Painel de Administração")
         
-        tab_ver, tab_cad, tab_edit, tab_del, tab_precos = st.tabs([
-            "👁️ Utilizadores", "➕ Cadastrar", "✏️ Editar", "🗑️ Excluir", "⚙️ Gerir Preços"
+        tab_ver, tab_cad, tab_edit, tab_del, tab_reset, tab_precos = st.tabs([
+            "👁️ Utilizadores", "➕ Cadastrar", "✏️ Editar", "🗑️ Excluir", "🔑 Resetar Senha", "⚙️ Gerir Preços"
         ])
 
         with tab_ver:
-            st.dataframe(umdb.get_all_users_for_admin_display(), use_container_width=True, hide_index=True)
+            st.markdown("##### Pesquisar Utilizador")
+            search_query = st.text_input("Pesquisar por nome ou username:", key="admin_search")
+            all_users = umdb.get_all_users_for_admin_display()
+            if search_query:
+                search_query = search_query.lower()
+                filtered_users = [
+                    user for user in all_users 
+                    if search_query in user.get('name', '').lower() or search_query in user.get('username', '').lower()
+                ]
+                st.dataframe(filtered_users, use_container_width=True, hide_index=True)
+            else:
+                st.dataframe(all_users, use_container_width=True, hide_index=True)
 
         with tab_cad:
             with st.form("form_cadastrar", clear_on_submit=True):
@@ -126,7 +135,11 @@ if st.session_state["authentication_status"]:
 
         users_dict = {u['username']: u for u in umdb.get_all_users_for_admin_display()}
         if users_dict:
-            user_to_manage = st.selectbox("Selecione um utilizador para Editar ou Excluir:", list(users_dict.keys()), key="user_select_manage")
+            user_to_manage = st.selectbox(
+                "Selecione um utilizador para Editar ou Excluir:", 
+                list(users_dict.keys()), 
+                key="user_select_manage"
+            )
             user_data = users_dict.get(user_to_manage, {})
 
             with tab_edit:
@@ -154,6 +167,25 @@ if st.session_state["authentication_status"]:
             with tab_edit: st.info("Nenhum utilizador para editar.")
             with tab_del: st.info("Nenhum utilizador para excluir.")
 
+        with tab_reset:
+            st.subheader("Resetar Senha de Utilizador")
+            users_list_reset = [u['username'] for u in umdb.get_all_users_for_admin_display()]
+            if not users_list_reset:
+                st.info("Nenhum utilizador disponível.")
+            else:
+                user_to_reset = st.selectbox("Selecione o utilizador:", users_list_reset, key="admin_reset_select")
+                with st.form(f"form_reset_password_{user_to_reset}", clear_on_submit=True):
+                    new_password = st.text_input("Digite a NOVA senha", type="password")
+                    if st.form_submit_button("Resetar Senha"):
+                        if new_password:
+                            if umdb.reset_user_password_by_admin(user_to_reset, new_password):
+                                umdb.add_log(username, "Resetou Senha", f"Senha resetada para o utilizador: {user_to_reset}")
+                                st.toast(f"Senha para '{user_to_reset}' resetada com sucesso!", icon="🔑")
+                            else:
+                                st.error("Falha ao resetar a senha.")
+                        else:
+                            st.warning("A nova senha não pode ser vazia.")
+                            
         with tab_precos:
             st.subheader("Gestão de Preços e Taxas da Plataforma")
             pricing_config = umdb.get_pricing_config()
@@ -163,7 +195,7 @@ if st.session_state["authentication_status"]:
                     col1, col2 = st.columns(2)
                     pf_prices["GPRS / Gsm"] = col1.number_input("Preço Rastreador GPRS/GSM (PF)", value=float(pf_prices.get("GPRS / Gsm", 0.0)), format="%.2f", key="pf_gprs")
                     pf_prices["Satelital"] = col2.number_input("Preço Rastreador Satelital (PF)", value=float(pf_prices.get("Satelital", 0.0)), format="%.2f", key="pf_satelital")
-
+                
                 with st.expander("Simulador Licitação (Custos)", expanded=True):
                     licit_prices = pricing_config.get("PRECO_CUSTO_LICITACAO", {})
                     l_col1, l_col2, l_col3 = st.columns(3)
