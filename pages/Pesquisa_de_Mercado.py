@@ -14,26 +14,41 @@ if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. FUNÇÕES PARA CARREGAR DADOS ---
-@st.cache_data
-def load_data():
-    """Carrega todos os dados dos ficheiros CSV."""
-    try:
-        df_comparativo = pd.read_csv("pesqusisa de mercado rastreadores março 2025.xlsx - comparativo.csv")
-        df_precos = pd.read_csv("pesqusisa de mercado rastreadores março 2025.xlsx - preços praticados .csv")
-        df_empresas = pd.read_csv("pesqusisa de mercado rastreadores março 2025.xlsx - empresas.csv")
-        df_alvos = pd.read_csv("Locadoras e Transportadoras.xlsx - Página1.csv")
-        
-        return df_comparativo, df_precos, df_empresas, df_alvos
-    except FileNotFoundError as e:
-        st.error(f"Erro ao carregar os ficheiros de dados: {e}. Certifique-se de que os ficheiros .csv estão na pasta raiz do projeto.")
-        return None, None, None, None
+# --- 2. ESTRUTURA DE DADOS CENTRALIZADA (SUBSTITUI OS .CSV) ---
+MARKET_DATA = {
+    "comparativo_features": [
+        {'Empresa': 'VERDIO', 'Telemetria (CAN)': 'Sim', 'Vídeo Monitoramento': 'Sim', 'Sensor de Fadiga': 'Sim', 'Controle de Jornada': 'Sim', 'Roteirizador': 'Sim'},
+        {'Empresa': 'Sascar', 'Telemetria (CAN)': 'Sim', 'Vídeo Monitoramento': 'Sim', 'Sensor de Fadiga': 'Não', 'Controle de Jornada': 'Sim', 'Roteirizador': 'Sim'},
+        {'Empresa': 'Omnilink', 'Telemetria (CAN)': 'Sim', 'Vídeo Monitoramento': 'Sim', 'Sensor de Fadiga': 'Não', 'Controle de Jornada': 'Sim', 'Roteirizador': 'Sim'},
+        {'Empresa': 'Onixsat', 'Telemetria (CAN)': 'Sim', 'Vídeo Monitoramento': 'Não', 'Sensor de Fadiga': 'Não', 'Controle de Jornada': 'Sim', 'Roteirizador': 'Não'},
+        {'Empresa': 'Autotrac', 'Telemetria (CAN)': 'Não', 'Vídeo Monitoramento': 'Não', 'Sensor de Fadiga': 'Não', 'Controle de Jornada': 'Não', 'Roteirizador': 'Sim'},
+        {'Empresa': 'Veltec', 'Telemetria (CAN)': 'Sim', 'Vídeo Monitoramento': 'Sim', 'Sensor de Fadiga': 'Não', 'Controle de Jornada': 'Sim', 'Roteirizador': 'Sim'},
+        {'Empresa': 'Maxtrack', 'Telemetria (CAN)': 'Sim', 'Vídeo Monitoramento': 'Não', 'Sensor de Fadiga': 'Não', 'Controle de Jornada': 'Não', 'Roteirizador': 'Sim'},
+        {'Empresa': 'Getrak', 'Telemetria (CAN)': 'Não', 'Vídeo Monitoramento': 'Não', 'Sensor de Fadiga': 'Não', 'Controle de Jornada': 'Não', 'Roteirizador': 'Não'},
+    ],
+    "precos_performance": [
+        {'Empresa': 'Getrak', 'Preço Mensal (a partir de)': 34.90, 'Nº de Funcionalidades Essenciais': 0},
+        {'Empresa': 'VERDIO', 'Preço Mensal (a partir de)': 40.00, 'Nº de Funcionalidades Essenciais': 5},
+        {'Empresa': 'Maxtrack', 'Preço Mensal (a partir de)': 59.90, 'Nº de Funcionalidades Essenciais': 2},
+        {'Empresa': 'Sascar', 'Preço Mensal (a partir de)': 79.90, 'Nº de Funcionalidades Essenciais': 4},
+        {'Empresa': 'Omnilink', 'Preço Mensal (a partir de)': 89.90, 'Nº de Funcionalidades Essenciais': 4},
+        {'Empresa': 'Autotrac', 'Preço Mensal (a partir de)': 99.90, 'Nº de Funcionalidades Essenciais': 1},
+        {'Empresa': 'Veltec', 'Preço Mensal (a partir de)': 110.00, 'Nº de Funcionalidades Essenciais': 4},
+        {'Empresa': 'Onixsat', 'Preço Mensal (a partir de)': 120.00, 'Nº de Funcionalidades Essenciais': 2},
+    ],
+    "empresas_concorrentes": {
+        "nacional_mundial": ["Sascar (Michelin)", "Omnilink", "Ituran", "Positron", "Autotrac", "Onixsat", "Veltec"],
+        "regional_nicho": ["Getrak", "Maxtrack", "CEABS", "SystemSat", "GolSat", "Sighra", "3S"]
+    },
+    "alvos": {
+        "locadoras": ["LOCALIZA HERTZ", "MOVIDA", "UNIDAS", "AS RENT A CAR", "FOCO ALUGUEL DE CARROS", "YES RENT A CAR", "VAMOS LOCADORA"],
+        "transportadoras": ["JSL", "TRANSPORTE BERTOLINI", "ATUAL CARGAS", "BRASPRESS", "CARVALIMA", "COOPERCarga", "RODONAVES"]
+    }
+}
 
-# Carrega os dados
-df_comparativo, df_precos, df_empresas, df_alvos = load_data()
-
-if df_comparativo is None:
-    st.stop()
+# Converte os dados para DataFrames do Pandas para fácil manipulação
+df_comparativo = pd.DataFrame(MARKET_DATA["comparativo_features"])
+df_precos = pd.DataFrame(MARKET_DATA["precos_performance"])
 
 # --- 3. INTERFACE DA PÁGINA ---
 st.sidebar.image("imgs/v-c.png", width=120)
@@ -52,41 +67,36 @@ st.subheader("Nosso Mercado-Alvo")
 st.markdown("""
 | Segmento | Dor Principal | Oportunidade para o Verdio |
 |---|---|---|
-| **Locadoras de Veículos** | Risco e Descontrole do Ativo: Uso indevido, sinistros, multas e a dificuldade de garantir a segurança do patrimônio. | Oferecer uma solução de proteção do ativo e segurança jurídica, que vai além do simples rastreamento. |
-| **Transportadoras** | Altos Custos Operacionais e Riscos Trabalhistas: Consumo excessivo de combustível, manutenção imprevista, acidentes por fadiga. | Entregar uma plataforma de eficiência operacional e compliance, com ROI claro através da redução de custos. |
+| **Locadoras de Veículos** | Risco e Descontrole do Ativo: Uso indevido, sinistros e a dificuldade de garantir a segurança do patrimônio. | Oferecer uma solução de proteção do ativo e segurança jurídica, que vai além do simples rastreamento. |
+| **Transportadoras** | Altos Custos Operacionais e Riscos Trabalhistas: Consumo excessivo de combustível, manutenção imprevista e acidentes. | Entregar uma plataforma de eficiência operacional e compliance, com ROI claro através da redução de custos. |
 """)
 st.markdown("---")
 
-# --- SEÇÃO DIFERENCIAIS ---
-st.subheader("Nossos Diferenciais Competitivos")
-st.write("Para vencer no mercado, nosso discurso deve focar nos pilares que a concorrência não entrega de forma integrada:")
-st.info("📊 **Gestão Financeira Integrada (ROI Claro):** Nossos dashboards transformam dados operacionais (combustível, ociosidade) em indicadores financeiros, provando o retorno sobre o investimento.")
-st.info("👮‍♂️ **Segurança Jurídica e Compliance:** Somos a única solução que integra a gestão da Lei do Motorista com o sensor de fadiga, mitigando passivos trabalhistas e acidentes.")
-st.info("💡 **Inovação Acessível:** Oferecemos tecnologias de ponta (sensor de fadiga, vídeo) que são tipicamente premium, como parte do nosso pacote padrão.")
+# --- SEÇÃO CENÁRIO COMPETITIVO ---
+st.subheader("Cenário Competitivo")
+col_a, col_b = st.columns(2)
+with col_a:
+    st.markdown("##### Players Nacionais e Mundiais")
+    for empresa in MARKET_DATA["empresas_concorrentes"]["nacional_mundial"]:
+        st.markdown(f"- {empresa}")
+with col_b:
+    st.markdown("##### Players Regionais e de Nicho")
+    for empresa in MARKET_DATA["empresas_concorrentes"]["regional_nicho"]:
+        st.markdown(f"- {empresa}")
 st.markdown("---")
-
 
 # --- SEÇÃO GRÁFICO DE FUNCIONALIDADES ---
 st.subheader("Verdio vs. Concorrência: A Vantagem Clara")
-st.write("Analisando as funcionalidades-chave, o Verdio se destaca por oferecer um pacote completo e tecnologicamente avançado a um preço competitivo.")
-
-# Prepara os dados do CSV para o gráfico
-df_comparativo_chart = df_comparativo.head(8) # Pega os 8 principais concorrentes
+fig_features = go.Figure()
 features = ['Telemetria (CAN)', 'Vídeo Monitoramento', 'Sensor de Fadiga', 'Controle de Jornada', 'Roteirizador']
 colors = ['#006494', '#0582CA', '#A7C957', '#00A6FB', '#6A994E']
 
-fig_features = go.Figure()
 for feature, color in zip(features, colors):
-    # Converte 'Sim'/'Não' para 1/0
-    x_data = df_comparativo_chart[feature].apply(lambda x: 1 if str(x).strip().lower() == 'sim' else 0)
+    x_data = df_comparativo[feature].apply(lambda x: 1 if str(x).strip().lower() == 'sim' else 0)
     fig_features.add_trace(go.Bar(
-        y=df_comparativo_chart['Empresa'],
-        x=x_data,
-        name=feature,
-        orientation='h',
-        marker=dict(color=color)
+        y=df_comparativo['Empresa'], x=x_data, name=feature,
+        orientation='h', marker=dict(color=color)
     ))
-
 fig_features.update_layout(
     title='Comparativo de Funcionalidades por Empresa', barmode='stack',
     yaxis={'categoryorder':'total ascending'}, yaxis_title="Empresa",
@@ -99,31 +109,19 @@ st.markdown("---")
 
 # --- SEÇÃO GRÁFICO DE CUSTO-BENEFÍCIO ---
 st.subheader("Custo-Benefício no Mercado")
-st.write("Ao cruzar o preço inicial com a quantidade de funcionalidades essenciais, o Verdio se posiciona no 'quadrante de alto valor', entregando a mais completa suíte de recursos pelo preço mais competitivo.")
-
-# Prepara os dados do CSV para o gráfico
-df_precos_chart = df_precos.head(8)
-df_precos_chart['color'] = df_precos_chart['Empresa'].apply(lambda x: '#A7C957' if x == 'VERDIO' else '#0582CA')
-df_precos_chart['size'] = df_precos_chart['Empresa'].apply(lambda x: 25 if x == 'VERDIO' else 15)
+df_precos['color'] = df_precos['Empresa'].apply(lambda x: '#A7C957' if x == 'VERDIO' else '#0582CA')
+df_precos['size'] = df_precos['Nº de Funcionalidades Essenciais'].apply(lambda y: y * 5 + 10) # Ajusta o tamanho da bolha
 
 fig_bubble = go.Figure(data=[go.Scatter(
-    x=df_precos_chart['Preço Mensal (a partir de)'],
-    y=df_precos_chart['Nº de Funcionalidades Essenciais'],
-    text=df_precos_chart['Empresa'],
-    mode='markers+text',
-    textposition="top center",
-    marker=dict(
-        size=df_precos_chart['size'],
-        color=df_precos_chart['color'],
-        sizemode='diameter'
-    )
+    x=df_precos['Preço Mensal (a partir de)'], y=df_precos['Nº de Funcionalidades Essenciais'],
+    text=df_precos['Empresa'], mode='markers+text', textposition="top center",
+    marker=dict(size=df_precos['size'], color=df_precos['color'])
 )])
 fig_bubble.update_layout(
     title='Preço Mensal vs. Quantidade de Funcionalidades Essenciais',
     xaxis_title="Preço Mensal (A partir de R$)",
     yaxis_title="Nº de Funcionalidades Essenciais",
-    height=500, margin=dict(l=20, r=20, t=50, b=20),
-    showlegend=False
+    height=500, margin=dict(l=20, r=20, t=50, b=20), showlegend=False
 )
 st.plotly_chart(fig_bubble, use_container_width=True)
 st.markdown("---")
@@ -133,9 +131,9 @@ st.subheader("Nossos Alvos Regionais")
 col_c, col_d = st.columns(2)
 with col_c:
     st.info("🎯 **Alvos em Locadoras**")
-    for locadora in df_alvos[df_alvos['Tipo'] == 'Locadora']['Empresa']:
+    for locadora in MARKET_DATA["alvos"]["locadoras"]:
         st.markdown(f"- {locadora}")
 with col_d:
     st.info("🎯 **Alvos em Transportadoras**")
-    for transportadora in df_alvos[df_alvos['Tipo'] == 'Transportadora']['Empresa']:
+    for transportadora in MARKET_DATA["alvos"]["transportadoras"]:
         st.markdown(f"- {transportadora}")
