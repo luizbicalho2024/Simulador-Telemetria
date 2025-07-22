@@ -2,7 +2,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-import plotly.express as px # Importado para a paleta de cores
+import plotly.express as px
 import re
 
 # --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
@@ -16,29 +16,10 @@ if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. DADOS CENTRALIZADOS ---
+# --- 2. DADOS CENTRALIZADOS (Versão Corrigida e Completa) ---
 MARKET_DATA = {
-    "precos_nacionais": [
-        {'Empresa': 'VERDIO (Referência)', 'Instalação (GPRS)': 'Alguns casos - R$ 50,00', 'Mensalidade (GPRS)': 'A partir de R$ 40,00', 'Instalação (Satelital)': 'Alguns casos - R$ 50,00', 'Mensalidade (Satelital)': 'A partir de R$ 107,67'},
-        {'Empresa': 'Sascar', 'Instalação (GPRS)': 'R$ 0,00', 'Mensalidade (GPRS)': 'R$ 79,90', 'Instalação (Satelital)': 'R$ 824,19', 'Mensalidade (Satelital)': 'R$ 193,80'},
-        {'Empresa': 'Omnilink', 'Instalação (GPRS)': 'R$ 0,00', 'Mensalidade (GPRS)': 'R$ 89,90', 'Instalação (Satelital)': 'R$ 554,00', 'Mensalidade (Satelital)': 'R$ 193,80'},
-        {'Empresa': 'Onixsat', 'Instalação (GPRS)': '–', 'Mensalidade (GPRS)': '–', 'Instalação (Satelital)': 'R$ 0,00', 'Mensalidade (Satelital)': 'R$ 120,00'},
-        {'Empresa': 'Veltec', 'Instalação (GPRS)': 'R$ 0,00', 'Mensalidade (GPRS)': 'R$ 110,00', 'Instalação (Satelital)': '–', 'Mensalidade (Satelital)': '–'},
-        {'Empresa': 'Positron', 'Instalação (GPRS)': 'R$ 0,00', 'Mensalidade (GPRS)': 'R$ 75,00', 'Instalação (Satelital)': 'R$ 256,27', 'Mensalidade (Satelital)': 'R$ 191,05'},
-        {'Empresa': 'Autotrac', 'Instalação (GPRS)': 'R$ 0,00', 'Mensalidade (GPRS)': 'R$ 99,90', 'Instalação (Satelital)': '–', 'Mensalidade (Satelital)': '–'},
-        {'Empresa': 'Maxtrack', 'Instalação (GPRS)': 'R$ 0,00', 'Mensalidade (GPRS)': 'R$ 59,90', 'Instalação (Satelital)': '–', 'Mensalidade (Satelital)': '–'},
-    ],
-    "precos_regionais": [
-        {'Empresa': 'Elite Rastro', 'Instalação (GPRS)': 'R$ 30,00', 'Mensalidade (GPRS)': 'R$ 50,00', 'Instalação (Satelital)': 'R$ 900,00', 'Mensalidade (Satelital)': 'R$ 180,00'},
-        {'Empresa': 'NJ Rastreamento', 'Instalação (GPRS)': 'R$ 120,00', 'Mensalidade (GPRS)': 'R$ 75,00', 'Instalação (Satelital)': 'R$ 650,00', 'Mensalidade (Satelital)': 'R$ 170,00'},
-        {'Empresa': 'TK Rastreadores', 'Instalação (GPRS)': 'R$ 80,00', 'Mensalidade (GPRS)': 'R$ 69,90', 'Instalação (Satelital)': 'R$ 980,00', 'Mensalidade (Satelital)': 'R$ 150,00'},
-        {'Empresa': 'vtrackrastreamento', 'Instalação (GPRS)': 'R$ 0,00', 'Mensalidade (GPRS)': 'R$ 50,00', 'Instalação (Satelital)': '–', 'Mensalidade (Satelital)': '–'},
-        {'Empresa': 'rastrek', 'Instalação (GPRS)': 'R$ 0,00', 'Mensalidade (GPRS)': 'R$ 60,00', 'Instalação (Satelital)': 'R$ 0,00', 'Mensalidade (Satelital)': 'R$ 130,00'},
-        {'Empresa': 'Pro Lion', 'Instalação (GPRS)': 'R$ 99,90', 'Mensalidade (GPRS)': 'R$ 49,90 - R$ 69,90', 'Instalação (Satelital)': '–', 'Mensalidade (Satelital)': '–'},
-        {'Empresa': 'Impacto Rast.', 'Instalação (GPRS)': 'R$ 0,00', 'Mensalidade (GPRS)': 'R$ 45,00', 'Instalação (Satelital)': '–', 'Mensalidade (Satelital)': '–'},
-    ],
-    "funcionalidades_nacionais": [
-        {'Empresa': 'VERDIO (Rovema)', 'Telemetria (CAN)': '✅ Sim', 'Vídeo': '✅ Sim', 'Sensor de Fadiga': '✅ Sim', 'Controle de Jornada': '✅ Sim', 'Roteirizador': '✅ Sim', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
+    "funcionalidades": [
+        {'Empresa': 'VERDIO', 'Telemetria (CAN)': '✅ Sim', 'Vídeo': '✅ Sim', 'Sensor de Fadiga': '✅ Sim', 'Controle de Jornada': '✅ Sim', 'Roteirizador': '✅ Sim', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
         {'Empresa': 'Sascar', 'Telemetria (CAN)': '✅ Sim', 'Vídeo': '✅ Sim', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '✅ Sim', 'Roteirizador': '✅ Sim', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
         {'Empresa': 'Omnilink', 'Telemetria (CAN)': '✅ Sim', 'Vídeo': '✅ Sim', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '✅ Sim', 'Roteirizador': '✅ Sim', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
         {'Empresa': 'Onixsat', 'Telemetria (CAN)': '✅ Sim', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '✅ Sim', 'Roteirizador': '❌ Não', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
@@ -46,21 +27,34 @@ MARKET_DATA = {
         {'Empresa': 'Positron', 'Telemetria (CAN)': '✅ Sim', 'Vídeo': '❔ Opcional', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '✅ Sim', 'Roteirizador': '✅ Sim', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
         {'Empresa': 'Autotrac', 'Telemetria (CAN)': '❌ Não', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '✅ Sim', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
         {'Empresa': 'Maxtrack', 'Telemetria (CAN)': '✅ Sim', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '✅ Sim', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
-    ],
-    "funcionalidades_regionais": [
         {'Empresa': 'Elite Rastro', 'Telemetria (CAN)': '✅ Sim', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '❌ Não', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
         {'Empresa': 'NJ Rastreamento', 'Telemetria (CAN)': '✅ Sim', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '❌ Não', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
         {'Empresa': 'TK Rastreadores', 'Telemetria (CAN)': '✅ Sim', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '✅ Sim', 'Suporte 24h': '❔ Comercial', 'App de Gestão': '✅ Sim'},
-        {'Empresa': 'Vtrack Rastreamento', 'Telemetria (CAN)': '✅ Sim', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '❌ Não', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
         {'Empresa': 'Rastrek', 'Telemetria (CAN)': '❔ Parcial', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '❌ Não', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
         {'Empresa': 'Pro Lion', 'Telemetria (CAN)': '❌ Não', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '❌ Não', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
         {'Empresa': 'Impacto Rast.', 'Telemetria (CAN)': '❌ Não', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '❌ Não', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
+    ],
+    "precos": [
+        {'Empresa': 'VERDIO', 'Mensalidade (GPRS)': 'A partir de R$ 40,00'},
+        {'Empresa': 'Sascar', 'Mensalidade (GPRS)': 'R$ 79,90'},
+        {'Empresa': 'Omnilink', 'Mensalidade (GPRS)': 'R$ 89,90'},
+        {'Empresa': 'Onixsat', 'Mensalidade (GPRS)': '–'},
+        {'Empresa': 'Veltec', 'Mensalidade (GPRS)': 'R$ 110,00'},
+        {'Empresa': 'Positron', 'Mensalidade (GPRS)': 'R$ 75,00'},
+        {'Empresa': 'Autotrac', 'Mensalidade (GPRS)': 'R$ 99,90'},
+        {'Empresa': 'Maxtrack', 'Mensalidade (GPRS)': 'R$ 59,90'},
+        {'Empresa': 'Elite Rastro', 'Mensalidade (GPRS)': 'R$ 50,00'},
+        {'Empresa': 'NJ Rastreamento', 'Mensalidade (GPRS)': 'R$ 75,00'},
+        {'Empresa': 'TK Rastreadores', 'Mensalidade (GPRS)': 'R$ 69,90'},
+        {'Empresa': 'Rastrek', 'Mensalidade (GPRS)': 'R$ 60,00'},
+        {'Empresa': 'Pro Lion', 'Mensalidade (GPRS)': 'R$ 49,90'},
+        {'Empresa': 'Impacto Rast.', 'Mensalidade (GPRS)': 'R$ 45,00'},
     ]
 }
 
 # --- 3. PROCESSAMENTO DE DADOS PARA GRÁFICOS ---
-df_func_all = pd.concat([pd.DataFrame(MARKET_DATA["funcionalidades_nacionais"]), pd.DataFrame(MARKET_DATA["funcionalidades_regionais"])]).drop_duplicates(subset=['Empresa']).reset_index(drop=True)
-df_prices_all = pd.concat([pd.DataFrame(MARKET_DATA["precos_nacionais"]), pd.DataFrame(MARKET_DATA["precos_regionais"])]).drop_duplicates(subset=['Empresa']).reset_index(drop=True)
+df_func_all = pd.DataFrame(MARKET_DATA["funcionalidades"])
+df_prices_all = pd.DataFrame(MARKET_DATA["precos"])
 
 score_map = {'✅ Sim': 1.0, '❔ Opcional': 0.5, '❔ Parcial': 0.5, '❌ Não': 0.0, '❔ Comercial': 0.0}
 features_to_score = ['Telemetria (CAN)', 'Vídeo', 'Sensor de Fadiga', 'Controle de Jornada', 'Roteirizador', 'Suporte 24h', 'App de Gestão']
@@ -79,6 +73,7 @@ df_prices_all['Mensalidade_GPRS_Num'] = df_prices_all['Mensalidade (GPRS)'].appl
 df_bi = pd.merge(df_func_all, df_prices_all, on='Empresa', how='inner')
 df_bi.dropna(subset=['Mensalidade_GPRS_Num', 'Pontuação Total'], inplace=True)
 
+
 # --- 4. INTERFACE DA PÁGINA ---
 st.sidebar.image("imgs/v-c.png", width=120)
 st.sidebar.title(f"Olá, {st.session_state.get('name', 'N/A')}! 👋")
@@ -90,28 +85,50 @@ except: pass
 
 st.markdown("<h1 style='text-align: center; color: #006494;'>Pesquisa de Mercado e Concorrentes</h1>", unsafe_allow_html=True)
 st.markdown("---")
-# ... (Secções de Mercado Alvo e Diferenciais como antes) ...
+
+# --- SEÇÃO MERCADO-ALVO E DIFERENCIAIS (REINTEGRADOS) ---
+st.subheader("Nosso Mercado-Alvo")
+st.markdown("""
+| Segmento | Dor Principal | Oportunidade para o Verdio |
+|---|---|---|
+| **Locadoras de Veículos** | Risco e Descontrole do Ativo: Uso indevido, sinistros e a dificuldade de garantir a segurança do patrimônio. | Oferecer uma solução de proteção do ativo e segurança jurídica. |
+| **Transportadoras** | Altos Custos Operacionais e Riscos Trabalhistas: Consumo excessivo de combustível, acidentes. | Entregar uma plataforma de eficiência operacional e compliance, com ROI claro. |
+""")
 st.markdown("---")
 
-# --- 5. EXIBIÇÃO DAS TABELAS ---
-st.subheader("Análise de Preços e Funcionalidades")
-# ... (Tabelas como antes) ...
+st.subheader("Nossos Diferenciais Competitivos")
+st.info("📊 **Gestão Financeira Integrada (ROI Claro):** Transformamos dados operacionais em indicadores financeiros.")
+st.info("👮‍♂️ **Segurança Jurídica e Compliance:** Integramos a gestão da Lei do Motorista com o sensor de fadiga.")
+st.info("💡 **Inovação Acessível:** Oferecemos tecnologias de ponta como parte do nosso pacote padrão.")
 st.markdown("---")
 
-# --- 6. GRÁFICOS DE BUSINESS INTELLIGENCE (BI) ---
+
+# --- 5. GRÁFICOS DE BUSINESS INTELLIGENCE (BI) ---
 st.subheader("Visualização e Inteligência de Mercado (BI)")
-# ... (Gráfico de Pontuação como antes) ...
 
+# --- GRÁFICO 1: PONTUAÇÃO DE FUNCIONALIDADES ---
+st.markdown("##### Pontuação Total de Funcionalidades")
+st.write("Este gráfico classifica os concorrentes com base na soma de funcionalidades essenciais.")
+df_func_all_sorted = df_func_all.sort_values('Pontuação Total', ascending=True)
+fig_score = go.Figure(go.Bar(
+    y=df_func_all_sorted['Empresa'], x=df_func_all_sorted['Pontuação Total'],
+    orientation='h', marker=dict(color=df_func_all_sorted['Pontuação Total'], colorscale='Greens')
+))
+fig_score.update_layout(
+    title='Ranking de Concorrentes por Pontuação de Funcionalidades',
+    xaxis_title='Pontuação Total (Soma das Funcionalidades)', yaxis_title=None, height=600
+)
+st.plotly_chart(fig_score, use_container_width=True)
+
+# --- GRÁFICO 2: CUSTO-BENEFÍCIO (COM CORES ÚNICAS) ---
 st.markdown("##### Análise de Custo-Benefício (GPRS)")
 st.write("Este gráfico cruza o custo da mensalidade GPRS com a pontuação de funcionalidades.")
 
-# Cria um mapa de cores único para cada empresa
 unique_companies = df_bi['Empresa'].unique()
 color_palette = px.colors.qualitative.Plotly
 color_map = {company: color_palette[i % len(color_palette)] for i, company in enumerate(unique_companies)}
-for key in color_map:
-    if "VERDIO" in key:
-        color_map[key] = '#2ca02c' # Verde de destaque
+if 'VERDIO' in color_map:
+    color_map['VERDIO'] = '#2ca02c'
 
 df_bi['color'] = df_bi['Empresa'].map(color_map)
 df_bi['size'] = df_bi['Pontuação Total'].apply(lambda y: y * 4 + 15)
@@ -124,7 +141,6 @@ for empresa in df_bi['Empresa'].unique():
         name=empresa, text=df_empresa['Empresa'], mode='markers',
         marker=dict(size=df_empresa['size'], color=df_empresa['color'].iloc[0], sizemode='diameter')
     ))
-
 fig_bubble_bi.update_layout(
     title='Custo (Mensalidade GPRS) vs. Benefício (Pontuação de Funcionalidades)',
     xaxis_title="Preço da Mensalidade GPRS (R$)",
