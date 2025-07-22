@@ -16,7 +16,7 @@ if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. DADOS CENTRALIZADOS (JSON NO CÓDIGO) ---
+# --- 2. DADOS CENTRALIZADOS (COM AS SUAS ATUALIZAÇÕES) ---
 MARKET_DATA = {
     "precos_nacionais": [
         {'Empresa': 'VERDIO (Referência)', 'Instalação (GPRS)': 'Tratativa Comercial', 'Mensalidade (GPRS)': 'R$ 44,93 - R$ 584,49', 'Instalação (Satelital)': 'Tratativa Comercial', 'Mensalidade (Satelital)': 'R$ 107,67 - R$ 193,80'},
@@ -139,9 +139,8 @@ fig_score.update_layout(
 )
 st.plotly_chart(fig_score, use_container_width=True)
 
-# --- GRÁFICO 2: CUSTO-BENEFÍCIO ---
+# --- GRÁFICO 2: CUSTO-BENEFÍCIO (COM CORES ÚNICAS) ---
 st.markdown("##### Análise de Custo-Benefício (GPRS)")
-
 def clean_price(price_str):
     try:
         return float(re.findall(r'\d+[\.,]\d+', str(price_str))[0].replace(',', '.'))
@@ -151,13 +150,12 @@ def clean_price(price_str):
 df_prices_all = pd.concat([df_preco_nacionais, df_preco_regionais]).drop_duplicates(subset=['Empresa'])
 df_prices_all['Mensalidade_GPRS_Num'] = df_prices_all['Mensalidade (GPRS)'].apply(clean_price)
 
-# Prepara o nome da empresa para o merge (removendo texto entre parênteses)
 df_func_all['Merge_Key'] = df_func_all['Empresa'].str.replace(r'\s*\(.*\)', '', regex=True)
 df_prices_all['Merge_Key'] = df_prices_all['Empresa'].str.replace(r'\s*\(.*\)', '', regex=True)
 
 df_bi = pd.merge(df_func_all, df_prices_all, on='Merge_Key', how='inner', suffixes=('', '_price'))
 df_bi.dropna(subset=['Mensalidade_GPRS_Num'], inplace=True)
-df_bi['Empresa'] = df_bi['Empresa_price'] # Usa o nome do ficheiro de preços que é mais limpo
+df_bi['Empresa'] = df_bi['Empresa_price']
 
 unique_companies = df_bi['Empresa'].unique()
 color_palette = px.colors.qualitative.Plotly
