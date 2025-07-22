@@ -15,45 +15,9 @@ if not st.session_state.get("authentication_status"):
     st.stop()
 
 # --- 2. FUNÇÕES AUXILIARES ---
-
-def load_and_process_file(uploaded_file, file_type):
-    """
-    Tenta ler um ficheiro Excel. Se falhar com erro de corrupção,
-    tenta lê-lo como uma tabela HTML com a codificação correta.
-    """
-    try:
-        if file_type == 'sistema':
-            df = pd.read_excel(uploaded_file, engine='xlrd')
-        else: # fisico
-            # Tenta ler como xlsx primeiro
-            try:
-                df = pd.read_excel(uploaded_file)
-            except Exception:
-                # Se falhar, tenta como csv
-                uploaded_file.seek(0)
-                df = pd.read_csv(uploaded_file)
-        return df
-    except Exception as e:
-        if "Workbook corruption" in str(e):
-            st.warning("Ficheiro do sistema parece estar num formato não padrão. A tentar uma abordagem alternativa...")
-            uploaded_file.seek(0)
-            
-            # ***** CORREÇÃO PRINCIPAL AQUI *****
-            # Usa a descodificação 'latin-1' que é comum em ficheiros exportados de sistemas mais antigos
-            try:
-                dfs = pd.read_html(io.StringIO(uploaded_file.getvalue().decode('latin-1')))
-                if dfs:
-                    return dfs[0]
-            except Exception as html_e:
-                st.error(f"Falha ao tentar ler o ficheiro como tabela HTML: {html_e}")
-                raise html_e
-                
-        raise e
-
 def processar_estoque_sistema(df_sistema):
     """Processa e limpa o DataFrame do estoque do sistema."""
-    # Remove linhas que possam ser cabeçalhos repetidos ou rodapés
-    df_sistema = df_sistema[df_sistema.iloc[:, 0] != 'ID']
+    df_sistema = df_sistema.iloc[1:] # Assume que a primeira linha é um cabeçalho e a remove
     df_sistema.columns = ['ID', 'Data Cadastro', 'Última Transmissão', 'Modelo', 'Versão', 'Serial', 'Status']
     df_sistema['Serial'] = df_sistema['Serial'].astype(str).str.strip()
     return df_sistema
@@ -82,9 +46,10 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.info("**1. Estoque do Sistema**")
+    st.warning("⚠️ **Importante:** Abra o ficheiro `relatorio_rastreador.xls` no Excel e guarde-o como .CSV antes de o carregar aqui.")
     uploaded_sistema = st.file_uploader(
-        "Carregue o ficheiro exportado do sistema (`relatorio_rastreador.xls`)",
-        type=['xls', 'xlsx']
+        "Carregue o ficheiro do sistema (guardado como .csv)",
+        type=['csv']
     )
 
 with col2:
@@ -99,11 +64,16 @@ st.markdown("---")
 # --- 5. ANÁLISE E COMPARAÇÃO ---
 if uploaded_sistema and uploaded_fisico:
     try:
-        df_sistema_raw = load_and_process_file(uploaded_sistema, 'sistema')
-        df_fisico_raw = load_and_process_file(uploaded_fisico, 'fisico')
+        df_sistema = pd.read_csv(uploaded_sistema)
+        
+        try:
+            df_fisico = pd.read_excel(uploaded_fisico)
+        except Exception:
+            uploaded_fisico.seek(0)
+            df_fisico = pd.read_csv(uploaded_fisico)
 
-        df_sistema = processar_estoque_sistema(df_sistema_raw)
-        df_fisico = processar_estoque_fisico(df_fisico_raw)
+        df_sistema = processar_estoque_sistema(df_sistema)
+        df_fisico = processar_estoque_fisico(df_fisico)
 
         st.subheader("Resultados da Conciliação de Estoque")
 
