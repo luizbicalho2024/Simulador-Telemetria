@@ -3,42 +3,37 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 
-# --- 1. CONFIGURAÇÃO DA PÁGINA E AUTENTICAÇÃO ---
+# --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
 st.set_page_config(
     layout="wide",
     page_title="Pesquisa de Mercado",
     page_icon="imgs/v-c.png"
 )
 
-# Bloco de verificação de autenticação padrão
 if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. DADOS (Extraídos do PDF) ---
-# Dados para o gráfico de comparação de funcionalidades
-comparison_data = {
-    'labels': ['VERDIO', 'Sascar', 'Omnilink', 'Onixsat', 'Autotrac', 'Veltec', 'Maxtrack', 'Getrak'],
-    'datasets': [
-        {'label': 'Telemetria (CAN)', 'data': [1, 1, 1, 1, 0, 1, 1, 0], 'color': '#006494'},
-        {'label': 'Vídeo Monitoramento', 'data': [1, 1, 1, 0, 0, 1, 0, 0], 'color': '#0582CA'},
-        {'label': 'Sensor de Fadiga', 'data': [1, 0, 0, 0, 0, 0, 0, 0], 'color': '#A7C957'},
-        {'label': 'Controle de Jornada', 'data': [1, 1, 1, 1, 0, 1, 0, 0], 'color': '#00A6FB'},
-        {'label': 'Roteirizador', 'data': [1, 1, 1, 0, 1, 1, 1, 0], 'color': '#6A994E'},
-    ]
-}
+# --- 2. FUNÇÕES PARA CARREGAR DADOS ---
+@st.cache_data
+def load_data():
+    """Carrega todos os dados dos ficheiros CSV."""
+    try:
+        df_comparativo = pd.read_csv("pesqusisa de mercado rastreadores março 2025.xlsx - comparativo.csv")
+        df_precos = pd.read_csv("pesqusisa de mercado rastreadores março 2025.xlsx - preços praticados .csv")
+        df_empresas = pd.read_csv("pesqusisa de mercado rastreadores março 2025.xlsx - empresas.csv")
+        df_alvos = pd.read_csv("Locadoras e Transportadoras.xlsx - Página1.csv")
+        
+        return df_comparativo, df_precos, df_empresas, df_alvos
+    except FileNotFoundError as e:
+        st.error(f"Erro ao carregar os ficheiros de dados: {e}. Certifique-se de que os ficheiros .csv estão na pasta raiz do projeto.")
+        return None, None, None, None
 
-# Dados para o gráfico de custo-benefício (bubble chart)
-price_performance_data = {
-    'labels': ['Getrak', 'VERDIO', 'Maxtrack', 'Sascar', 'Omnilink', 'Autotrac', 'Veltec', 'Onixsat'],
-    'data': [
-        {'x': 34.90, 'y': 0, 'r': 10}, {'x': 40.00, 'y': 5, 'r': 25}, {'x': 59.90, 'y': 2, 'r': 15},
-        {'x': 79.90, 'y': 4, 'r': 20}, {'x': 89.90, 'y': 4, 'r': 20}, {'x': 99.90, 'y': 1, 'r': 12},
-        {'x': 110.00, 'y': 4, 'r': 20}, {'x': 120.00, 'y': 2, 'r': 15},
-    ],
-    'verdiocolor': '#A7C957',
-    'competitorcolor': '#0582CA'
-}
+# Carrega os dados
+df_comparativo, df_precos, df_empresas, df_alvos = load_data()
+
+if df_comparativo is None:
+    st.stop()
 
 # --- 3. INTERFACE DA PÁGINA ---
 st.sidebar.image("imgs/v-c.png", width=120)
@@ -49,70 +44,53 @@ try:
     st.image("imgs/logo.png", width=250)
 except: pass
 
-st.markdown("<h1 style='text-align: center; color: #006494;'>Análise Competitiva de Mercado</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; font-size: 1.2em;'>Inteligência para Frotas</p>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; color: #006494;'>Pesquisa de Mercado e Concorrentes</h1>", unsafe_allow_html=True)
 st.markdown("---")
 
-# --- SEÇÃO INTRODUTÓRIA E ROI ---
-st.subheader("O Desafio da Frota Moderna")
-st.write("Gerenciar uma frota hoje é um ato de equilíbrio entre reduzir custos operacionais e mitigar riscos críticos. Falhas na gestão resultam em perdas financeiras e vulnerabilidades que podem comprometer toda a operação.")
-st.metric(label="Retorno sobre o Investimento (ROI) com Gestão Eficiente", value="200%")
-st.caption("Cálculo baseado na eliminação de custos invisíveis versus o investimento na plataforma Verdio.")
+# --- SEÇÃO MERCADO-ALVO ---
+st.subheader("Nosso Mercado-Alvo")
+st.markdown("""
+| Segmento | Dor Principal | Oportunidade para o Verdio |
+|---|---|---|
+| **Locadoras de Veículos** | Risco e Descontrole do Ativo: Uso indevido, sinistros, multas e a dificuldade de garantir a segurança do patrimônio. | Oferecer uma solução de proteção do ativo e segurança jurídica, que vai além do simples rastreamento. |
+| **Transportadoras** | Altos Custos Operacionais e Riscos Trabalhistas: Consumo excessivo de combustível, manutenção imprevista, acidentes por fadiga. | Entregar uma plataforma de eficiência operacional e compliance, com ROI claro através da redução de custos. |
+""")
 st.markdown("---")
 
-# --- SEÇÃO SOLUÇÃO VERDIO ---
-st.subheader("Verdio: A Solução Integrada")
-st.write("Verdio transforma dados brutos em decisões inteligentes, conectando a tecnologia embarcada no veículo à gestão estratégica do negócio, focando em segurança, conformidade e, principalmente, rentabilidade.")
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.info("🛰️ **Tecnologia Embarcada:** Hardware de ponta, incluindo rastreador, vídeo e sensor de fadiga.")
-with col2:
-    st.info("📊 **Plataforma de Gestão:** Dashboards claros, relatórios financeiros e controle de jornada.")
-with col3:
-    st.success("🏆 **Decisão e Resultado:** ROI comprovado, mais segurança e total conformidade legal.")
+# --- SEÇÃO DIFERENCIAIS ---
+st.subheader("Nossos Diferenciais Competitivos")
+st.write("Para vencer no mercado, nosso discurso deve focar nos pilares que a concorrência não entrega de forma integrada:")
+st.info("📊 **Gestão Financeira Integrada (ROI Claro):** Nossos dashboards transformam dados operacionais (combustível, ociosidade) em indicadores financeiros, provando o retorno sobre o investimento.")
+st.info("👮‍♂️ **Segurança Jurídica e Compliance:** Somos a única solução que integra a gestão da Lei do Motorista com o sensor de fadiga, mitigando passivos trabalhistas e acidentes.")
+st.info("💡 **Inovação Acessível:** Oferecemos tecnologias de ponta (sensor de fadiga, vídeo) que são tipicamente premium, como parte do nosso pacote padrão.")
 st.markdown("---")
 
-# --- SEÇÃO CENÁRIO COMPETITIVO ---
-st.subheader("Cenário Competitivo")
-col_a, col_b = st.columns(2)
-with col_a:
-    st.markdown("##### Players Nacionais e Mundiais")
-    st.markdown("""
-    - Sascar (Michelin)
-    - Omnilink
-    - Ituran
-    - Positron
-    - Autotrac
-    - Onixsat
-    - Veltec
-    """)
-with col_b:
-    st.markdown("##### Players Regionais e de Nicho")
-    st.markdown("""
-    - Getrak
-    - Maxtrack
-    - CEABS
-    - SystemSat
-    - GolSat
-    - Sighra
-    - 3S
-    """)
-st.markdown("---")
 
 # --- SEÇÃO GRÁFICO DE FUNCIONALIDADES ---
 st.subheader("Verdio vs. Concorrência: A Vantagem Clara")
-st.write("Analisando as funcionalidades-chave, o Verdio se destaca por oferecer um pacote completo e tecnologicamente avançado a um preço competitivo. O nosso principal diferencial, o Sensor de Fadiga, é um recurso de segurança que a maioria dos concorrentes não oferece ou cobra um valor premium.")
+st.write("Analisando as funcionalidades-chave, o Verdio se destaca por oferecer um pacote completo e tecnologicamente avançado a um preço competitivo.")
+
+# Prepara os dados do CSV para o gráfico
+df_comparativo_chart = df_comparativo.head(8) # Pega os 8 principais concorrentes
+features = ['Telemetria (CAN)', 'Vídeo Monitoramento', 'Sensor de Fadiga', 'Controle de Jornada', 'Roteirizador']
+colors = ['#006494', '#0582CA', '#A7C957', '#00A6FB', '#6A994E']
 
 fig_features = go.Figure()
-for dataset in comparison_data['datasets']:
+for feature, color in zip(features, colors):
+    # Converte 'Sim'/'Não' para 1/0
+    x_data = df_comparativo_chart[feature].apply(lambda x: 1 if str(x).strip().lower() == 'sim' else 0)
     fig_features.add_trace(go.Bar(
-        y=comparison_data['labels'], x=dataset['data'], name=dataset['label'],
-        orientation='h', marker=dict(color=dataset['color'])
+        y=df_comparativo_chart['Empresa'],
+        x=x_data,
+        name=feature,
+        orientation='h',
+        marker=dict(color=color)
     ))
+
 fig_features.update_layout(
     title='Comparativo de Funcionalidades por Empresa', barmode='stack',
     yaxis={'categoryorder':'total ascending'}, yaxis_title="Empresa",
-    xaxis_title="Funcionalidades Oferecidas (Pontuação)",
+    xaxis_title="Funcionalidades Oferecidas (1 = Sim, 0 = Não)",
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     height=500, margin=dict(l=20, r=20, t=50, b=20)
 )
@@ -123,41 +101,41 @@ st.markdown("---")
 st.subheader("Custo-Benefício no Mercado")
 st.write("Ao cruzar o preço inicial com a quantidade de funcionalidades essenciais, o Verdio se posiciona no 'quadrante de alto valor', entregando a mais completa suíte de recursos pelo preço mais competitivo.")
 
-bubble_colors = [price_performance_data['verdiocolor'] if label == 'VERDIO' else price_performance_data['competitorcolor'] for label in price_performance_data['labels']]
+# Prepara os dados do CSV para o gráfico
+df_precos_chart = df_precos.head(8)
+df_precos_chart['color'] = df_precos_chart['Empresa'].apply(lambda x: '#A7C957' if x == 'VERDIO' else '#0582CA')
+df_precos_chart['size'] = df_precos_chart['Empresa'].apply(lambda x: 25 if x == 'VERDIO' else 15)
+
 fig_bubble = go.Figure(data=[go.Scatter(
-    x=[d['x'] for d in price_performance_data['data']],
-    y=[d['y'] for d in price_performance_data['data']],
-    text=price_performance_data['labels'], mode='markers+text',
+    x=df_precos_chart['Preço Mensal (a partir de)'],
+    y=df_precos_chart['Nº de Funcionalidades Essenciais'],
+    text=df_precos_chart['Empresa'],
+    mode='markers+text',
     textposition="top center",
     marker=dict(
-        size=[d['r'] for d in price_performance_data['data']], color=bubble_colors,
-        sizemode='diameter', showscale=False
+        size=df_precos_chart['size'],
+        color=df_precos_chart['color'],
+        sizemode='diameter'
     )
 )])
 fig_bubble.update_layout(
     title='Preço Mensal vs. Quantidade de Funcionalidades Essenciais',
     xaxis_title="Preço Mensal (A partir de R$)",
     yaxis_title="Nº de Funcionalidades Essenciais",
-    height=500, margin=dict(l=20, r=20, t=50, b=20)
+    height=500, margin=dict(l=20, r=20, t=50, b=20),
+    showlegend=False
 )
 st.plotly_chart(fig_bubble, use_container_width=True)
 st.markdown("---")
 
 # --- SEÇÃO CLIENTES-ALVO ---
-st.subheader("Nossos Alvos: A Oportunidade de Mercado")
+st.subheader("Nossos Alvos Regionais")
 col_c, col_d = st.columns(2)
 with col_c:
-    st.info("🎯 **Alvos em Locadoras:** LOCALIZA HERTZ, MOVIDA, UNIDAS, AS RENT A CAR, FOCO, YES RENT A CAR, VAMOS LOCADORA.")
+    st.info("🎯 **Alvos em Locadoras**")
+    for locadora in df_alvos[df_alvos['Tipo'] == 'Locadora']['Empresa']:
+        st.markdown(f"- {locadora}")
 with col_d:
-    st.info("🎯 **Alvos em Transportadoras:** JSL, TRANSPORTE BERTOLINI, ATUAL CARGAS, BRASPRESS, CARVALIMA, COOPERCarga, RODONAVES.")
-st.markdown("---")
-
-# --- SEÇÃO IMPLANTAÇÃO ---
-st.subheader("Implantação Ágil: Do Contrato ao Valor")
-st.write("Nossa promessa é clara: frotas de até 200 veículos implantadas em 30 dias, sem paralisar a operação do cliente. O nosso processo é consultivo e pensado para gerar resultados rápidos.")
-st.markdown("""
-- **1. Diagnóstico:** Análise da frota e sistemas atuais.
-- **2. Proposta Sob Medida:** Plano customizado para o seu negócio.
-- **3. Implantação:** Instalação do hardware sem parar a frota.
-- **4. Treinamento:** Capacitação das equipas operacionais.
-""")
+    st.info("🎯 **Alvos em Transportadoras**")
+    for transportadora in df_alvos[df_alvos['Tipo'] == 'Transportadora']['Empresa']:
+        st.markdown(f"- {transportadora}")
