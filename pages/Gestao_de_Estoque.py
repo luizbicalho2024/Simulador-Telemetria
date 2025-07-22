@@ -16,42 +16,52 @@ if not st.session_state.get("authentication_status"):
 
 # --- 2. FUNÇÕES AUXILIARES ---
 
-# ***** NOVA FUNÇÃO ROBUSTA PARA LER FICHEIROS *****
 def load_and_process_file(uploaded_file, file_type):
     """
     Tenta ler um ficheiro Excel. Se falhar com erro de corrupção,
-    tenta lê-lo como uma tabela HTML, que é um formato comum para exportações de sistema.
+    tenta lê-lo como uma tabela HTML com a codificação correta.
     """
     try:
         if file_type == 'sistema':
-            # Primeira tentativa: ler como Excel normal
             df = pd.read_excel(uploaded_file, engine='xlrd')
         else: # fisico
-            df = pd.read_excel(uploaded_file)
+            # Tenta ler como xlsx primeiro
+            try:
+                df = pd.read_excel(uploaded_file)
+            except Exception:
+                # Se falhar, tenta como csv
+                uploaded_file.seek(0)
+                df = pd.read_csv(uploaded_file)
         return df
     except Exception as e:
-        # Se a primeira tentativa falhar, verifica se é o erro de corrupção
         if "Workbook corruption" in str(e):
             st.warning("Ficheiro do sistema parece estar num formato não padrão. A tentar uma abordagem alternativa...")
-            # Segunda tentativa: ler como se fosse uma tabela HTML
-            uploaded_file.seek(0) # Volta ao início do ficheiro
-            # O Pandas consegue ler tabelas diretamente de ficheiros HTML
-            dfs = pd.read_html(io.StringIO(uploaded_file.getvalue().decode('utf-8')))
-            if dfs:
-                return dfs[0] # Retorna a primeira tabela encontrada no ficheiro
-        # Se for outro erro, ou se a segunda tentativa falhar, lança a exceção
+            uploaded_file.seek(0)
+            
+            # ***** CORREÇÃO PRINCIPAL AQUI *****
+            # Usa a descodificação 'latin-1' que é comum em ficheiros exportados de sistemas mais antigos
+            try:
+                dfs = pd.read_html(io.StringIO(uploaded_file.getvalue().decode('latin-1')))
+                if dfs:
+                    return dfs[0]
+            except Exception as html_e:
+                st.error(f"Falha ao tentar ler o ficheiro como tabela HTML: {html_e}")
+                raise html_e
+                
         raise e
 
 def processar_estoque_sistema(df_sistema):
     """Processa e limpa o DataFrame do estoque do sistema."""
+    # Remove linhas que possam ser cabeçalhos repetidos ou rodapés
+    df_sistema = df_sistema[df_sistema.iloc[:, 0] != 'ID']
     df_sistema.columns = ['ID', 'Data Cadastro', 'Última Transmissão', 'Modelo', 'Versão', 'Serial', 'Status']
-    df_sistema['Serial'] = df_sistema['Serial'].astype(str)
+    df_sistema['Serial'] = df_sistema['Serial'].astype(str).str.strip()
     return df_sistema
 
 def processar_estoque_fisico(df_fisico):
     """Processa e limpa o DataFrame do estoque físico."""
     df_fisico.columns = ['Serial']
-    df_fisico['Serial'] = df_fisico['Serial'].astype(str)
+    df_fisico['Serial'] = df_fisico['Serial'].astype(str).str.strip()
     return df_fisico
 
 # --- 3. INTERFACE DA PÁGINA ---
@@ -89,7 +99,6 @@ st.markdown("---")
 # --- 5. ANÁLISE E COMPARAÇÃO ---
 if uploaded_sistema and uploaded_fisico:
     try:
-        # Usa a nova função de carregamento robusta
         df_sistema_raw = load_and_process_file(uploaded_sistema, 'sistema')
         df_fisico_raw = load_and_process_file(uploaded_fisico, 'fisico')
 
@@ -99,7 +108,7 @@ if uploaded_sistema and uploaded_fisico:
         st.subheader("Resultados da Conciliação de Estoque")
 
         with st.expander("🔍 Análise do Estoque Físico", expanded=True):
-            df_fisico_com_status = pd.merge(df_fisico, df_sistema[['Serial', 'Status']], on='Serial', how='left')
+            df_fisico_com_status = pd.merge(df_fisico, df_sistema[['Serial', 'Status', 'Modelo']], on='Serial', how='left')
             df_fisico_com_status['Status'].fillna('Não Encontrado no Sistema', inplace=True)
             
             st.metric("Total de Rastreadores no Estoque Físico", value=len(df_fisico))
