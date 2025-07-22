@@ -1,7 +1,7 @@
 # user_management_db.py
 import streamlit as st
 import pymongo
-from bson import ObjectId # Importante para lidar com o ID do MongoDB
+from bson import ObjectId
 from passlib.context import CryptContext
 from datetime import datetime
 from config import get_default_pricing
@@ -33,7 +33,6 @@ def get_users_collection():
 # --- 2. FUNÇÕES DE GESTÃO DE SENHAS ---
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
-
 def get_password_hash(password):
     return pwd_context.hash(password)
 
@@ -98,6 +97,10 @@ def get_all_users_for_admin_display():
         return list(users_collection.find({}, {"_id": 0, "hashed_password": 0}))
     return []
 
+def reset_user_password_by_admin(username: str, new_password: str):
+    """Permite que um admin redefina a senha de qualquer utilizador."""
+    return update_user_password(username, new_password)
+
 # --- 4. FUNÇÕES PARA GESTÃO DE PREÇOS ---
 @st.cache_data(ttl=300)
 def get_pricing_config():
@@ -158,21 +161,17 @@ def log_proposal(proposal_data: dict):
     return False
 
 def get_all_proposals():
-    """Busca todas as propostas, retornando também o _id do MongoDB."""
     proposals_collection = get_collection("proposals")
     if proposals_collection is not None:
-        # Retorna o cursor para ser iterado
         return proposals_collection.find({}).sort("data_geracao", -1)
     return []
 
 def delete_proposal(proposal_id: str):
-    """Exclui uma proposta específica pelo seu _id."""
     proposals_collection = get_collection("proposals")
     if proposals_collection is not None:
         try:
             result = proposals_collection.delete_one({"_id": ObjectId(proposal_id)})
             if result.deleted_count > 0:
-                # Adiciona log da exclusão
                 add_log(st.session_state["username"], "Excluiu Proposta", f"ID da proposta: {proposal_id}")
                 st.toast("Proposta excluída com sucesso!", icon="🗑️")
             return result.deleted_count > 0
