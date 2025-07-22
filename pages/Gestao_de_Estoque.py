@@ -16,15 +16,37 @@ if not st.session_state.get("authentication_status"):
 
 # --- 2. FUNÇÕES AUXILIARES ---
 def processar_estoque_sistema(df_sistema):
-    """Processa e limpa o DataFrame do estoque do sistema."""
-    # Encontra a primeira linha que serve de cabeçalho (procurando pela palavra 'ID')
-    header_row_index = df_sistema[df_sistema.iloc[:, 0] == 'ID'].index[0]
-    # Define o cabeçalho
+    """
+    Processa e limpa o DataFrame do estoque do sistema, localizando o cabeçalho dinamicamente.
+    Esta função é mais robusta para lidar com ficheiros exportados de sistemas.
+    """
+    header_row_index = -1
+    # Procura pelo cabeçalho nas primeiras 15 linhas do ficheiro
+    for i, row in df_sistema.head(15).iterrows():
+        # Converte a linha para uma string única para facilitar a busca
+        row_str = ' '.join(map(str, row.values))
+        # Procura por palavras-chave que identificam o cabeçalho
+        if 'ID' in row_str and 'Serial' in row_str and 'Status' in row_str:
+            header_row_index = i
+            break
+            
+    if header_row_index == -1:
+        raise ValueError("Não foi possível encontrar a linha de cabeçalho no ficheiro do sistema. Verifique se o ficheiro contém colunas como 'ID', 'Serial' e 'Status'.")
+
+    # Define a linha encontrada como o novo cabeçalho
     df_sistema.columns = df_sistema.iloc[header_row_index]
+    
     # Remove todas as linhas acima e incluindo o cabeçalho
     df_sistema = df_sistema.iloc[header_row_index + 1:].reset_index(drop=True)
-    # Renomeia as colunas para um formato padronizado
+    
+    # Renomeia as colunas para um formato padronizado para evitar problemas
     df_sistema.columns = ['ID', 'Data Cadastro', 'Última Transmissão', 'Modelo', 'Versão', 'Serial', 'Status']
+    
+    # Remove linhas onde o 'Serial' é nulo, vazio ou não numérico, que podem ser rodapés
+    df_sistema.dropna(subset=['Serial'], inplace=True)
+    df_sistema = df_sistema[df_sistema['Serial'].astype(str).str.strip() != '']
+    df_sistema = df_sistema[pd.to_numeric(df_sistema['Serial'], errors='coerce').notnull()]
+
     # Limpa os dados da coluna Serial
     df_sistema['Serial'] = df_sistema['Serial'].astype(str).str.strip()
     return df_sistema
@@ -71,18 +93,17 @@ st.markdown("---")
 # --- 5. ANÁLISE E COMPARAÇÃO ---
 if uploaded_sistema and uploaded_fisico:
     try:
-        # ***** CORREÇÃO PRINCIPAL AQUI *****
-        # Lê o CSV especificando o ponto e vírgula como delimitador e ignorando linhas com erro
-        df_sistema = pd.read_csv(uploaded_sistema, delimiter=';', on_bad_lines='skip', header=None, encoding='latin-1')
+        # Lê o CSV sem cabeçalho para que a nossa função possa encontrá-lo
+        df_sistema_raw = pd.read_csv(uploaded_sistema, delimiter=';', header=None, encoding='latin-1', on_bad_lines='skip')
         
         try:
-            df_fisico = pd.read_excel(uploaded_fisico)
+            df_fisico_raw = pd.read_excel(uploaded_fisico)
         except Exception:
             uploaded_fisico.seek(0)
-            df_fisico = pd.read_csv(uploaded_fisico)
+            df_fisico_raw = pd.read_csv(uploaded_fisico)
 
-        df_sistema = processar_estoque_sistema(df_sistema)
-        df_fisico = processar_estoque_fisico(df_fisico)
+        df_sistema = processar_estoque_sistema(df_sistema_raw)
+        df_fisico = processar_estoque_fisico(df_fisico_raw)
 
         st.subheader("Resultados da Conciliação de Estoque")
 
