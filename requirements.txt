@@ -14,5 +14,6 @@ requests
 streamlit-option-menu
 streamlit_extras
 Pillow
-pytest # Adicionado para testes
+pytest
 plotly
+xlrd
