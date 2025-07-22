@@ -19,7 +19,7 @@ if not st.session_state.get("authentication_status"):
 # --- 2. DADOS CENTRALIZADOS (JSON NO CÓDIGO) ---
 MARKET_DATA = {
     "precos_nacionais": [
-        {'Empresa': 'VERDIO (Referência)', 'Instalação (GPRS)': 'Tratativa Comercial', 'Mensalidade (GPRS)': 'A partir de R$ 44,93', 'Instalação (Satelital)': 'Tratativa Comercial', 'Mensalidade (Satelital)': 'A partir de R$ 107,67'},
+        {'Empresa': 'VERDIO (Referência)', 'Instalação (GPRS)': 'Tratativa Comercial', 'Mensalidade (GPRS)': 'R$ 44,93 - R$ 584,49', 'Instalação (Satelital)': 'Tratativa Comercial', 'Mensalidade (Satelital)': 'R$ 107,67 - R$ 193,80'},
         {'Empresa': 'Sascar', 'Instalação (GPRS)': 'R$ 0,00', 'Mensalidade (GPRS)': 'R$ 79,90', 'Instalação (Satelital)': 'R$ 824,19', 'Mensalidade (Satelital)': 'R$ 193,80'},
         {'Empresa': 'Omnilink', 'Instalação (GPRS)': 'R$ 0,00', 'Mensalidade (GPRS)': 'R$ 89,90', 'Instalação (Satelital)': 'R$ 554,00', 'Mensalidade (Satelital)': 'R$ 193,80'},
         {'Empresa': 'Onixsat', 'Instalação (GPRS)': '–', 'Mensalidade (GPRS)': '–', 'Instalação (Satelital)': 'R$ 0,00', 'Mensalidade (Satelital)': 'R$ 120,00'},
@@ -29,7 +29,7 @@ MARKET_DATA = {
         {'Empresa': 'Maxtrack', 'Instalação (GPRS)': 'R$ 0,00', 'Mensalidade (GPRS)': 'R$ 59,90', 'Instalação (Satelital)': '–', 'Mensalidade (Satelital)': '–'},
     ],
     "precos_regionais": [
-        {'Empresa': 'VERDIO (Referência)', 'Instalação (GPRS)': 'Tratativa Comercial', 'Mensalidade (GPRS)': 'A partir de R$ 44,93', 'Instalação (Satelital)': 'Tratativa Comercial', 'Mensalidade (Satelital)': 'A partir de R$ 107,67'},
+        {'Empresa': 'VERDIO (Referência)', 'Instalação (GPRS)': 'Tratativa Comercial', 'Mensalidade (GPRS)': 'R$ 44,93 - R$ 584,49', 'Instalação (Satelital)': 'Tratativa Comercial', 'Mensalidade (Satelital)': 'R$ 107,67 - R$ 193,80'},
         {'Empresa': 'Elite Rastro', 'Instalação (GPRS)': 'R$ 30,00', 'Mensalidade (GPRS)': 'R$ 50,00', 'Instalação (Satelital)': 'R$ 900,00', 'Mensalidade (Satelital)': 'R$ 180,00'},
         {'Empresa': 'NJ Rastreamento', 'Instalação (GPRS)': 'R$ 120,00', 'Mensalidade (GPRS)': 'R$ 75,00', 'Instalação (Satelital)': 'R$ 650,00', 'Mensalidade (Satelital)': 'R$ 170,00'},
         {'Empresa': 'TK Rastreadores', 'Instalação (GPRS)': 'R$ 80,00', 'Mensalidade (GPRS)': 'R$ 69,90', 'Instalação (Satelital)': 'R$ 980,00', 'Mensalidade (Satelital)': 'R$ 150,00'},
