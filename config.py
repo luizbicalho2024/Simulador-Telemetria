@@ -4,12 +4,9 @@ from decimal import Decimal
 def get_default_pricing():
     """
     Retorna a estrutura de preços padrão da aplicação.
-    Estes valores são usados como fallback se a configuração não for encontrada na base de dados.
-    Os valores são guardados como float para compatibilidade com JSON/BSON no MongoDB.
     """
     return {
-        "_id": "global_prices", # Identificador fixo para o documento na BD
-        
+        "_id": "global_prices",
         "PLANOS_PJ": {
             "12 Meses": {"GPRS / Gsm": 80.88, "Satélite": 193.80, "Identificador de Motorista / RFID": 19.25, "Leitor de Rede CAN / Telemetria": 75.25, "Videomonitoramento + DMS + ADAS": 409.11},
             "24 Meses": {"GPRS / Gsm": 53.92, "Satélite": 129.20, "Identificador de Motorista / RFID": 12.83, "Leitor de Rede CAN / Telemetria": 50.17, "Videomonitoramento + DMS + ADAS": 272.74},
