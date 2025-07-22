@@ -17,3 +17,5 @@ Pillow
 pytest
 plotly
 xlrd
+html5lib
+lxml
