@@ -1,6 +1,7 @@
 # pages/Pesquisa_de_Mercado.py
 import streamlit as st
 import pandas as pd
+import plotly.graph_objects as go
 
 # --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
 st.set_page_config(
@@ -63,7 +64,6 @@ df_preco_regionais = pd.DataFrame(MARKET_DATA["precos_regionais"])
 df_funci_nacionais = pd.DataFrame(MARKET_DATA["funcionalidades_nacionais"])
 df_funci_regionais = pd.DataFrame(MARKET_DATA["funcionalidades_regionais"])
 
-
 # --- 3. INTERFACE DA PÁGINA ---
 st.sidebar.image("imgs/v-c.png", width=120)
 st.sidebar.title(f"Olá, {st.session_state.get('name', 'N/A')}! 👋")
@@ -74,24 +74,6 @@ try:
 except: pass
 
 st.markdown("<h1 style='text-align: center; color: #006494;'>Pesquisa de Mercado e Concorrentes</h1>", unsafe_allow_html=True)
-st.markdown("---")
-
-# --- SEÇÃO MERCADO-ALVO ---
-st.subheader("Nosso Mercado-Alvo")
-st.markdown("""
-| Segmento | Dor Principal | Oportunidade para o Verdio |
-|---|---|---|
-| **Locadoras de Veículos** | Risco e Descontrole do Ativo: Uso indevido, sinistros e a dificuldade de garantir a segurança do patrimônio. | Oferecer uma solução de proteção do ativo e segurança jurídica, que vai além do simples rastreamento. |
-| **Transportadoras** | Altos Custos Operacionais e Riscos Trabalhistas: Consumo excessivo de combustível, manutenção imprevista e acidentes. | Entregar uma plataforma de eficiência operacional e compliance, com ROI claro através da redução de custos. |
-""")
-st.markdown("---")
-
-# --- SEÇÃO DIFERENCIAIS ---
-st.subheader("Nossos Diferenciais Competitivos")
-st.write("Para vencer no mercado, nosso discurso deve focar nos pilares que a concorrência não entrega de forma integrada:")
-st.info("📊 **Gestão Financeira Integrada (ROI Claro):** Nossos dashboards transformam dados operacionais (combustível, ociosidade) em indicadores financeiros, provando o retorno sobre o investimento.")
-st.info("👮‍♂️ **Segurança Jurídica e Compliance:** Somos a única solução que integra a gestão da Lei do Motorista com o sensor de fadiga, mitigando passivos trabalhistas e acidentes.")
-st.info("💡 **Inovação Acessível:** Oferecemos tecnologias de ponta (sensor de fadiga, vídeo) que são tipicamente premium, como parte do nosso pacote padrão.")
 st.markdown("---")
 
 # --- 4. EXIBIÇÃO DAS TABELAS ---
@@ -110,3 +92,81 @@ with st.expander("Comparativo de Funcionalidades - Concorrentes Nacionais", expa
 
 with st.expander("Comparativo de Funcionalidades - Concorrentes Regionais", expanded=True):
     st.dataframe(df_funci_regionais, hide_index=True, use_container_width=True)
+
+st.markdown("---")
+
+
+# --- 5. GRÁFICOS DE BUSINESS INTELLIGENCE (BI) ---
+st.subheader("Visualização e Inteligência de Mercado (BI)")
+
+# --- GRÁFICO 1: PONTUAÇÃO DE FUNCIONALIDADES ---
+st.markdown("##### Pontuação Total de Funcionalidades")
+st.write("Este gráfico classifica os concorrentes com base numa pontuação, onde cada funcionalidade essencial ('Sim') vale 1 ponto e 'Parcial' ou 'Opcional' vale 0.5. Isto permite uma visão rápida de quem oferece a solução mais completa.")
+
+# Junta as funcionalidades de nacionais e regionais num único DataFrame
+df_func_all = pd.concat([
+    df_funci_nacionais,
+    df_funci_regionais
+]).drop_duplicates(subset=['Empresa']).reset_index(drop=True)
+
+# Mapeia os valores para uma pontuação numérica
+score_map = {'✅ Sim': 1.0, '❔ Opcional': 0.5, '❔ Parcial': 0.5, '❌ Não': 0.0, '❔ Comercial': 0.0}
+features_to_score = ['Telemetria (CAN)', 'Vídeo', 'Sensor de Fadiga', 'Controle de Jornada', 'Roteirizador', 'Suporte 24h', 'App de Gestão']
+
+for feature in features_to_score:
+    df_func_all[feature] = df_func_all[feature].map(score_map).fillna(0)
+
+df_func_all['Pontuação Total'] = df_func_all[features_to_score].sum(axis=1)
+df_func_all_sorted = df_func_all.sort_values('Pontuação Total', ascending=True)
+
+# Cria o gráfico de barras
+fig_score = go.Figure(go.Bar(
+    y=df_func_all_sorted['Empresa'],
+    x=df_func_all_sorted['Pontuação Total'],
+    orientation='h',
+    marker=dict(color=df_func_all_sorted['Pontuação Total'], colorscale='Greens')
+))
+fig_score.update_layout(
+    title='Ranking de Concorrentes por Pontuação de Funcionalidades',
+    xaxis_title='Pontuação Total (Soma das Funcionalidades)',
+    yaxis_title=None,
+    height=600
+)
+st.plotly_chart(fig_score, use_container_width=True)
+
+
+# --- GRÁFICO 2: CUSTO-BENEFÍCIO ---
+st.markdown("##### Análise de Custo-Benefício (GPRS)")
+st.write("Este gráfico cruza o custo da mensalidade GPRS com a pontuação de funcionalidades. O 'quadrante de alto valor' (canto superior esquerdo) representa as empresas que oferecem mais funcionalidades por um preço menor.")
+
+# Prepara os dados de preço (limpeza e conversão)
+def clean_price(price_str):
+    try:
+        # Pega o primeiro número que encontrar na string
+        price = re.findall(r'\d+[\.,]\d+', str(price_str))[0]
+        return float(price.replace(',', '.'))
+    except (IndexError, TypeError):
+        return None # Retorna None se não encontrar um preço válido
+
+df_prices_all = pd.concat([df_preco_nacionais, df_preco_regionais]).drop_duplicates(subset=['Empresa'])
+df_prices_all['Mensalidade_GPRS_Num'] = df_prices_all['Mensalidade (GPRS)'].apply(clean_price)
+
+# Junta os dataframes de funcionalidades e preços
+df_bi = pd.merge(df_func_all, df_prices_all, on='Empresa', how='left')
+df_bi.dropna(subset=['Mensalidade_GPRS_Num'], inplace=True) # Remove empresas sem preço GPRS
+
+df_bi['color'] = df_bi['Empresa'].apply(lambda x: '#A7C957' if 'VERDIO' in x else '#0582CA')
+df_bi['size'] = df_bi['Pontuação Total'].apply(lambda y: y * 4 + 10)
+
+fig_bubble_bi = go.Figure(data=[go.Scatter(
+    x=df_bi['Mensalidade_GPRS_Num'], y=df_bi['Pontuação Total'],
+    text=df_bi['Empresa'], mode='markers+text', textposition="top center",
+    marker=dict(size=df_bi['size'], color=df_bi['color'])
+)])
+fig_bubble_bi.update_layout(
+    title='Custo (Mensalidade GPRS) vs. Benefício (Pontuação de Funcionalidades)',
+    xaxis_title="Preço da Mensalidade GPRS (R$)",
+    yaxis_title="Pontuação Total de Funcionalidades",
+    height=600, showlegend=False
+)
+st.plotly_chart(fig_bubble_bi, use_container_width=True)
