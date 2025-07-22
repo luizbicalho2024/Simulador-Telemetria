@@ -59,7 +59,6 @@ st.markdown("---")
 # --- 5. ANÁLISE E COMPARAÇÃO ---
 if uploaded_sistema and uploaded_fisico:
     try:
-        # ***** ALTERAÇÃO PRINCIPAL AQUI *****
         # Lê o CSV especificando que o cabeçalho está na linha 12 (índice 11)
         df_sistema = pd.read_csv(
             uploaded_sistema,
@@ -69,16 +68,13 @@ if uploaded_sistema and uploaded_fisico:
             on_bad_lines='skip'
         )
         
-        # Renomeia as colunas para um formato padradonizado
-        df_sistema = df_sistema.rename(columns={'Nº Série': 'Serial'})
+        # ***** CORREÇÃO PRINCIPAL AQUI *****
+        # Renomeia as colunas para um padrão limpo, corrigindo os problemas de codificação
+        df_sistema.columns = [
+            'Modelo', 'Gateway', 'N_Equipamento', 'Serial', 'P_Entrada',
+            'Kit', 'Status', 'Tipo_Equipamento', 'Situacao'
+        ]
         
-        # Validação para garantir que as colunas essenciais existem
-        required_columns = ['Serial', 'Status', 'Modelo']
-        if not all(col in df_sistema.columns for col in required_columns):
-            st.error("Erro de Colunas: O cabeçalho na linha 12 não contém as colunas necessárias (Ex: 'Nº Série', 'Status', 'Modelo').")
-            st.write("Colunas encontradas:", df_sistema.columns.tolist())
-            st.stop()
-
         df_sistema['Serial'] = df_sistema['Serial'].astype(str).str.strip()
         
         # Lê o ficheiro do estoque físico
@@ -125,7 +121,7 @@ if uploaded_sistema and uploaded_fisico:
                 
                 df_faltantes = df_sistema[df_sistema['Serial'].isin(faltando_no_fisico)]
                 st.dataframe(
-                    df_faltantes[['Serial', 'Status', 'Modelo', 'Última Transmissão']],
+                    df_faltantes[['Serial', 'Status', 'Modelo', 'Situacao']],
                     use_container_width=True, hide_index=True
                 )
 
