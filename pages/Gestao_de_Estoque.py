@@ -15,36 +15,8 @@ if not st.session_state.get("authentication_status"):
     st.stop()
 
 # --- 2. FUNÇÕES AUXILIARES ---
-def processar_estoque_sistema(df_raw):
-    """
-    Processa o DataFrame do sistema, localizando o cabeçalho dinamicamente.
-    """
-    header_row_index = -1
-    for i, row in df_raw.head(20).iterrows():
-        row_str = ' '.join(map(str, row.values)).lower()
-        if 'modelo' in row_str and 'nº série' in row_str and 'status' in row_str:
-            header_row_index = i
-            break
-            
-    if header_row_index == -1:
-        raise ValueError("Cabeçalho não encontrado. Verifique se o ficheiro do sistema contém as colunas 'Modelo', 'Nº Série' e 'Status'.")
-
-    df = df_raw.copy()
-    df.columns = df.iloc[header_row_index]
-    df = df.iloc[header_row_index + 1:].reset_index(drop=True)
-    
-    df = df.rename(columns={'Nº Série': 'Serial'})
-    
-    if 'Serial' not in df.columns:
-        raise ValueError("A coluna 'Nº Série' não foi encontrada no cabeçalho identificado.")
-
-    df.dropna(subset=['Serial'], inplace=True)
-    df = df[df['Serial'].astype(str).str.strip() != '']
-    df['Serial'] = df['Serial'].astype(str).str.strip()
-    return df
-
 def processar_estoque_fisico(df_fisico):
-    """Processa o DataFrame do estoque físico."""
+    """Processa e limpa o DataFrame do estoque físico."""
     df_fisico.columns = ['Serial'] + list(df_fisico.columns[1:])
     df_fisico = df_fisico[['Serial']]
     df_fisico['Serial'] = df_fisico['Serial'].astype(str).str.strip()
@@ -68,17 +40,16 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.info("**1. Estoque do Sistema**")
-    st.warning("⚠️ **Instruções:** Exporte o `relatorio_rastreador.xls` e guarde-o como **CSV (separado por ponto e vírgula)**.")
-    
+    st.warning("⚠️ **Instruções:** Abra o `relatorio_rastreador.xls` no Excel e guarde-o como **Pasta de Trabalho do Excel (*.xlsx)** antes de o carregar.")
     uploaded_sistema = st.file_uploader(
-        "Carregue o ficheiro do sistema (guardado como .csv)",
-        type=['csv']
+        "Carregue o ficheiro do sistema (guardado como .xlsx)",
+        type=['xlsx']
     )
 
 with col2:
     st.info("**2. Estoque Físico**")
     uploaded_fisico = st.file_uploader(
-        "Carregue a planilha do inventário físico (`estoque_fisico.xlsx`)",
+        "Carregue a planilha do inventário físico",
         type=['xlsx', 'csv']
     )
 
@@ -87,15 +58,31 @@ st.markdown("---")
 # --- 5. ANÁLISE E COMPARAÇÃO ---
 if uploaded_sistema and uploaded_fisico:
     try:
-        df_sistema_raw = pd.read_csv(uploaded_sistema, delimiter=';', header=None, encoding='latin-1', on_bad_lines='skip')
+        # Lê o ficheiro do sistema diretamente como .xlsx, com cabeçalho fixo
+        df_sistema = pd.read_excel(
+            uploaded_sistema,
+            header=11, # Linha 12 do Excel (índice 11)
+            engine='openpyxl'
+        )
         
+        df_sistema = df_sistema.rename(columns={'Nº Série': 'Serial'})
+        
+        required_columns = ['Serial', 'Status', 'Modelo']
+        if not all(col in df_sistema.columns for col in required_columns):
+            st.error(f"Erro de Colunas: O cabeçalho na linha 12 não contém as colunas necessárias (Ex: 'Nº Série', 'Status', 'Modelo').")
+            st.write("Colunas encontradas:", df_sistema.columns.tolist())
+            st.stop()
+
+        df_sistema['Serial'] = df_sistema['Serial'].astype(str).str.strip()
+        df_sistema.dropna(subset=['Serial'], inplace=True)
+
+        # Lê o ficheiro do estoque físico
         try:
             df_fisico_raw = pd.read_excel(uploaded_fisico)
         except Exception:
             uploaded_fisico.seek(0)
             df_fisico_raw = pd.read_csv(uploaded_fisico)
-
-        df_sistema = processar_estoque_sistema(df_sistema_raw)
+        
         df_fisico = processar_estoque_fisico(df_fisico_raw)
 
         st.subheader("Resultados da Conciliação de Estoque")
@@ -118,9 +105,8 @@ if uploaded_sistema and uploaded_fisico:
             st.dataframe(df_fisico_com_status, use_container_width=True, hide_index=True)
         
         # ***** NOVA TABELA AQUI *****
-        # Filtra apenas os seriais que não foram encontrados no sistema
         df_nao_encontrados = df_fisico_com_status[df_fisico_com_status['Status'] == 'Não Encontrado no Sistema']
-        with st.expander("🚫 Seriais Não Encontrados no Sistema", expanded=False):
+        with st.expander("🚫 Seriais do Físico Não Encontrados no Sistema", expanded=False):
             if not df_nao_encontrados.empty:
                 st.warning(f"Foram encontrados {len(df_nao_encontrados)} seriais no estoque físico que não constam no sistema. Estes itens precisam ser cadastrados.")
                 st.dataframe(df_nao_encontrados[['Serial']], use_container_width=True, hide_index=True)
@@ -139,7 +125,6 @@ if uploaded_sistema and uploaded_fisico:
             else:
                 st.error(f"Atenção: {len(faltando_no_fisico)} rastreador(es) não foram encontrados no estoque físico (excluindo os já 'Indisponíveis').")
                 
-                # Prepara a coluna para exibição, se existir
                 if 'Última Transmissão' not in df_sistema.columns:
                      df_sistema['Última Transmissão'] = "N/A"
                 
@@ -151,7 +136,7 @@ if uploaded_sistema and uploaded_fisico:
 
     except Exception as e:
         st.error(f"Ocorreu um erro ao processar os ficheiros: {e}")
-        st.info("Por favor, verifique se os ficheiros têm o formato e as colunas esperadas.")
+        st.info("Por favor, verifique se os ficheiros têm o formato e as colunas esperadas, e se o cabeçalho está realmente na linha 12 do ficheiro do sistema.")
 
 else:
     st.info("Por favor, carregue ambos os ficheiros para iniciar a análise.")
