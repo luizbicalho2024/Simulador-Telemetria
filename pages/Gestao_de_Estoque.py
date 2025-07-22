@@ -15,19 +15,42 @@ if not st.session_state.get("authentication_status"):
     st.stop()
 
 # --- 2. FUNÇÕES AUXILIARES ---
+
+# ***** NOVA FUNÇÃO ROBUSTA PARA LER FICHEIROS *****
+def load_and_process_file(uploaded_file, file_type):
+    """
+    Tenta ler um ficheiro Excel. Se falhar com erro de corrupção,
+    tenta lê-lo como uma tabela HTML, que é um formato comum para exportações de sistema.
+    """
+    try:
+        if file_type == 'sistema':
+            # Primeira tentativa: ler como Excel normal
+            df = pd.read_excel(uploaded_file, engine='xlrd')
+        else: # fisico
+            df = pd.read_excel(uploaded_file)
+        return df
+    except Exception as e:
+        # Se a primeira tentativa falhar, verifica se é o erro de corrupção
+        if "Workbook corruption" in str(e):
+            st.warning("Ficheiro do sistema parece estar num formato não padrão. A tentar uma abordagem alternativa...")
+            # Segunda tentativa: ler como se fosse uma tabela HTML
+            uploaded_file.seek(0) # Volta ao início do ficheiro
+            # O Pandas consegue ler tabelas diretamente de ficheiros HTML
+            dfs = pd.read_html(io.StringIO(uploaded_file.getvalue().decode('utf-8')))
+            if dfs:
+                return dfs[0] # Retorna a primeira tabela encontrada no ficheiro
+        # Se for outro erro, ou se a segunda tentativa falhar, lança a exceção
+        raise e
+
 def processar_estoque_sistema(df_sistema):
     """Processa e limpa o DataFrame do estoque do sistema."""
-    # Renomeia as colunas para facilitar o acesso
     df_sistema.columns = ['ID', 'Data Cadastro', 'Última Transmissão', 'Modelo', 'Versão', 'Serial', 'Status']
-    # Converte a coluna 'Serial' para string para garantir a comparação correta
     df_sistema['Serial'] = df_sistema['Serial'].astype(str)
     return df_sistema
 
 def processar_estoque_fisico(df_fisico):
     """Processa e limpa o DataFrame do estoque físico."""
-    # Renomeia a coluna
     df_fisico.columns = ['Serial']
-    # Converte a coluna 'Serial' para string
     df_fisico['Serial'] = df_fisico['Serial'].astype(str)
     return df_fisico
 
@@ -66,31 +89,21 @@ st.markdown("---")
 # --- 5. ANÁLISE E COMPARAÇÃO ---
 if uploaded_sistema and uploaded_fisico:
     try:
-        df_sistema = pd.read_excel(uploaded_sistema, engine='xlrd')
-        # Tenta ler como xlsx, se falhar, tenta como csv
-        try:
-            df_fisico = pd.read_excel(uploaded_fisico)
-        except Exception:
-            # Reposiciona o ponteiro do ficheiro para o início para a nova leitura
-            uploaded_fisico.seek(0)
-            df_fisico = pd.read_csv(uploaded_fisico)
+        # Usa a nova função de carregamento robusta
+        df_sistema_raw = load_and_process_file(uploaded_sistema, 'sistema')
+        df_fisico_raw = load_and_process_file(uploaded_fisico, 'fisico')
 
-        # Processa os dataframes
-        df_sistema = processar_estoque_sistema(df_sistema)
-        df_fisico = processar_estoque_fisico(df_fisico)
+        df_sistema = processar_estoque_sistema(df_sistema_raw)
+        df_fisico = processar_estoque_fisico(df_fisico_raw)
 
         st.subheader("Resultados da Conciliação de Estoque")
 
-        # Análise do Estoque Físico
         with st.expander("🔍 Análise do Estoque Físico", expanded=True):
-            # Junta os dados do estoque físico com os do sistema para obter o status
             df_fisico_com_status = pd.merge(df_fisico, df_sistema[['Serial', 'Status']], on='Serial', how='left')
             df_fisico_com_status['Status'].fillna('Não Encontrado no Sistema', inplace=True)
             
-            status_counts = df_fisico_com_status['Status'].value_counts()
             st.metric("Total de Rastreadores no Estoque Físico", value=len(df_fisico))
             
-            # Mapeia os status para as categorias desejadas
             disponivel_revisao = df_fisico_com_status[df_fisico_com_status['Status'].isin(['Disponível', 'Revisão'])]
             indisponivel = df_fisico_com_status[df_fisico_com_status['Status'] == 'Indisponível']
             manutencao = df_fisico_com_status[df_fisico_com_status['Status'] == 'Manutenção']
@@ -99,28 +112,22 @@ if uploaded_sistema and uploaded_fisico:
             col_a.success(f"Disponível/Revisão: **{len(disponivel_revisao)}**")
             col_b.warning(f"Indisponível (Em Uso): **{len(indisponivel)}**")
             col_c.error(f"Manutenção: **{len(manutencao)}**")
-
             st.dataframe(df_fisico_com_status, use_container_width=True, hide_index=True)
 
-        # Análise de Divergências
         with st.expander("⚠️ Análise de Divergências", expanded=True):
             seriais_sistema = set(df_sistema['Serial'])
             seriais_fisico = set(df_fisico['Serial'])
             
-            # Itens que estão no sistema mas não no físico
             faltando_no_fisico = seriais_sistema - seriais_fisico
             
             if not faltando_no_fisico:
                 st.success("🎉 Parabéns! Todos os rastreadores do sistema foram encontrados no estoque físico.")
             else:
                 st.error(f"Atenção: {len(faltando_no_fisico)} rastreador(es) não foram encontrados no estoque físico.")
-                
-                # Mostra a lista dos que faltam com os seus detalhes do sistema
                 df_faltantes = df_sistema[df_sistema['Serial'].isin(faltando_no_fisico)]
                 st.dataframe(
                     df_faltantes[['Serial', 'Status', 'Modelo', 'Última Transmissão']],
-                    use_container_width=True,
-                    hide_index=True
+                    use_container_width=True, hide_index=True
                 )
 
     except Exception as e:
