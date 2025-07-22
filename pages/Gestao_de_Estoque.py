@@ -14,12 +14,11 @@ if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. FUNÇÃO AUXILIAR (SIMPLIFICADA) ---
+# --- 2. FUNÇÃO AUXILIAR ---
 def processar_estoque_fisico(df_fisico):
     """Processa e limpa o DataFrame do estoque físico."""
-    # Garante que a primeira coluna se chama 'Serial'
     df_fisico.columns = ['Serial'] + list(df_fisico.columns[1:])
-    df_fisico = df_fisico[['Serial']] # Seleciona apenas a coluna 'Serial'
+    df_fisico = df_fisico[['Serial']]
     df_fisico['Serial'] = df_fisico['Serial'].astype(str).str.strip()
     return df_fisico
 
@@ -41,16 +40,16 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.info("**1. Estoque do Sistema**")
-    st.warning("⚠️ **Instruções:** Exporte o `relatorio_rastreador.xls` do sistema e guarde-o como **CSV (separado por ponto e vírgula)**.")
+    st.warning("⚠️ **Instruções:** Abra o `relatorio_rastreador.xls` no Excel e guarde-o como **Pasta de Trabalho do Excel (*.xlsx)** antes de o carregar.")
     uploaded_sistema = st.file_uploader(
-        "Carregue o ficheiro do sistema (guardado como .csv)",
-        type=['csv']
+        "Carregue o ficheiro do sistema (guardado como .xlsx)",
+        type=['xlsx']
     )
 
 with col2:
     st.info("**2. Estoque Físico**")
     uploaded_fisico = st.file_uploader(
-        "Carregue a planilha do inventário físico (`estoque_fisico.xlsx`)",
+        "Carregue a planilha do inventário físico",
         type=['xlsx', 'csv']
     )
 
@@ -59,27 +58,26 @@ st.markdown("---")
 # --- 5. ANÁLISE E COMPARAÇÃO ---
 if uploaded_sistema and uploaded_fisico:
     try:
-        # Lê o CSV especificando que o cabeçalho está na linha 12 (índice 11)
-        df_sistema = pd.read_csv(
+        # Lê o ficheiro do sistema diretamente como .xlsx, assumindo o cabeçalho na linha 12
+        df_sistema = pd.read_excel(
             uploaded_sistema,
-            delimiter=';',
-            header=11, # FIXADO: Linha 12 do ficheiro
-            encoding='latin-1',
-            on_bad_lines='warn'
+            header=11, # Linha 12 do Excel (índice 11)
+            engine='openpyxl'
         )
         
-        # ***** CORREÇÃO DEFINITIVA AQUI *****
-        # Atribui manualmente os nomes corretos às colunas, ignorando os nomes corrompidos do ficheiro.
-        df_sistema.columns = [
-            'Modelo', 'Gateway', 'N_Equipamento', 'Serial', 'P_Entrada',
-            'Kit', 'Status', 'Tipo_Equipamento', 'Situacao'
-        ]
+        # Renomeia as colunas para um formato padronizado e seguro
+        df_sistema = df_sistema.rename(columns={'Nº Série': 'Serial', 'Nº Equipamento': 'N_Equipamento'})
         
-        # Limpa e converte a coluna Serial
-        df_sistema.dropna(subset=['Serial'], inplace=True)
-        df_sistema = df_sistema[df_sistema['Serial'].astype(str).str.strip() != '']
+        # Validação crucial para garantir que a leitura foi bem-sucedida
+        required_columns = ['Serial', 'Status', 'Modelo']
+        if not all(col in df_sistema.columns for col in required_columns):
+            st.error(f"Erro de Colunas: O cabeçalho na linha 12 do seu ficheiro .xlsx não contém as colunas necessárias (Ex: 'Nº Série', 'Status', 'Modelo').")
+            st.write("Colunas encontradas:", df_sistema.columns.tolist())
+            st.stop()
+
         df_sistema['Serial'] = df_sistema['Serial'].astype(str).str.strip()
-        
+        df_sistema.dropna(subset=['Serial'], inplace=True)
+
         # Lê o ficheiro do estoque físico
         try:
             df_fisico_raw = pd.read_excel(uploaded_fisico)
@@ -119,16 +117,19 @@ if uploaded_sistema and uploaded_fisico:
             else:
                 st.error(f"Atenção: {len(faltando_no_fisico)} rastreador(es) não foram encontrados no estoque físico.")
                 
+                # Prepara a coluna para exibição, se existir
+                if 'Última Transmissão' not in df_sistema.columns:
+                     df_sistema['Última Transmissão'] = "N/A"
+                
                 df_faltantes = df_sistema[df_sistema['Serial'].isin(faltando_no_fisico)]
-                # Seleciona as colunas que sabemos que existem
                 st.dataframe(
-                    df_faltantes[['Serial', 'Status', 'Modelo', 'Situacao']],
+                    df_faltantes[['Serial', 'Status', 'Modelo', 'Última Transmissão']],
                     use_container_width=True, hide_index=True
                 )
 
     except Exception as e:
         st.error(f"Ocorreu um erro ao processar os ficheiros: {e}")
-        st.info("Por favor, verifique se o ficheiro do sistema foi guardado como CSV, se o cabeçalho está na linha 12 e se o ficheiro de estoque físico está correto.")
+        st.info("Por favor, verifique se os ficheiros têm o formato e as colunas esperadas, e se o cabeçalho está realmente na linha 12 do ficheiro do sistema.")
 
 else:
     st.info("Por favor, carregue ambos os ficheiros para iniciar a análise.")
