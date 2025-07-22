@@ -14,7 +14,8 @@ if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. DADOS CENTRALIZADOS (Extraídos do PDF e ficheiros de dados) ---
+# --- 2. DADOS CENTRALIZADOS (Extraídos dos seus ficheiros) ---
+# (Mantém a mesma estrutura de dados interna)
 MARKET_DATA = {
     "comparativo_features": [
         {'Empresa': 'VERDIO', 'Telemetria (CAN)': 1, 'Vídeo Monitoramento': 1, 'Sensor de Fadiga': 1, 'Controle de Jornada': 1, 'Roteirizador': 1},
@@ -40,14 +41,21 @@ MARKET_DATA = {
         "nacional_mundial": ["Sascar (Michelin)", "Omnilink", "Ituran", "Positron", "Autotrac", "Onixsat", "Veltec"],
         "regional_nicho": ["Getrak", "Maxtrack", "CEABS", "SystemSat", "GolSat", "Sighra", "3S"]
     },
-    "alvos": {
-        "locadoras": ["LOCALIZA HERTZ", "MOVIDA", "UNIDAS", "AS RENT A CAR", "FOCO ALUGUEL DE CARROS", "YES RENT A CAR", "VAMOS LOCADORA"],
-        "transportadoras": ["JSL", "TRANSPORTE BERTOLINI", "ATUAL CARGAS", "BRASPRESS", "CARVALIMA", "COOPERCarga", "RODONAVES"]
-    }
+    "precos_concorrentes_regionais": [
+        {'Concorrente': 'VERDIO (Referência)', 'Instalação (GPRS)': 'Alguns casos - R$ 50,00', 'Mensalidade (GPRS)': 'A partir de R$ 40,00', 'Instalação (Satelital)': 'Alguns casos - R$ 50,00', 'Mensalidade (Satelital)': 'A partir de R$ 107,67'},
+        {'Concorrente': 'Elite Rastro', 'Instalação (GPRS)': 'R$ 30,00', 'Mensalidade (GPRS)': 'R$ 50,00', 'Instalação (Satelital)': 'R$ 900,00', 'Mensalidade (Satelital)': 'R$ 180,00'},
+        {'Concorrente': 'NJ Rastreamento', 'Instalação (GPRS)': 'R$ 120,00', 'Mensalidade (GPRS)': 'R$ 75,00', 'Instalação (Satelital)': 'R$ 650,00', 'Mensalidade (Satelital)': 'R$ 170,00'},
+        {'Concorrente': 'TK Rastreadores', 'Instalação (GPRS)': 'R$ 80,00', 'Mensalidade (GPRS)': 'R$ 69,90', 'Instalação (Satelital)': 'R$ 980,00', 'Mensalidade (Satelital)': 'R$ 150,00'},
+        {'Concorrente': 'vtrackrastreamento', 'Instalação (GPRS)': 'R$ 0,00', 'Mensalidade (GPRS)': 'R$ 50,00', 'Instalação (Satelital)': '-', 'Mensalidade (Satelital)': '-'},
+        {'Concorrente': 'rastrek', 'Instalação (GPRS)': 'R$ 0,00', 'Mensalidade (GPRS)': 'R$ 60,00', 'Instalação (Satelital)': 'R$ 0,00', 'Mensalidade (Satelital)': 'R$ 130,00'},
+        {'Concorrente': 'Pro Lion', 'Instalação (GPRS)': 'R$ 99,90', 'Mensalidade (GPRS)': 'R$ 49,90 - R$ 69,90', 'Instalação (Satelital)': '-', 'Mensalidade (Satelital)': '-'},
+        {'Concorrente': 'Impacto Rast.', 'Instalação (GPRS)': 'R$ 0,00', 'Mensalidade (GPRS)': 'R$ 45,00', 'Instalação (Satelital)': '-', 'Mensalidade (Satelital)': '-'},
+    ]
 }
 
 df_comparativo = pd.DataFrame(MARKET_DATA["comparativo_features"])
 df_precos = pd.DataFrame(MARKET_DATA["precos_performance"])
+df_precos_regionais = pd.DataFrame(MARKET_DATA["precos_concorrentes_regionais"])
 
 # --- 3. INTERFACE DA PÁGINA ---
 st.sidebar.image("imgs/v-c.png", width=120)
@@ -79,18 +87,22 @@ st.info("👮‍♂️ **Segurança Jurídica e Compliance:** Somos a única sol
 st.info("💡 **Inovação Acessível:** Oferecemos tecnologias de ponta (sensor de fadiga, vídeo) que são tipicamente premium, como parte do nosso pacote padrão.")
 st.markdown("---")
 
-
-# --- SEÇÃO CENÁRIO COMPETITIVO ---
+# --- SEÇÃO CENÁRIO COMPETITIVO (AGORA COMO TABELA) ---
 st.subheader("Cenário Competitivo")
 col_a, col_b = st.columns(2)
 with col_a:
     st.markdown("##### Players Nacionais e Mundiais")
-    for empresa in MARKET_DATA["empresas_concorrentes"]["nacional_mundial"]:
-        st.markdown(f"- {empresa}")
+    df_nacional = pd.DataFrame(MARKET_DATA["empresas_concorrentes"]["nacional_mundial"], columns=["Concorrente"])
+    st.dataframe(df_nacional, hide_index=True, use_container_width=True)
 with col_b:
     st.markdown("##### Players Regionais e de Nicho")
-    for empresa in MARKET_DATA["empresas_concorrentes"]["regional_nicho"]:
-        st.markdown(f"- {empresa}")
+    df_regional = pd.DataFrame(MARKET_DATA["empresas_concorrentes"]["regional_nicho"], columns=["Concorrente"])
+    st.dataframe(df_regional, hide_index=True, use_container_width=True)
+st.markdown("---")
+
+# --- NOVA SEÇÃO: COMPARATIVO DE PREÇOS (TABELA) ---
+st.subheader("Comparativo de Preços - Concorrentes Regionais")
+st.dataframe(df_precos_regionais, hide_index=True, use_container_width=True)
 st.markdown("---")
 
 # --- SEÇÃO GRÁFICO DE COMPARAÇÃO DE FUNCIONALIDADES ---
@@ -113,34 +125,3 @@ fig_features.update_layout(
 )
 st.plotly_chart(fig_features, use_container_width=True)
 st.markdown("---")
-
-# --- SEÇÃO GRÁFICO DE CUSTO-BENEFÍCIO ---
-st.subheader("Custo-Benefício no Mercado")
-df_precos['color'] = df_precos['Empresa'].apply(lambda x: '#A7C957' if x == 'VERDIO' else '#0582CA')
-df_precos['size'] = df_precos['Funcionalidades'].apply(lambda y: y * 5 + 10)
-
-fig_bubble = go.Figure(data=[go.Scatter(
-    x=df_precos['Preço Mensal'], y=df_precos['Funcionalidades'],
-    text=df_precos['Empresa'], mode='markers+text', textposition="top center",
-    marker=dict(size=df_precos['size'], color=df_precos['color'])
-)])
-fig_bubble.update_layout(
-    title='Preço Mensal vs. Quantidade de Funcionalidades Essenciais',
-    xaxis_title="Preço Mensal (A partir de R$)",
-    yaxis_title="Nº de Funcionalidades Essenciais",
-    height=500, margin=dict(l=20, r=20, t=50, b=20), showlegend=False
-)
-st.plotly_chart(fig_bubble, use_container_width=True)
-st.markdown("---")
-
-# --- SEÇÃO CLIENTES-ALVO ---
-st.subheader("Nossos Alvos Regionais")
-col_c, col_d = st.columns(2)
-with col_c:
-    st.info("🎯 **Alvos em Locadoras**")
-    for locadora in MARKET_DATA["alvos"]["locadoras"]:
-        st.markdown(f"- {locadora}")
-with col_d:
-    st.info("🎯 **Alvos em Transportadoras**")
-    for transportadora in MARKET_DATA["alvos"]["transportadoras"]:
-        st.markdown(f"- {transportadora}")
