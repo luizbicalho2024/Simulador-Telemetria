@@ -13,7 +13,7 @@ if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. DADOS CENTRALIZADOS (Extraídos dos ficheiros .xlsx) ---
+# --- 2. DADOS CENTRALIZADOS (Extraídos dos seus ficheiros) ---
 MARKET_DATA = {
     "precos_nacionais": [
         {'Empresa': 'VERDIO (Referência)', 'Instalação (GPRS)': 'Alguns casos - R$ 50,00', 'Mensalidade (GPRS)': 'A partir de R$ 40,00', 'Instalação (Satelital)': 'Alguns casos - R$ 50,00', 'Mensalidade (Satelital)': 'A partir de R$ 107,67'},
@@ -74,6 +74,24 @@ try:
 except: pass
 
 st.markdown("<h1 style='text-align: center; color: #006494;'>Pesquisa de Mercado e Concorrentes</h1>", unsafe_allow_html=True)
+st.markdown("---")
+
+# --- SEÇÃO MERCADO-ALVO ---
+st.subheader("Nosso Mercado-Alvo")
+st.markdown("""
+| Segmento | Dor Principal | Oportunidade para o Verdio |
+|---|---|---|
+| **Locadoras de Veículos** | Risco e Descontrole do Ativo: Uso indevido, sinistros e a dificuldade de garantir a segurança do patrimônio. | Oferecer uma solução de proteção do ativo e segurança jurídica, que vai além do simples rastreamento. |
+| **Transportadoras** | Altos Custos Operacionais e Riscos Trabalhistas: Consumo excessivo de combustível, manutenção imprevista e acidentes. | Entregar uma plataforma de eficiência operacional e compliance, com ROI claro através da redução de custos. |
+""")
+st.markdown("---")
+
+# --- SEÇÃO DIFERENCIAIS ---
+st.subheader("Nossos Diferenciais Competitivos")
+st.write("Para vencer no mercado, nosso discurso deve focar nos pilares que a concorrência não entrega de forma integrada:")
+st.info("📊 **Gestão Financeira Integrada (ROI Claro):** Nossos dashboards transformam dados operacionais (combustível, ociosidade) em indicadores financeiros, provando o retorno sobre o investimento.")
+st.info("👮‍♂️ **Segurança Jurídica e Compliance:** Somos a única solução que integra a gestão da Lei do Motorista com o sensor de fadiga, mitigando passivos trabalhistas e acidentes.")
+st.info("💡 **Inovação Acessível:** Oferecemos tecnologias de ponta (sensor de fadiga, vídeo) que são tipicamente premium, como parte do nosso pacote padrão.")
 st.markdown("---")
 
 # --- 4. EXIBIÇÃO DAS TABELAS ---
