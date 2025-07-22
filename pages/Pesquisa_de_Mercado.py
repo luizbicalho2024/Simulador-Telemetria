@@ -1,42 +1,44 @@
-# pages/Analise_Concorrentes.py
+# pages/Pesquisa_de_Mercado.py
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 
-# --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
+# --- 1. CONFIGURAÇÃO DA PÁGINA E AUTENTICAÇÃO ---
 st.set_page_config(
     layout="wide",
-    page_title="Análise de Concorrentes",
+    page_title="Pesquisa de Mercado",
     page_icon="imgs/v-c.png"
 )
 
+# Bloco de verificação de autenticação padrão
 if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. FUNÇÕES PARA CARREGAR DADOS ---
-@st.cache_data
-def load_data():
-    """Carrega todos os dados dos ficheiros CSV."""
-    try:
-        # Carrega os dados para os gráficos
-        df_comparativo = pd.read_csv("pesqusisa de mercado rastreadores março 2025.xlsx - comparativo.csv")
-        df_precos = pd.read_csv("pesqusisa de mercado rastreadores março 2025.xlsx - preços praticados .csv")
-        
-        # Carrega os dados para as listas de empresas
-        df_empresas = pd.read_csv("pesqusisa de mercado rastreadores março 2025.xlsx - empresas.csv")
-        df_alvos = pd.read_csv("Locadoras e Transportadoras.xlsx - Página1.csv")
-        
-        return df_comparativo, df_precos, df_empresas, df_alvos
-    except FileNotFoundError as e:
-        st.error(f"Erro ao carregar os ficheiros de dados: {e}. Certifique-se de que os ficheiros .csv estão na pasta raiz do projeto.")
-        return None, None, None, None
+# --- 2. DADOS (Extraídos do PDF) ---
+# Dados para o gráfico de comparação de funcionalidades
+comparison_data = {
+    'labels': ['VERDIO', 'Sascar', 'Omnilink', 'Onixsat', 'Autotrac', 'Veltec', 'Maxtrack', 'Getrak'],
+    'datasets': [
+        {'label': 'Telemetria (CAN)', 'data': [1, 1, 1, 1, 0, 1, 1, 0], 'color': '#006494'},
+        {'label': 'Vídeo Monitoramento', 'data': [1, 1, 1, 0, 0, 1, 0, 0], 'color': '#0582CA'},
+        {'label': 'Sensor de Fadiga', 'data': [1, 0, 0, 0, 0, 0, 0, 0], 'color': '#A7C957'},
+        {'label': 'Controle de Jornada', 'data': [1, 1, 1, 1, 0, 1, 0, 0], 'color': '#00A6FB'},
+        {'label': 'Roteirizador', 'data': [1, 1, 1, 0, 1, 1, 1, 0], 'color': '#6A994E'},
+    ]
+}
 
-# Carrega os dados
-df_comparativo, df_precos, df_empresas, df_alvos = load_data()
-
-if df_comparativo is None:
-    st.stop() # Interrompe a execução se os dados não puderem ser carregados
+# Dados para o gráfico de custo-benefício (bubble chart)
+price_performance_data = {
+    'labels': ['Getrak', 'VERDIO', 'Maxtrack', 'Sascar', 'Omnilink', 'Autotrac', 'Veltec', 'Onixsat'],
+    'data': [
+        {'x': 34.90, 'y': 0, 'r': 10}, {'x': 40.00, 'y': 5, 'r': 25}, {'x': 59.90, 'y': 2, 'r': 15},
+        {'x': 79.90, 'y': 4, 'r': 20}, {'x': 89.90, 'y': 4, 'r': 20}, {'x': 99.90, 'y': 1, 'r': 12},
+        {'x': 110.00, 'y': 4, 'r': 20}, {'x': 120.00, 'y': 2, 'r': 15},
+    ],
+    'verdiocolor': '#A7C957',
+    'competitorcolor': '#0582CA'
+}
 
 # --- 3. INTERFACE DA PÁGINA ---
 st.sidebar.image("imgs/v-c.png", width=120)
@@ -75,12 +77,26 @@ st.subheader("Cenário Competitivo")
 col_a, col_b = st.columns(2)
 with col_a:
     st.markdown("##### Players Nacionais e Mundiais")
-    for empresa in df_empresas[df_empresas['Categoria'] == 'Nacional/Mundial']['Empresa']:
-        st.markdown(f"- {empresa}")
+    st.markdown("""
+    - Sascar (Michelin)
+    - Omnilink
+    - Ituran
+    - Positron
+    - Autotrac
+    - Onixsat
+    - Veltec
+    """)
 with col_b:
     st.markdown("##### Players Regionais e de Nicho")
-    for empresa in df_empresas[df_empresas['Categoria'] == 'Regional/Nicho']['Empresa']:
-        st.markdown(f"- {empresa}")
+    st.markdown("""
+    - Getrak
+    - Maxtrack
+    - CEABS
+    - SystemSat
+    - GolSat
+    - Sighra
+    - 3S
+    """)
 st.markdown("---")
 
 # --- SEÇÃO GRÁFICO DE FUNCIONALIDADES ---
@@ -88,22 +104,15 @@ st.subheader("Verdio vs. Concorrência: A Vantagem Clara")
 st.write("Analisando as funcionalidades-chave, o Verdio se destaca por oferecer um pacote completo e tecnologicamente avançado a um preço competitivo. O nosso principal diferencial, o Sensor de Fadiga, é um recurso de segurança que a maioria dos concorrentes não oferece ou cobra um valor premium.")
 
 fig_features = go.Figure()
-features = ['Telemetria (CAN)', 'Vídeo Monitoramento', 'Sensor de Fadiga', 'Controle de Jornada', 'Roteirizador']
-colors = ['#006494', '#0582CA', '#A7C957', '#00A6FB', '#6A994E']
-
-for feature, color in zip(features, colors):
+for dataset in comparison_data['datasets']:
     fig_features.add_trace(go.Bar(
-        y=df_comparativo['Empresa'],
-        x=df_comparativo[feature],
-        name=feature,
-        orientation='h',
-        marker=dict(color=color)
+        y=comparison_data['labels'], x=dataset['data'], name=dataset['label'],
+        orientation='h', marker=dict(color=dataset['color'])
     ))
-
 fig_features.update_layout(
     title='Comparativo de Funcionalidades por Empresa', barmode='stack',
     yaxis={'categoryorder':'total ascending'}, yaxis_title="Empresa",
-    xaxis_title="Funcionalidades Oferecidas (1 = Sim, 0 = Não)",
+    xaxis_title="Funcionalidades Oferecidas (Pontuação)",
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     height=500, margin=dict(l=20, r=20, t=50, b=20)
 )
@@ -114,27 +123,22 @@ st.markdown("---")
 st.subheader("Custo-Benefício no Mercado")
 st.write("Ao cruzar o preço inicial com a quantidade de funcionalidades essenciais, o Verdio se posiciona no 'quadrante de alto valor', entregando a mais completa suíte de recursos pelo preço mais competitivo.")
 
-df_precos['color'] = df_precos['Empresa'].apply(lambda x: '#A7C957' if x == 'VERDIO' else '#0582CA')
-df_precos['size'] = df_precos['Empresa'].apply(lambda x: 25 if x == 'VERDIO' else 15)
-
+bubble_colors = [price_performance_data['verdiocolor'] if label == 'VERDIO' else price_performance_data['competitorcolor'] for label in price_performance_data['labels']]
 fig_bubble = go.Figure(data=[go.Scatter(
-    x=df_precos['Preço Mensal (a partir de)'],
-    y=df_precos['Nº de Funcionalidades Essenciais'],
-    text=df_precos['Empresa'],
-    mode='markers+text',
+    x=[d['x'] for d in price_performance_data['data']],
+    y=[d['y'] for d in price_performance_data['data']],
+    text=price_performance_data['labels'], mode='markers+text',
     textposition="top center",
     marker=dict(
-        size=df_precos['size'],
-        color=df_precos['color'],
-        sizemode='diameter'
+        size=[d['r'] for d in price_performance_data['data']], color=bubble_colors,
+        sizemode='diameter', showscale=False
     )
 )])
 fig_bubble.update_layout(
     title='Preço Mensal vs. Quantidade de Funcionalidades Essenciais',
     xaxis_title="Preço Mensal (A partir de R$)",
     yaxis_title="Nº de Funcionalidades Essenciais",
-    height=500, margin=dict(l=20, r=20, t=50, b=20),
-    showlegend=False
+    height=500, margin=dict(l=20, r=20, t=50, b=20)
 )
 st.plotly_chart(fig_bubble, use_container_width=True)
 st.markdown("---")
@@ -143,13 +147,9 @@ st.markdown("---")
 st.subheader("Nossos Alvos: A Oportunidade de Mercado")
 col_c, col_d = st.columns(2)
 with col_c:
-    st.info("🎯 **Alvos em Locadoras**")
-    for locadora in df_alvos[df_alvos['Tipo'] == 'Locadora']['Empresa']:
-        st.markdown(f"- {locadora}")
+    st.info("🎯 **Alvos em Locadoras:** LOCALIZA HERTZ, MOVIDA, UNIDAS, AS RENT A CAR, FOCO, YES RENT A CAR, VAMOS LOCADORA.")
 with col_d:
-    st.info("🎯 **Alvos em Transportadoras**")
-    for transportadora in df_alvos[df_alvos['Tipo'] == 'Transportadora']['Empresa']:
-        st.markdown(f"- {transportadora}")
+    st.info("🎯 **Alvos em Transportadoras:** JSL, TRANSPORTE BERTOLINI, ATUAL CARGAS, BRASPRESS, CARVALIMA, COOPERCarga, RODONAVES.")
 st.markdown("---")
 
 # --- SEÇÃO IMPLANTAÇÃO ---
