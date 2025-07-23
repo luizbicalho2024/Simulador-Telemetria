@@ -61,7 +61,7 @@ MARKET_DATA = {
         {'Empresa': 'Impacto Rast.', 'Telemetria (CAN)': '❌ Não', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '❌ Não', 'Com. Satelital': '❌ Não', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
     ],
     "localizacoes_regionais": [
-        {"Empresa": "VERDIO (CSC Rovema)", "lat": -8.7619, "lon": -63.9039, "cor": "green"},
+        {"Empresa": "VERDIO (CSC Rovema)", "lat": -8.75242, "lon": -63.90317, "cor": "green"},
         {'Empresa': 'Elite Rastro', "lat": -8.76797, "lon": -63.84175, "cor": "blue"},      # São Paulo, SP
         {'Empresa': 'NJ Rastreamento', "lat": -8.76494, "lon": -63.87658, "cor": "blue"},   # Rio de Janeiro, RJ
         {'Empresa': 'TK Rastreadores', "lat": -8.75304, "lon": -63.90038, "cor": "blue"},   # Brasília, DF
