@@ -18,7 +18,7 @@ if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. DADOS CENTRALIZADOS (COM COORDENADAS PARA O MAPA) ---
+# --- 2. DADOS CENTRALIZADOS (COM AS SUAS COORDENADAS) ---
 MARKET_DATA = {
     "precos_nacionais": [
         {'Empresa': 'VERDIO (Referência)', 'Instalação (GPRS)': 'Tratativa Comercial', 'Mensalidade (GPRS)': 'R$ 44,93 - R$ 584,49', 'Instalação (Satelital)': 'Tratativa Comercial', 'Mensalidade (Satelital)': 'R$ 107,67 - R$ 193,80'},
@@ -136,14 +136,11 @@ st.markdown("##### Pontuação Total de Funcionalidades")
 df_func_all = pd.concat([df_funci_nacionais, df_funci_regionais]).drop_duplicates(subset=['Empresa']).reset_index(drop=True)
 score_map = {'✅ Sim': 1.0, '❔ Opcional': 0.5, '❔ Parcial': 0.5, '❌ Não': 0.0, '❔ Comercial': 0.0}
 features_to_score = ['Telemetria (CAN)', 'Vídeo', 'Sensor de Fadiga', 'Controle de Jornada', 'Roteirizador', 'Com. Satelital', 'Suporte 24h', 'App de Gestão']
-
 for feature in features_to_score:
     if feature in df_func_all.columns:
         df_func_all[feature] = df_func_all[feature].map(score_map).fillna(0)
-
 df_func_all['Pontuação Total'] = df_func_all[features_to_score].sum(axis=1)
 df_func_all_sorted = df_func_all.sort_values('Pontuação Total', ascending=True)
-
 fig_score = go.Figure(go.Bar(
     y=df_func_all_sorted['Empresa'], x=df_func_all_sorted['Pontuação Total'],
     orientation='h', marker=dict(color=df_func_all_sorted['Pontuação Total'], colorscale='Greens')
@@ -218,7 +215,7 @@ fig_satelital.update_layout(
 )
 st.plotly_chart(fig_satelital, use_container_width=True)
 
-# --- 7. MAPA DE CONCORRENTES REGIONAIS (COM ETIQUETAS FIXAS) ---
+# --- 7. MAPA DE CONCORRENTES REGIONAIS ---
 st.markdown("---")
 st.subheader("Mapa de Concorrentes Regionais")
 st.write("Visualização da distribuição geográfica dos concorrentes em Porto Velho, com informações de preço.")
@@ -226,11 +223,11 @@ st.write("Visualização da distribuição geográfica dos concorrentes em Porto
 porto_velho_centro = [-8.755, -63.875]
 zoom_level = 13
 
-mapa = folium.Map(location=porto_velho_centro, zoom_start=zoom_level, tiles="CartoDB positron")
+mapa = folium.Map(location=porto_velho_centro, zoom_start=zoom_level, tiles="Esri.WorldImagery")
 
 for index, row in df_mapa.iterrows():
     tooltip_html = f"""
-    <div style="font-family: sans-serif; font-size: 12px;">
+    <div style="font-family: sans-serif; font-size: 12px; color: white; background-color: rgba(0, 0, 0, 0.6); padding: 5px; border-radius: 3px;">
         <strong>{row['Empresa']}</strong><br>
         <hr style='margin: 2px 0;'>
         <strong>GPRS:</strong> {row.get('Mensalidade (GPRS)', 'N/A')}<br>
@@ -247,14 +244,8 @@ for index, row in df_mapa.iterrows():
         text=tooltip_html,
         permanent=True,
         direction='right',
-        offset=(10, 0),
-        style="""
-            background-color: rgba(255, 255, 255, 0.8);
-            border: 1px solid black;
-            border-radius: 3px;
-            box-shadow: 3px 3px rgba(0, 0, 0, 0.2);
-            padding: 5px;
-        """
+        offset=(10, -10),
+        sticky=True
     ).add_to(
         folium.CircleMarker(location=[row['lat'], row['lon']], radius=1, fill_opacity=0, opacity=0)
     )
