@@ -18,7 +18,7 @@ if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. DADOS CENTRALIZADOS (COM AS SUAS COORDENADAS) ---
+# --- 2. DADOS CENTRALIZADOS (COM COORDENADAS PARA O MAPA) ---
 MARKET_DATA = {
     "precos_nacionais": [
         {'Empresa': 'VERDIO (Referência)', 'Instalação (GPRS)': 'Tratativa Comercial', 'Mensalidade (GPRS)': 'R$ 44,93 - R$ 584,49', 'Instalação (Satelital)': 'Tratativa Comercial', 'Mensalidade (Satelital)': 'R$ 107,67 - R$ 193,80'},
@@ -158,25 +158,20 @@ def clean_price(price_str):
         return float(re.findall(r'\d+[\.,]\d+', str(price_str))[0].replace(',', '.'))
     except (IndexError, TypeError):
         return None
-
 df_prices_all_for_bi = df_prices_all.copy()
 df_prices_all_for_bi['Mensalidade_GPRS_Num'] = df_prices_all_for_bi['Mensalidade (GPRS)'].apply(clean_price)
 df_func_all['Merge_Key'] = df_func_all['Empresa'].str.replace(r'\s*\(.*\)', '', regex=True)
 df_prices_all_for_bi['Merge_Key'] = df_prices_all_for_bi['Empresa'].str.replace(r'\s*\(.*\)', '', regex=True)
-
 df_bi = pd.merge(df_func_all, df_prices_all_for_bi, on='Merge_Key', how='inner', suffixes=('', '_price'))
 df_bi.dropna(subset=['Mensalidade_GPRS_Num'], inplace=True)
 df_bi['Empresa'] = df_bi['Empresa_price']
-
 unique_companies = df_bi['Empresa'].unique()
 color_palette = px.colors.qualitative.Plotly
 color_map = {company: color_palette[i % len(color_palette)] for i, company in enumerate(unique_companies)}
 if 'VERDIO (Referência)' in color_map:
     color_map['VERDIO (Referência)'] = '#2ca02c'
-
 df_bi['color'] = df_bi['Empresa'].map(color_map)
 df_bi['size'] = df_bi['Pontuação Total'].apply(lambda y: y * 4 + 15)
-
 fig_bubble_bi = go.Figure()
 for empresa in df_bi['Empresa'].unique():
     df_empresa = df_bi[df_bi['Empresa'] == empresa]
@@ -198,7 +193,6 @@ st.markdown("##### Análise de Custos - Comunicação Satelital")
 df_prices_all['Instalacao_Satelital_Num'] = df_prices_all['Instalação (Satelital)'].apply(clean_price)
 df_prices_all['Mensalidade_Satelital_Num'] = df_prices_all['Mensalidade (Satelital)'].apply(clean_price)
 df_satelital = df_prices_all.dropna(subset=['Mensalidade_Satelital_Num'])
-
 fig_satelital = go.Figure()
 fig_satelital.add_trace(go.Bar(
     x=df_satelital['Empresa'], y=df_satelital['Instalacao_Satelital_Num'],
@@ -215,11 +209,10 @@ fig_satelital.update_layout(
 )
 st.plotly_chart(fig_satelital, use_container_width=True)
 
-# --- 7. MAPA DE CONCORRENTES REGIONAIS ---
+# --- 7. MAPA DE CONCORRENTES REGIONAIS (COM ETIQUETAS FIXAS E VISÃO DE SATÉLITE) ---
 st.markdown("---")
 st.subheader("Mapa de Concorrentes Regionais")
 st.write("Visualização da distribuição geográfica dos concorrentes em Porto Velho, com informações de preço.")
-
 porto_velho_centro = [-8.755, -63.875]
 zoom_level = 13
 
