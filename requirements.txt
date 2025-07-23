@@ -19,3 +19,5 @@ plotly
 xlrd
 html5lib
 lxml
+folium
+streamlit-folium
