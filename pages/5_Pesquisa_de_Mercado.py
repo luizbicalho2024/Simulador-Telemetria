@@ -62,13 +62,13 @@ MARKET_DATA = {
     ],
     "localizacoes_regionais": [
         {"Empresa": "VERDIO (CSC Rovema)", "lat": -8.75242, "lon": -63.90317, "cor": "green"},
-        {'Empresa': 'Elite Rastro', "lat": -8.76797, "lon": -63.84175, "cor": "blue"},      # São Paulo, SP
-        {'Empresa': 'NJ Rastreamento', "lat": -8.76494, "lon": -63.87658, "cor": "blue"},   # Rio de Janeiro, RJ
-        {'Empresa': 'TK Rastreadores', "lat": -8.75304, "lon": -63.90038, "cor": "blue"},   # Brasília, DF
-        {'Empresa': 'vtrackrastreamento', "lat": -8.74052, "lon": -63.84815, "cor": "blue"},# Goiânia, GO
-        {'Empresa': 'rastrek', "lat": -8.75011, "lon": -63.84796, "cor": "blue"},           # Belo Horizonte, MG
-        {'Empresa': 'Pro Lion', "lat": -8.75608, "lon": -63.87928, "cor": "blue"},          # Curitiba, PR
-        {'Empresa': 'Impacto Rast.', "lat": -8.76647, "lon": -63.88595, "cor": "blue"},     # Manaus, AM
+        {'Empresa': 'Elite Rastro', "lat": -8.76797, "lon": -63.84175, "cor": "blue"},
+        {'Empresa': 'NJ Rastreamento', "lat": -8.76494, "lon": -63.87658, "cor": "blue"},
+        {'Empresa': 'TK Rastreadores', "lat": -8.75304, "lon": -63.90038, "cor": "blue"},
+        {'Empresa': 'vtrackrastreamento', "lat": -8.74052, "lon": -63.84815, "cor": "blue"},
+        {'Empresa': 'rastrek', "lat": -8.75011, "lon": -63.84796, "cor": "blue"},
+        {'Empresa': 'Pro Lion', "lat": -8.75608, "lon": -63.87928, "cor": "blue"},
+        {'Empresa': 'Impacto Rast.', "lat": -8.76647, "lon": -63.88595, "cor": "blue"},
     ]
 }
 
@@ -219,11 +219,14 @@ st.plotly_chart(fig_satelital, use_container_width=True)
 # --- 7. MAPA DE CONCORRENTES REGIONAIS ---
 st.markdown("---")
 st.subheader("Mapa de Concorrentes Regionais")
-st.write("Visualização da distribuição geográfica dos principais concorrentes regionais em relação à nossa sede.")
+st.write("Visualização da distribuição geográfica dos principais concorrentes regionais em Porto Velho.")
 
 df_mapa = pd.DataFrame(MARKET_DATA["localizacoes_regionais"])
-mapa_centro = [df_mapa['lat'].mean(), df_mapa['lon'].mean()]
-mapa = folium.Map(location=mapa_centro, zoom_start=4)
+
+porto_velho_centro = [-8.755, -63.875]
+zoom_level = 13
+
+mapa = folium.Map(location=porto_velho_centro, zoom_start=zoom_level)
 
 for index, row in df_mapa.iterrows():
     folium.Marker(
