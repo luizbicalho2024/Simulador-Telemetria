@@ -18,7 +18,7 @@ if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. DADOS CENTRALIZADOS (COM COORDENADAS PARA O MAPA) ---
+# --- 2. DADOS CENTRALIZADOS (COM AS SUAS ATUALIZAÇÕES) ---
 MARKET_DATA = {
     "precos_nacionais": [
         {'Empresa': 'VERDIO (Referência)', 'Instalação (GPRS)': 'Tratativa Comercial', 'Mensalidade (GPRS)': 'R$ 44,93 - R$ 584,49', 'Instalação (Satelital)': 'Tratativa Comercial', 'Mensalidade (Satelital)': 'R$ 107,67 - R$ 193,80'},
@@ -55,8 +55,8 @@ MARKET_DATA = {
         {'Empresa': 'Elite Rastro', 'Telemetria (CAN)': '✅ Sim', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '❌ Não', 'Com. Satelital': '✅ Sim', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
         {'Empresa': 'NJ Rastreamento', 'Telemetria (CAN)': '✅ Sim', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '❌ Não', 'Com. Satelital': '✅ Sim', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
         {'Empresa': 'TK Rastreadores', 'Telemetria (CAN)': '✅ Sim', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '✅ Sim', 'Com. Satelital': '✅ Sim', 'Suporte 24h': '❔ Comercial', 'App de Gestão': '✅ Sim'},
-        {'Empresa': 'vtrackrastreamento', 'Telemetria (CAN)': '✅ Sim', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '❌ Não', 'Com. Satelital': '❌ Não', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
-        {'Empresa': 'rastrek', 'Telemetria (CAN)': '❔ Parcial', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '❌ Não', 'Com. Satelital': '✅ Sim', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
+        {'Empresa': 'Vtrack Rastreamento', 'Telemetria (CAN)': '✅ Sim', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '❌ Não', 'Com. Satelital': '❌ Não', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
+        {'Empresa': 'Rastrek', 'Telemetria (CAN)': '❔ Parcial', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '❌ Não', 'Com. Satelital': '✅ Sim', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
         {'Empresa': 'Pro Lion', 'Telemetria (CAN)': '❌ Não', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '❌ Não', 'Com. Satelital': '❌ Não', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
         {'Empresa': 'Impacto Rast.', 'Telemetria (CAN)': '❌ Não', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '❌ Não', 'Com. Satelital': '❌ Não', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
     ],
@@ -80,11 +80,8 @@ df_funci_regionais = pd.DataFrame(MARKET_DATA["funcionalidades_regionais"])
 df_localizacoes = pd.DataFrame(MARKET_DATA["localizacoes_regionais"])
 df_prices_all = pd.concat([df_preco_nacionais, df_preco_regionais]).drop_duplicates(subset=['Empresa']).reset_index(drop=True)
 
-# Prepara o nome da empresa para o merge
 df_localizacoes['Merge_Key'] = df_localizacoes['Empresa'].str.replace(r'\s*\(.*\)', '', regex=True).str.strip()
 df_prices_all['Merge_Key'] = df_prices_all['Empresa'].str.replace(r'\s*\(.*\)', '', regex=True).str.strip()
-
-# Junta os dados de localização com os de preço para o mapa
 df_mapa = pd.merge(df_localizacoes, df_prices_all, on='Merge_Key', how='left', suffixes=('', '_price'))
 
 # --- 4. INTERFACE DA PÁGINA ---
@@ -165,8 +162,9 @@ def clean_price(price_str):
     except (IndexError, TypeError):
         return None
 
-df_prices_all_for_bi = df_prices_all.copy() # Cria uma cópia para não afetar as tabelas
+df_prices_all_for_bi = df_prices_all.copy()
 df_prices_all_for_bi['Mensalidade_GPRS_Num'] = df_prices_all_for_bi['Mensalidade (GPRS)'].apply(clean_price)
+
 df_func_all['Merge_Key'] = df_func_all['Empresa'].str.replace(r'\s*\(.*\)', '', regex=True)
 df_prices_all_for_bi['Merge_Key'] = df_prices_all_for_bi['Empresa'].str.replace(r'\s*\(.*\)', '', regex=True)
 
@@ -221,28 +219,44 @@ fig_satelital.update_layout(
 )
 st.plotly_chart(fig_satelital, use_container_width=True)
 
-# --- 7. MAPA DE CONCORRENTES REGIONAIS ---
+# --- 7. MAPA DE CONCORRENTES REGIONAIS (COM ETIQUETAS FIXAS) ---
 st.markdown("---")
 st.subheader("Mapa de Concorrentes Regionais")
-st.write("Visualização da distribuição geográfica dos principais concorrentes regionais em Porto Velho.")
+st.write("Visualização da distribuição geográfica dos concorrentes em Porto Velho, com informações de preço.")
 
 porto_velho_centro = [-8.755, -63.875]
 zoom_level = 13
 
-mapa = folium.Map(location=porto_velho_centro, zoom_start=zoom_level)
+mapa = folium.Map(location=porto_velho_centro, zoom_start=zoom_level, tiles="CartoDB positron")
 
 for index, row in df_mapa.iterrows():
-    popup_html = f"""
-    <b>{row['Empresa']}</b><br>
-    <hr style='margin: 4px 0;'>
-    <b>Mensalidade GPRS:</b> {row.get('Mensalidade (GPRS)', 'N/A')}<br>
-    <b>Mensalidade Satelital:</b> {row.get('Mensalidade (Satelital)', 'N/A')}
+    tooltip_html = f"""
+    <div style="font-family: sans-serif; font-size: 12px;">
+        <strong>{row['Empresa']}</strong><br>
+        <hr style='margin: 2px 0;'>
+        <strong>GPRS:</strong> {row.get('Mensalidade (GPRS)', 'N/A')}<br>
+        <strong>Satelital:</strong> {row.get('Mensalidade (Satelital)', 'N/A')}
+    </div>
     """
     
     folium.Marker(
         location=[row['lat'], row['lon']],
-        popup=folium.Popup(popup_html, max_width=300),
         icon=folium.Icon(color=row['cor'], icon='building', prefix='fa')
     ).add_to(mapa)
+    
+    folium.Tooltip(
+        text=tooltip_html,
+        permanent=True,
+        direction='right',
+        offset=(10, 0),
+        style="""
+            background-color: #f0f0f0;
+            border: 1px solid black;
+            border-radius: 3px;
+            box-shadow: 3px 3px rgba(0, 0, 0, 0.2);
+        """
+    ).add_to(
+        folium.CircleMarker(location=[row['lat'], row['lon']], radius=1)
+    )
 
 st_folium(mapa, use_container_width=True, height=500)
