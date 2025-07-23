@@ -62,13 +62,13 @@ MARKET_DATA = {
     ],
     "localizacoes_regionais": [
         {"Empresa": "VERDIO (CSC Rovema)", "lat": -8.7619, "lon": -63.9039, "cor": "green"},
-        {'Empresa': 'Elite Rastro', "lat": -23.5505, "lon": -46.6333, "cor": "blue"},      # São Paulo, SP
-        {'Empresa': 'NJ Rastreamento', "lat": -22.9068, "lon": -43.1729, "cor": "blue"},   # Rio de Janeiro, RJ
-        {'Empresa': 'TK Rastreadores', "lat": -15.7942, "lon": -47.8825, "cor": "blue"},   # Brasília, DF
-        {'Empresa': 'vtrackrastreamento', "lat": -16.6869, "lon": -49.2648, "cor": "blue"},# Goiânia, GO
-        {'Empresa': 'rastrek', "lat": -19.9167, "lon": -43.9345, "cor": "blue"},           # Belo Horizonte, MG
-        {'Empresa': 'Pro Lion', "lat": -25.4284, "lon": -49.2733, "cor": "blue"},          # Curitiba, PR
-        {'Empresa': 'Impacto Rast.', "lat": -3.1190, "lon": -60.0217, "cor": "blue"},     # Manaus, AM
+        {'Empresa': 'Elite Rastro', "lat": -8.76797, "lon": -63.84175, "cor": "blue"},      # São Paulo, SP
+        {'Empresa': 'NJ Rastreamento', "lat": -8.76494, "lon": -63.87658, "cor": "blue"},   # Rio de Janeiro, RJ
+        {'Empresa': 'TK Rastreadores', "lat": -8.75304, "lon": -63.90038, "cor": "blue"},   # Brasília, DF
+        {'Empresa': 'vtrackrastreamento', "lat": -8.74052, "lon": -63.84815, "cor": "blue"},# Goiânia, GO
+        {'Empresa': 'rastrek', "lat": -8.75011, "lon": -63.84796, "cor": "blue"},           # Belo Horizonte, MG
+        {'Empresa': 'Pro Lion', "lat": -8.75608, "lon": -63.87928, "cor": "blue"},          # Curitiba, PR
+        {'Empresa': 'Impacto Rast.', "lat": -8.76647, "lon": -63.88595, "cor": "blue"},     # Manaus, AM
     ]
 }
 
