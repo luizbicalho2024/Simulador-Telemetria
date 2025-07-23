@@ -80,8 +80,11 @@ df_funci_regionais = pd.DataFrame(MARKET_DATA["funcionalidades_regionais"])
 df_localizacoes = pd.DataFrame(MARKET_DATA["localizacoes_regionais"])
 df_prices_all = pd.concat([df_preco_nacionais, df_preco_regionais]).drop_duplicates(subset=['Empresa']).reset_index(drop=True)
 
+# Prepara o nome da empresa para o merge (juntar os dataframes)
 df_localizacoes['Merge_Key'] = df_localizacoes['Empresa'].str.replace(r'\s*\(.*\)', '', regex=True).str.strip()
 df_prices_all['Merge_Key'] = df_prices_all['Empresa'].str.replace(r'\s*\(.*\)', '', regex=True).str.strip()
+
+# Junta os dados de localização com os de preço para o mapa
 df_mapa = pd.merge(df_localizacoes, df_prices_all, on='Merge_Key', how='left', suffixes=('', '_price'))
 
 # --- 4. INTERFACE DA PÁGINA ---
