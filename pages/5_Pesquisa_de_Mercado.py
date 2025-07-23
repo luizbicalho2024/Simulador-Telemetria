@@ -4,6 +4,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 import re
+import folium
+from streamlit_folium import st_folium
 
 # --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
 st.set_page_config(
@@ -16,7 +18,7 @@ if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. DADOS CENTRALIZADOS (COM A NOVA FUNCIONALIDADE SATELITAL) ---
+# --- 2. DADOS CENTRALIZADOS (COM COORDENADAS PARA O MAPA) ---
 MARKET_DATA = {
     "precos_nacionais": [
         {'Empresa': 'VERDIO (Referência)', 'Instalação (GPRS)': 'Tratativa Comercial', 'Mensalidade (GPRS)': 'R$ 44,93 - R$ 584,49', 'Instalação (Satelital)': 'Tratativa Comercial', 'Mensalidade (Satelital)': 'R$ 107,67 - R$ 193,80'},
@@ -57,6 +59,16 @@ MARKET_DATA = {
         {'Empresa': 'Rastrek', 'Telemetria (CAN)': '❔ Parcial', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '❌ Não', 'Com. Satelital': '✅ Sim', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
         {'Empresa': 'Pro Lion', 'Telemetria (CAN)': '❌ Não', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '❌ Não', 'Com. Satelital': '❌ Não', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
         {'Empresa': 'Impacto Rast.', 'Telemetria (CAN)': '❌ Não', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '❌ Não', 'Com. Satelital': '❌ Não', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
+    ],
+    "localizacoes_regionais": [
+        {"Empresa": "VERDIO (CSC Rovema)", "lat": -8.7619, "lon": -63.9039, "cor": "green"},
+        {'Empresa': 'Elite Rastro', "lat": -23.5505, "lon": -46.6333, "cor": "blue"},      # São Paulo, SP
+        {'Empresa': 'NJ Rastreamento', "lat": -22.9068, "lon": -43.1729, "cor": "blue"},   # Rio de Janeiro, RJ
+        {'Empresa': 'TK Rastreadores', "lat": -15.7942, "lon": -47.8825, "cor": "blue"},   # Brasília, DF
+        {'Empresa': 'vtrackrastreamento', "lat": -16.6869, "lon": -49.2648, "cor": "blue"},# Goiânia, GO
+        {'Empresa': 'rastrek', "lat": -19.9167, "lon": -43.9345, "cor": "blue"},           # Belo Horizonte, MG
+        {'Empresa': 'Pro Lion', "lat": -25.4284, "lon": -49.2733, "cor": "blue"},          # Curitiba, PR
+        {'Empresa': 'Impacto Rast.', "lat": -3.1190, "lon": -60.0217, "cor": "blue"},     # Manaus, AM
     ]
 }
 
@@ -182,7 +194,7 @@ fig_bubble_bi.update_layout(
 )
 st.plotly_chart(fig_bubble_bi, use_container_width=True)
 
-# --- GRÁFICO 3: COMPARATIVO DE CUSTOS - SATELITAL (NOVO) ---
+# --- GRÁFICO 3: COMPARATIVO DE CUSTOS - SATELITAL ---
 st.markdown("##### Análise de Custos - Comunicação Satelital")
 df_prices_all['Instalacao_Satelital_Num'] = df_prices_all['Instalação (Satelital)'].apply(clean_price)
 df_prices_all['Mensalidade_Satelital_Num'] = df_prices_all['Mensalidade (Satelital)'].apply(clean_price)
@@ -203,3 +215,21 @@ fig_satelital.update_layout(
     legend_title_text='Tipo de Custo', height=500
 )
 st.plotly_chart(fig_satelital, use_container_width=True)
+
+# --- 7. MAPA DE CONCORRENTES REGIONAIS ---
+st.markdown("---")
+st.subheader("Mapa de Concorrentes Regionais")
+st.write("Visualização da distribuição geográfica dos principais concorrentes regionais em relação à nossa sede.")
+
+df_mapa = pd.DataFrame(MARKET_DATA["localizacoes_regionais"])
+mapa_centro = [df_mapa['lat'].mean(), df_mapa['lon'].mean()]
+mapa = folium.Map(location=mapa_centro, zoom_start=4)
+
+for index, row in df_mapa.iterrows():
+    folium.Marker(
+        location=[row['lat'], row['lon']],
+        popup=f"<strong>{row['Empresa']}</strong>",
+        icon=folium.Icon(color=row['cor'], icon='truck', prefix='fa')
+    ).add_to(mapa)
+
+st_folium(mapa, use_container_width=True, height=500)
