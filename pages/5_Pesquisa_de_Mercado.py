@@ -80,7 +80,7 @@ df_funci_regionais = pd.DataFrame(MARKET_DATA["funcionalidades_regionais"])
 df_localizacoes = pd.DataFrame(MARKET_DATA["localizacoes_regionais"])
 df_prices_all = pd.concat([df_preco_nacionais, df_preco_regionais]).drop_duplicates(subset=['Empresa']).reset_index(drop=True)
 
-# Prepara o nome da empresa para o merge (juntar os dataframes)
+# Prepara o nome da empresa para o merge
 df_localizacoes['Merge_Key'] = df_localizacoes['Empresa'].str.replace(r'\s*\(.*\)', '', regex=True).str.strip()
 df_prices_all['Merge_Key'] = df_prices_all['Empresa'].str.replace(r'\s*\(.*\)', '', regex=True).str.strip()
 
@@ -139,11 +139,14 @@ st.markdown("##### Pontuação Total de Funcionalidades")
 df_func_all = pd.concat([df_funci_nacionais, df_funci_regionais]).drop_duplicates(subset=['Empresa']).reset_index(drop=True)
 score_map = {'✅ Sim': 1.0, '❔ Opcional': 0.5, '❔ Parcial': 0.5, '❌ Não': 0.0, '❔ Comercial': 0.0}
 features_to_score = ['Telemetria (CAN)', 'Vídeo', 'Sensor de Fadiga', 'Controle de Jornada', 'Roteirizador', 'Com. Satelital', 'Suporte 24h', 'App de Gestão']
+
 for feature in features_to_score:
     if feature in df_func_all.columns:
         df_func_all[feature] = df_func_all[feature].map(score_map).fillna(0)
+
 df_func_all['Pontuação Total'] = df_func_all[features_to_score].sum(axis=1)
 df_func_all_sorted = df_func_all.sort_values('Pontuação Total', ascending=True)
+
 fig_score = go.Figure(go.Bar(
     y=df_func_all_sorted['Empresa'], x=df_func_all_sorted['Pontuação Total'],
     orientation='h', marker=dict(color=df_func_all_sorted['Pontuação Total'], colorscale='Greens')
@@ -161,20 +164,25 @@ def clean_price(price_str):
         return float(re.findall(r'\d+[\.,]\d+', str(price_str))[0].replace(',', '.'))
     except (IndexError, TypeError):
         return None
-df_prices_all_for_bi = df_prices_all.copy()
+
+df_prices_all_for_bi = df_prices_all.copy() # Cria uma cópia para não afetar as tabelas
 df_prices_all_for_bi['Mensalidade_GPRS_Num'] = df_prices_all_for_bi['Mensalidade (GPRS)'].apply(clean_price)
 df_func_all['Merge_Key'] = df_func_all['Empresa'].str.replace(r'\s*\(.*\)', '', regex=True)
 df_prices_all_for_bi['Merge_Key'] = df_prices_all_for_bi['Empresa'].str.replace(r'\s*\(.*\)', '', regex=True)
+
 df_bi = pd.merge(df_func_all, df_prices_all_for_bi, on='Merge_Key', how='inner', suffixes=('', '_price'))
 df_bi.dropna(subset=['Mensalidade_GPRS_Num'], inplace=True)
 df_bi['Empresa'] = df_bi['Empresa_price']
+
 unique_companies = df_bi['Empresa'].unique()
 color_palette = px.colors.qualitative.Plotly
 color_map = {company: color_palette[i % len(color_palette)] for i, company in enumerate(unique_companies)}
 if 'VERDIO (Referência)' in color_map:
     color_map['VERDIO (Referência)'] = '#2ca02c'
+
 df_bi['color'] = df_bi['Empresa'].map(color_map)
 df_bi['size'] = df_bi['Pontuação Total'].apply(lambda y: y * 4 + 15)
+
 fig_bubble_bi = go.Figure()
 for empresa in df_bi['Empresa'].unique():
     df_empresa = df_bi[df_bi['Empresa'] == empresa]
@@ -196,6 +204,7 @@ st.markdown("##### Análise de Custos - Comunicação Satelital")
 df_prices_all['Instalacao_Satelital_Num'] = df_prices_all['Instalação (Satelital)'].apply(clean_price)
 df_prices_all['Mensalidade_Satelital_Num'] = df_prices_all['Mensalidade (Satelital)'].apply(clean_price)
 df_satelital = df_prices_all.dropna(subset=['Mensalidade_Satelital_Num'])
+
 fig_satelital = go.Figure()
 fig_satelital.add_trace(go.Bar(
     x=df_satelital['Empresa'], y=df_satelital['Instalacao_Satelital_Num'],
@@ -212,38 +221,28 @@ fig_satelital.update_layout(
 )
 st.plotly_chart(fig_satelital, use_container_width=True)
 
-# --- 7. MAPA DE CONCORRENTES REGIONAIS (COM ETIQUETAS FIXAS E VISÃO DE SATÉLITE) ---
+# --- 7. MAPA DE CONCORRENTES REGIONAIS ---
 st.markdown("---")
 st.subheader("Mapa de Concorrentes Regionais")
-st.write("Visualização da distribuição geográfica dos concorrentes em Porto Velho, com informações de preço.")
+st.write("Visualização da distribuição geográfica dos principais concorrentes regionais em Porto Velho.")
+
 porto_velho_centro = [-8.755, -63.875]
 zoom_level = 13
 
-mapa = folium.Map(location=porto_velho_centro, zoom_start=zoom_level, tiles="Esri.WorldImagery")
+mapa = folium.Map(location=porto_velho_centro, zoom_start=zoom_level)
 
 for index, row in df_mapa.iterrows():
-    tooltip_html = f"""
-    <div style="font-family: sans-serif; font-size: 12px; color: white; background-color: rgba(0, 0, 0, 0.6); padding: 5px; border-radius: 3px;">
-        <strong>{row['Empresa']}</strong><br>
-        <hr style='margin: 2px 0;'>
-        <strong>GPRS:</strong> {row.get('Mensalidade (GPRS)', 'N/A')}<br>
-        <strong>Satelital:</strong> {row.get('Mensalidade (Satelital)', 'N/A')}
-    </div>
+    popup_html = f"""
+    <b>{row['Empresa']}</b><br>
+    <hr style='margin: 4px 0;'>
+    <b>Mensalidade GPRS:</b> {row.get('Mensalidade (GPRS)', 'N/A')}<br>
+    <b>Mensalidade Satelital:</b> {row.get('Mensalidade (Satelital)', 'N/A')}
     """
     
     folium.Marker(
         location=[row['lat'], row['lon']],
+        popup=folium.Popup(popup_html, max_width=300),
         icon=folium.Icon(color=row['cor'], icon='building', prefix='fa')
     ).add_to(mapa)
-    
-    folium.Tooltip(
-        text=tooltip_html,
-        permanent=True,
-        direction='right',
-        offset=(10, -10),
-        sticky=True
-    ).add_to(
-        folium.CircleMarker(location=[row['lat'], row['lon']], radius=1, fill_opacity=0, opacity=0)
-    )
 
 st_folium(mapa, use_container_width=True, height=500)
