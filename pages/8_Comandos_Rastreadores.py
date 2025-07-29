@@ -40,11 +40,12 @@ if not serial or len(serial) < 5:
 st.success(f"A gerar comandos para o serial: **{serial}**")
 
 # --- 3. ABAS POR MODELO ---
-tab_st310u, tab_st300hd, tab_st4305, tab_st390 = st.tabs(["ST310U / ST340", "ST300HD", "ST4305", "ST390"])
+tab_st310u, tab_st300hd, tab_st4305, tab_st390 = st.tabs(["ST310U / ST340", "ST300HD (iButton)", "ST4305", "ST390"])
 
 with tab_st310u:
     st.header("Modelo ST310U / ST340")
-    with st.expander("Configuração de Rede (IP, Porta e APN)", expanded=True):
+    
+    with st.expander("⚙️ Configuração de Rede (IP, Porta e APN)", expanded=True):
         apn = st.text_input("APN:", value="allcom.claro.com.br", key="cmd_310_apn")
         user = st.text_input("Utilizador APN:", value="allcom", key="cmd_310_user")
         pwd = st.text_input("Senha APN:", value="allcom", key="cmd_310_pwd", type="password")
@@ -52,21 +53,48 @@ with tab_st310u:
         porta1 = st.text_input("Porta Primária:", value="9601", key="cmd_310_porta1")
         st.code(f"ST300NTW;{serial};02;1;{apn};{user};{pwd};{ip1};{porta1};;;")
 
-    with st.expander("Intervalos de Comunicação"):
+    with st.expander("🕒 Intervalos de Comunicação (Report)", expanded=True):
         st.markdown("##### Intervalo Padrão (Carro)")
+        st.caption("Reporta a cada 120s com ignição ligada e a cada 3600s com ignição desligada.")
         st.code(f'ST300RPT;{serial};02;3600;120;3600;1;0;600;0;0;0')
         st.markdown("##### Intervalo para Motos (Otimizado)")
+        st.caption("Reporta a cada 60s com ignição ligada e desliga o report com ignição desligada.")
         st.code(f'ST300RPT;{serial};02;0;60;0;1;0;0;0;0;0')
 
-    with st.expander("Outras Configurações Essenciais"):
+    with st.expander("🛡️ Segurança e Anti-Furto"):
+        st.markdown("##### Ativar Anti-Furto por Afastamento do V-ALRT")
+        st.code(f"ST300ATM;{serial};02;1;1")
+        st.markdown("##### Desativar Anti-Furto por Afastamento do V-ALRT")
+        st.code(f"ST300ATM;{serial};02;0;1")
+        st.markdown("##### Ativar Bloqueio Progressivo")
+        st.caption("A saída 1 será ativada 3 minutos após o comando de bloqueio.")
+        st.code(f"ST300LCK;{serial};02;1;180;1")
+        st.markdown("##### Desativar Bloqueio Progressivo")
+        st.code(f"ST300LCK;{serial};02;0;180;1")
+
+    with st.expander("⚡ Entradas e Saídas (IO)"):
+        st.markdown("##### Ativar Saída 1 (Bloqueio)")
+        st.code(f"ST300OUT;{serial};02;1;1")
+        st.markdown("##### Desativar Saída 1 (Desbloqueio)")
+        st.code(f"ST300OUT;{serial};02;1;0")
+        st.markdown("##### Ler Estado das Entradas e Saídas")
+        st.code(f"ST300IO;{serial};02")
+
+    with st.expander("▶️ Ações Remotas"):
+        st.markdown("##### Solicitar Posição Atual")
+        st.code(f"ST300POS;{serial};02")
+        st.markdown("##### Reiniciar o Equipamento (Reboot)")
+        st.code(f"ST300RST;{serial};02")
+        st.markdown("##### Apagar Memória de Eventos")
+        st.code(f"ST300EMG;{serial};02;2")
+
+    with st.expander("🔧 Outras Configurações Essenciais"):
         st.markdown("##### Habilitar/Desabilitar Transmissão de Dados")
         st.code(f"ST300SVC;{serial};02;1;180;0;0;0;1;1;0;1;0;0;1;0")
         st.markdown("##### Protocolo TCP/IP")
         st.code(f"ST300ADP;{serial};02;T;T;1;;0;0;0;0;0;0")
-        st.markdown("##### Configuração de Eventos")
+        st.markdown("##### Configuração de Eventos Padrão")
         st.code(f"ST300EVT;{serial};02;0;10;0;12;3;9;30;20;0;1;7;1;1;0;0;0;0;0;0;9;9;0;0;0")
-        st.markdown("##### Parâmetros de Ângulo (NPTs)")
-        st.code(f"ST300NPT;{serial};02;20.0;1;30;0;1;500;300;5;10;100;10;180;100;1")
 
 with tab_st300hd:
     st.header("Modelo ST300HD (Identificador de Motorista)")
