@@ -14,19 +14,30 @@ if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. FUNÇÃO AUXILIAR ---
+# --- 2. FUNÇÃO AUXILIAR (MAIS ROBUSTA) ---
 def processar_planilha_terminais(uploaded_file):
     """
-    Lê a planilha, extrai o nome do cliente, os dados da tabela,
-    e realiza a análise de status com base nas colunas corretas.
+    Lê a planilha, extrai o nome do cliente de forma inteligente, 
+    lê os dados da tabela, e realiza a análise de status.
     """
-    df_cliente = pd.read_excel(uploaded_file, header=None, skiprows=8, nrows=1, engine='openpyxl')
-    nome_cliente = df_cliente.iloc[0, 0] if not df_cliente.empty else "Cliente não identificado"
+    # ***** CORREÇÃO PRINCIPAL AQUI *****
+    # Lê as primeiras 11 linhas para encontrar o nome do cliente
+    df_header_info = pd.read_excel(uploaded_file, header=None, nrows=11, engine='openpyxl')
+    nome_cliente = "Cliente não identificado"
+    # Itera sobre as primeiras 11 linhas para encontrar a célula com "Cliente:"
+    for index, row in df_header_info.iterrows():
+        for cell in row:
+            if isinstance(cell, str) and "Cliente:" in cell:
+                # Extrai o texto após "Cliente:" e limpa espaços
+                nome_cliente = cell.split("Cliente:")[1].strip()
+                break
+        if nome_cliente != "Cliente não identificado":
+            break
 
+    # Lê a tabela de dados principal a partir da linha 12 (índice 11)
     df_terminais = pd.read_excel(uploaded_file, header=11, engine='openpyxl')
 
-    # ***** CORREÇÃO DEFINITIVA AQUI *****
-    # Renomeia as colunas do ficheiro para o padrão que o script espera.
+    # Renomeia as colunas para um padrão limpo e previsível
     df_terminais = df_terminais.rename(columns={
         'Última Transmissão': 'Data Transmissão',
         'Rastreador Modelo': 'Modelo'
@@ -35,13 +46,15 @@ def processar_planilha_terminais(uploaded_file):
     required_cols = ['Terminal', 'Placa', 'Rastreador', 'Modelo', 'Data Transmissão']
     if not all(col in df_terminais.columns for col in required_cols):
         st.error(f"O ficheiro não contém todas as colunas necessárias. Verifique se o cabeçalho na linha 12 contém os nomes corretos.")
-        st.write("Colunas encontradas após a tentativa de renomeação:", df_terminais.columns.tolist())
+        st.write("Colunas encontradas:", df_terminais.columns.tolist())
         return None, None
 
+    # Limpeza e processamento dos dados
     df_terminais.dropna(subset=['Terminal'], inplace=True)
     df_terminais['Data Transmissão'] = pd.to_datetime(df_terminais['Data Transmissão'], errors='coerce')
     df_terminais.dropna(subset=['Data Transmissão'], inplace=True)
 
+    # Análise de status
     dez_dias_atras = datetime.now() - timedelta(days=10)
     df_terminais['Status_Atualizacao'] = df_terminais['Data Transmissão'].apply(
         lambda data: "Atualizado" if data >= dez_dias_atras else "Desatualizado"
