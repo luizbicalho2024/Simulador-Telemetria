@@ -14,27 +14,22 @@ if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. FUNÇÃO AUXILIAR (COM A LEITURA CORRIGIDA) ---
+# --- 2. FUNÇÃO AUXILIAR ---
 def processar_planilha_terminais(uploaded_file):
     """
     Lê a planilha, extrai o nome do cliente da linha 9, coluna 5,
     lê os dados da tabela, e realiza a análise de status.
     """
-    # ***** CORREÇÃO DEFINITIVA AQUI *****
-    # Lê a linha 9 (skiprows=8) para obter o nome do cliente
     df_cliente = pd.read_excel(uploaded_file, header=None, skiprows=8, nrows=1, engine='openpyxl')
     
-    # Extrai o nome do cliente da coluna 5 (índice 4)
     nome_cliente = "Cliente não identificado"
     if not df_cliente.empty and len(df_cliente.columns) > 4:
         nome_cliente_raw = df_cliente.iloc[0, 4]
         if pd.notna(nome_cliente_raw):
             nome_cliente = str(nome_cliente_raw).strip()
 
-    # Lê a tabela de dados principal a partir da linha 12 (índice 11)
     df_terminais = pd.read_excel(uploaded_file, header=11, engine='openpyxl')
 
-    # Renomeia as colunas para um padrão limpo e previsível
     df_terminais = df_terminais.rename(columns={
         'Última Transmissão': 'Data Transmissão',
         'Rastreador Modelo': 'Modelo'
@@ -46,12 +41,10 @@ def processar_planilha_terminais(uploaded_file):
         st.write("Colunas encontradas:", df_terminais.columns.tolist())
         return None, None
 
-    # Limpeza e processamento dos dados
     df_terminais.dropna(subset=['Terminal'], inplace=True)
     df_terminais['Data Transmissão'] = pd.to_datetime(df_terminais['Data Transmissão'], errors='coerce')
     df_terminais.dropna(subset=['Data Transmissão'], inplace=True)
 
-    # Análise de status
     dez_dias_atras = datetime.now() - timedelta(days=10)
     df_terminais['Status_Atualizacao'] = df_terminais['Data Transmissão'].apply(
         lambda data: "Atualizado" if data >= dez_dias_atras else "Desatualizado"
@@ -121,6 +114,48 @@ if uploaded_file:
                         )
                     }
                 )
+
+                # ***** NOVA SECÇÃO: MODELO DE E-MAIL *****
+                st.markdown("---")
+                st.subheader("📧 Modelo de E-mail para o Cliente")
+                st.info("Copie o conteúdo abaixo para enviar uma notificação ao cliente.")
+
+                # Cria a lista de veículos para o corpo do e-mail
+                lista_veiculos_str = ""
+                for index, row in df_desatualizados.iterrows():
+                    placa = row['Placa']
+                    data_transmissao = row['Data Transmissão'].strftime('%d/%m/%Y às %H:%M:%S')
+                    lista_veiculos_str += f"- **Placa:** {placa} | **Última Comunicação:** {data_transmissao}\n"
+
+                assunto_email = "Importante: Verificação Necessária no seu Sistema de Rastreamento"
+                
+                corpo_email = f"""
+Prezado(a) Cliente,
+
+Esperamos que este e-mail o encontre bem.
+
+Nosso sistema de monitoramento indicou uma interrupção na comunicação com o(s) dispositivo(s) rastreador(es) instalado(s) no(s) seguinte(s) veículo(s) sob sua responsabilidade:
+
+{lista_veiculos_str}
+Essa ausência de sinal impede o acompanhamento em tempo real, o que é uma função essencial para a segurança do seu patrimônio e para a eficácia do serviço contratado.
+
+Por isso, pedimos sua especial atenção: se o(s) veículo(s) listado(s) acima está(ão) sendo utilizado(s) normalmente, é imprescindível que uma verificação técnica seja agendada. Nossa equipe precisa diagnosticar a causa da falha para restabelecer a comunicação do rastreador.
+
+Para agendar o atendimento da forma mais conveniente para você ou sua operação, por favor, entre em contato através de um de nossos canais:
+
+- **WhatsApp:** (69) 9 9322-9855
+- **Capitais:** 4020-1724
+- **Outras Localidades:** 0800 025 8871
+- **Suporte:** contato@rovemabank.com.br
+
+Agradecemos sua cooperação para garantir que seu sistema de rastreamento opere corretamente e que seu(s) veículo(s) permaneça(m) protegido(s).
+
+Atenciosamente,
+                """
+
+                st.text_input("Assunto:", value=assunto_email, key="email_subject")
+                st.text_area("Corpo do E-mail:", value=corpo_email, height=500, key="email_body")
+
             else:
                 st.success("🎉 Excelente! Todos os terminais estão atualizados.")
 
