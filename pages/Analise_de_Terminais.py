@@ -14,31 +14,36 @@ if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. FUNÇÕES AUXILIARES ---
-@st.cache_data
+# --- 2. FUNÇÃO AUXILIAR ---
 def processar_planilha_terminais(uploaded_file):
     """
-    Lê a planilha de terminais, extrai o nome do cliente e os dados,
-    e realiza a análise de status.
+    Lê a planilha, extrai o nome do cliente, os dados da tabela,
+    e realiza a análise de status com base nas colunas corretas.
     """
     # Lê a linha 9 para obter o nome do cliente
-    # skiprows=8 lê a partir da 9ª linha, nrows=1 pega apenas essa linha
     df_cliente = pd.read_excel(uploaded_file, header=None, skiprows=8, nrows=1, engine='openpyxl')
-    # O nome do cliente estará na primeira célula (índice 0)
     nome_cliente = df_cliente.iloc[0, 0] if not df_cliente.empty else "Cliente não identificado"
 
     # Lê a tabela de dados a partir da linha 12 (índice 11)
     df_terminais = pd.read_excel(uploaded_file, header=11, engine='openpyxl')
 
-    # Validação de colunas essenciais
+    # ***** CORREÇÃO PRINCIPAL AQUI *****
+    # Renomeia as colunas para um padrão limpo e previsível
+    df_terminais = df_terminais.rename(columns={
+        'Última Transmissão': 'Data Transmissão'
+    })
+
+    # Validação de colunas essenciais com base nos nomes corretos do seu ficheiro
     required_cols = ['Terminal', 'Placa', 'Rastreador', 'Modelo', 'Data Transmissão']
     if not all(col in df_terminais.columns for col in required_cols):
-        raise ValueError(f"O ficheiro não contém todas as colunas necessárias. Verifique se existem as colunas: {', '.join(required_cols)}")
+        st.error(f"O ficheiro não contém todas as colunas necessárias. Verifique se o cabeçalho na linha 12 contém: {', '.join(required_cols)}")
+        st.write("Colunas encontradas:", df_terminais.columns.tolist())
+        return None, None # Retorna None para indicar falha
 
     # Limpeza e processamento dos dados
-    df_terminais.dropna(subset=['Terminal'], inplace=True) # Remove linhas vazias
+    df_terminais.dropna(subset=['Terminal'], inplace=True)
     df_terminais['Data Transmissão'] = pd.to_datetime(df_terminais['Data Transmissão'], errors='coerce')
-    df_terminais.dropna(subset=['Data Transmissão'], inplace=True) # Remove linhas com datas inválidas
+    df_terminais.dropna(subset=['Data Transmissão'], inplace=True)
 
     # Análise de status
     dez_dias_atras = datetime.now() - timedelta(days=10)
@@ -76,44 +81,43 @@ if uploaded_file:
     try:
         nome_cliente, df_analise = processar_planilha_terminais(uploaded_file)
         
-        st.header(f"Cliente: {nome_cliente}")
-        
-        # Filtra os dataframes por status
-        df_atualizados = df_analise[df_analise['Status_Atualizacao'] == 'Atualizado']
-        df_desatualizados = df_analise[df_analise['Status_Atualizacao'] == 'Desatualizado']
-        
-        # --- CARDS DE MÉTRICAS ---
-        col1, col2 = st.columns(2)
-        col1.metric(
-            label="✅ Total de Terminais Atualizados",
-            value=len(df_atualizados),
-            help="Terminais que transmitiram nos últimos 10 dias."
-        )
-        col2.metric(
-            label="⚠️ Total de Terminais Desatualizados",
-            value=len(df_desatualizados),
-            help="Terminais que não transmitem há mais de 10 dias."
-        )
-
-        st.markdown("---")
-        
-        # --- TABELA DE TERMINAIS DESATUALIZADOS ---
-        st.subheader("Lista de Terminais Desatualizados")
-        if not df_desatualizados.empty:
-            st.warning("Atenção: Os terminais abaixo precisam de verificação.")
-            st.dataframe(
-                df_desatualizados[['Terminal', 'Placa', 'Rastreador', 'Modelo', 'Data Transmissão']],
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "Data Transmissão": st.column_config.DatetimeColumn(
-                        "Data da Última Transmissão",
-                        format="DD/MM/YYYY HH:mm:ss"
-                    )
-                }
+        # Continua apenas se o processamento for bem-sucedido
+        if nome_cliente is not None and df_analise is not None:
+            st.header(f"Cliente: {nome_cliente}")
+            
+            df_atualizados = df_analise[df_analise['Status_Atualizacao'] == 'Atualizado']
+            df_desatualizados = df_analise[df_analise['Status_Atualizacao'] == 'Desatualizado']
+            
+            col1, col2 = st.columns(2)
+            col1.metric(
+                label="✅ Total de Terminais Atualizados",
+                value=len(df_atualizados),
+                help="Terminais que transmitiram nos últimos 10 dias."
             )
-        else:
-            st.success("🎉 Excelente! Todos os terminais estão atualizados.")
+            col2.metric(
+                label="⚠️ Total de Terminais Desatualizados",
+                value=len(df_desatualizados),
+                help="Terminais que não transmitem há mais de 10 dias."
+            )
+
+            st.markdown("---")
+            
+            st.subheader("Lista de Terminais Desatualizados")
+            if not df_desatualizados.empty:
+                st.warning("Atenção: Os terminais abaixo precisam de verificação.")
+                st.dataframe(
+                    df_desatualizados[['Terminal', 'Placa', 'Rastreador', 'Modelo', 'Data Transmissão']],
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Data Transmissão": st.column_config.DatetimeColumn(
+                            "Data da Última Transmissão",
+                            format="DD/MM/YYYY HH:mm:ss"
+                        )
+                    }
+                )
+            else:
+                st.success("🎉 Excelente! Todos os terminais estão atualizados.")
 
     except Exception as e:
         st.error(f"Ocorreu um erro ao processar o ficheiro: {e}")
