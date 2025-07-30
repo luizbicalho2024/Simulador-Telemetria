@@ -74,27 +74,31 @@ with tab_st310u:
 
     with st.expander("⚡ Entradas e Saídas (IO)"):
         st.markdown("##### Ativar Saída 1 (Bloqueio)")
-        st.code(f"ST300OUT;{serial};02;1;1")
+        st.code(f"ST300CMD;{serial};02;Enable1")
         st.markdown("##### Desativar Saída 1 (Desbloqueio)")
-        st.code(f"ST300OUT;{serial};02;1;0")
-        st.markdown("##### Ler Estado das Entradas e Saídas")
-        st.code(f"ST300IO;{serial};02")
+        st.code(f"ST300CMD;{serial};02;Disable1")
 
     with st.expander("▶️ Ações Remotas"):
         st.markdown("##### Solicitar Posição Atual")
-        st.code(f"ST300POS;{serial};02")
+        st.code(f"ST300CMD;{serial};02;StatusReq")
         st.markdown("##### Reiniciar o Equipamento (Reboot)")
-        st.code(f"ST300RST;{serial};02")
+        st.code(f"ST300CMD;{serial};02;Reboot")
         st.markdown("##### Apagar Memória de Eventos")
-        st.code(f"ST300EMG;{serial};02;2")
+        st.code(f"ST300CMD;{serial};02;EraseAll")
 
     with st.expander("🔧 Outras Configurações Essenciais"):
         st.markdown("##### Habilitar/Desabilitar Transmissão de Dados")
         st.code(f"ST300SVC;{serial};02;1;180;0;0;0;1;1;0;1;0;0;1;0")
+        st.markdown("##### Desativar protocolo ZIP")
+        st.code(f"ST300SVC;{serial};318;1;300;0;0;0;0;1;0;1;0;0;1;0")
         st.markdown("##### Protocolo TCP/IP")
         st.code(f"ST300ADP;{serial};02;T;T;1;;0;0;0;0;0;0")
         st.markdown("##### Configuração de Eventos Padrão")
         st.code(f"ST300EVT;{serial};02;0;10;0;12;3;9;30;20;0;1;7;1;1;0;0;0;0;0;0;9;9;0;0;0")
+        st.markdown("##### Configuração LIFO")
+        st.code(f"ST300NPT;{serial};02;0.0;1;30;0;0;300;300;5;10;100;10;180;100;1")
+        st.markdown("##### Configuração FIFO")
+        st.code(f"ST300NPT;{serial};02;0.0;0;30;0;0;300;300;5;10;100;10;180;100;1")
 
 with tab_st300hd:
     st.header("Modelo ST300HD (Identificador de Motorista)")
