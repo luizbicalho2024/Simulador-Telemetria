@@ -14,25 +14,22 @@ if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. FUNÇÃO AUXILIAR (MAIS ROBUSTA) ---
+# --- 2. FUNÇÃO AUXILIAR (COM A LEITURA CORRIGIDA) ---
 def processar_planilha_terminais(uploaded_file):
     """
-    Lê a planilha, extrai o nome do cliente de forma inteligente, 
+    Lê a planilha, extrai o nome do cliente da linha 9, coluna 5,
     lê os dados da tabela, e realiza a análise de status.
     """
-    # ***** CORREÇÃO PRINCIPAL AQUI *****
-    # Lê as primeiras 11 linhas para encontrar o nome do cliente
-    df_header_info = pd.read_excel(uploaded_file, header=None, nrows=11, engine='openpyxl')
+    # ***** CORREÇÃO DEFINITIVA AQUI *****
+    # Lê a linha 9 (skiprows=8) para obter o nome do cliente
+    df_cliente = pd.read_excel(uploaded_file, header=None, skiprows=8, nrows=1, engine='openpyxl')
+    
+    # Extrai o nome do cliente da coluna 5 (índice 4)
     nome_cliente = "Cliente não identificado"
-    # Itera sobre as primeiras 11 linhas para encontrar a célula com "Cliente:"
-    for index, row in df_header_info.iterrows():
-        for cell in row:
-            if isinstance(cell, str) and "Cliente:" in cell:
-                # Extrai o texto após "Cliente:" e limpa espaços
-                nome_cliente = cell.split("Cliente:")[1].strip()
-                break
-        if nome_cliente != "Cliente não identificado":
-            break
+    if not df_cliente.empty and len(df_cliente.columns) > 4:
+        nome_cliente_raw = df_cliente.iloc[0, 4]
+        if pd.notna(nome_cliente_raw):
+            nome_cliente = str(nome_cliente_raw).strip()
 
     # Lê a tabela de dados principal a partir da linha 12 (índice 11)
     df_terminais = pd.read_excel(uploaded_file, header=11, engine='openpyxl')
