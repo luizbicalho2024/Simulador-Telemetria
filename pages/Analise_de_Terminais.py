@@ -20,32 +20,28 @@ def processar_planilha_terminais(uploaded_file):
     Lê a planilha, extrai o nome do cliente, os dados da tabela,
     e realiza a análise de status com base nas colunas corretas.
     """
-    # Lê a linha 9 para obter o nome do cliente
     df_cliente = pd.read_excel(uploaded_file, header=None, skiprows=8, nrows=1, engine='openpyxl')
     nome_cliente = df_cliente.iloc[0, 0] if not df_cliente.empty else "Cliente não identificado"
 
-    # Lê a tabela de dados a partir da linha 12 (índice 11)
     df_terminais = pd.read_excel(uploaded_file, header=11, engine='openpyxl')
 
-    # ***** CORREÇÃO PRINCIPAL AQUI *****
-    # Renomeia as colunas para um padrão limpo e previsível
+    # ***** CORREÇÃO DEFINITIVA AQUI *****
+    # Renomeia as colunas do ficheiro para o padrão que o script espera.
     df_terminais = df_terminais.rename(columns={
-        'Última Transmissão': 'Data Transmissão'
+        'Última Transmissão': 'Data Transmissão',
+        'Rastreador Modelo': 'Modelo'
     })
 
-    # Validação de colunas essenciais com base nos nomes corretos do seu ficheiro
     required_cols = ['Terminal', 'Placa', 'Rastreador', 'Modelo', 'Data Transmissão']
     if not all(col in df_terminais.columns for col in required_cols):
-        st.error(f"O ficheiro não contém todas as colunas necessárias. Verifique se o cabeçalho na linha 12 contém: {', '.join(required_cols)}")
-        st.write("Colunas encontradas:", df_terminais.columns.tolist())
-        return None, None # Retorna None para indicar falha
+        st.error(f"O ficheiro não contém todas as colunas necessárias. Verifique se o cabeçalho na linha 12 contém os nomes corretos.")
+        st.write("Colunas encontradas após a tentativa de renomeação:", df_terminais.columns.tolist())
+        return None, None
 
-    # Limpeza e processamento dos dados
     df_terminais.dropna(subset=['Terminal'], inplace=True)
     df_terminais['Data Transmissão'] = pd.to_datetime(df_terminais['Data Transmissão'], errors='coerce')
     df_terminais.dropna(subset=['Data Transmissão'], inplace=True)
 
-    # Análise de status
     dez_dias_atras = datetime.now() - timedelta(days=10)
     df_terminais['Status_Atualizacao'] = df_terminais['Data Transmissão'].apply(
         lambda data: "Atualizado" if data >= dez_dias_atras else "Desatualizado"
@@ -81,7 +77,6 @@ if uploaded_file:
     try:
         nome_cliente, df_analise = processar_planilha_terminais(uploaded_file)
         
-        # Continua apenas se o processamento for bem-sucedido
         if nome_cliente is not None and df_analise is not None:
             st.header(f"Cliente: {nome_cliente}")
             
