@@ -121,7 +121,7 @@ if uploaded_file:
                     }
                 )
 
-                # --- SECÇÃO DE MODELO DE E-MAIL (NOVA) ---
+                # ***** SECÇÃO DE MODELO DE E-MAIL (COM st.code) *****
                 st.markdown("---")
                 st.subheader("📧 Modelo de E-mail para o Cliente")
                 st.info("Copie o conteúdo abaixo para enviar uma notificação ao cliente.")
@@ -131,7 +131,7 @@ if uploaded_file:
                 for index, row in df_desatualizados.iterrows():
                     placa = row['Placa']
                     data_transmissao = row['Data Transmissão'].strftime('%d/%m/%Y às %H:%M:%S')
-                    lista_veiculos_str += f"- **Placa:** {placa} | **Última Comunicação:** {data_transmissao}\n"
+                    lista_veiculos_str += f"Placa: {placa} | Última Comunicação: {data_transmissao}\n"
 
                 assunto_email = "Importante: Verificação Necessária no seu Sistema de Rastreamento"
                 
@@ -148,18 +148,20 @@ Por isso, pedimos sua especial atenção: se o(s) veículo(s) listado(s) acima e
 
 Para agendar o atendimento da forma mais conveniente para você ou sua operação, por favor, entre em contato através de um de nossos canais:
 
-- **WhatsApp:** (69) 9 9322-9855
-- **Capitais:** 4020-1724
-- **Outras Localidades:** 0800 025 8871
-- **Suporte:** contato@rovemabank.com.br
+- WhatsApp: (69) 9 9322-9855
+- Capitais: 4020-1724
+- Outras Localidades: 0800 025 8871
+- Suporte: contato@rovemabank.com.br
 
 Agradecemos sua cooperação para garantir que seu sistema de rastreamento opere corretamente e que seu(s) veículo(s) permaneça(m) protegido(s).
 
 Atenciosamente,
 """
-
-                st.text_input("Assunto:", value=assunto_email, key="email_subject")
-                st.text_area("Corpo do E-mail:", value=corpo_email, height=500, key="email_body")
+                st.markdown("##### Assunto:")
+                st.code(assunto_email, language=None)
+                
+                st.markdown("##### Corpo do E-mail:")
+                st.code(corpo_email, language='text')
 
             else:
                 st.success("🎉 Excelente! Todos os terminais estão atualizados.")
