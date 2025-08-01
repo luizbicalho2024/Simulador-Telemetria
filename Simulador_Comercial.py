@@ -4,25 +4,56 @@ import pandas as pd
 import user_management_db as umdb
 import streamlit_authenticator as stauth
 
-st.set_page_config(page_title="Simulador Telemetria", layout="wide", page_icon="imgs/v-c.png")
+# --- 1. CONFIGURAÇÃO INICIAL DA PÁGINA ---
+st.set_page_config(
+    page_title="Simulador Telemetria",
+    layout="wide",
+    page_icon="imgs/v-c.png"
+)
 
 try:
     st.image("imgs/logo.png", width=250)
-except: pass
+except Exception:
+    pass
 
+# --- 2. VERIFICAÇÃO DA CONEXÃO ---
 if not umdb.get_mongo_client():
-    st.error("🚨 FALHA CRÍTICA NA CONEXÃO COM A BASE DE DADOS."); st.stop()
+    st.error("🚨 FALHA CRÍTICA NA CONEXÃO COM A BASE DE DADOS.")
+    st.info("Verifique os 'Secrets' e as permissões de IP no MongoDB Atlas.")
+    st.stop()
 
+# --- 3. CONFIGURAÇÃO DO AUTENTICADOR ---
 credentials = umdb.fetch_all_users_for_auth()
 authenticator = stauth.Authenticate(
-    credentials, st.secrets["AUTH_COOKIE_NAME"], st.secrets["AUTH_COOKIE_KEY"],
-    cookie_expiry_days=st.secrets.get("AUTH_COOKIE_EXPIRY_DAYS", 30), preauthorized=None
+    credentials,
+    st.secrets["AUTH_COOKIE_NAME"],
+    st.secrets["AUTH_COOKIE_KEY"],
+    cookie_expiry_days=st.secrets.get("AUTH_COOKIE_EXPIRY_DAYS", 30),
+    preauthorized=None
 )
 
+# --- 4. LÓGICA PRINCIPAL ---
+
+# A. Criação do primeiro admin
 if not credentials.get("usernames"):
     st.title("🚀 Bem-vindo ao Simulador de Telemetria!")
-    # ... (formulário de criação do primeiro admin como antes) ...
+    st.subheader("Configuração Inicial: Crie a sua Conta de Administrador")
+    with st.form("form_criar_primeiro_admin"):
+        name = st.text_input("Nome Completo")
+        username = st.text_input("Nome de Utilizador (login)")
+        email = st.text_input("Email")
+        password = st.text_input("Senha", type="password")
+        if st.form_submit_button("✨ Criar Administrador"):
+            if all([name, username, email, password]):
+                if umdb.add_user(username, name, email, password, "admin"):
+                    umdb.add_log(username, "Criação de Conta", "Primeiro administrador criado.")
+                    st.toast("Conta de administrador criada! A página será recarregada.", icon="🎉")
+                    st.rerun()
+            else:
+                st.warning("Por favor, preencha todos os campos.")
+    st.stop()
 
+# B. Processo de Login
 authenticator.login(location='main')
 
 if "logged_in_log" not in st.session_state:
@@ -34,6 +65,7 @@ elif not st.session_state["authentication_status"]:
     st.session_state.logged_in_log = False
 
 if st.session_state["authentication_status"]:
+    # --- PÓS-LOGIN ---
     name = st.session_state["name"]
     username = st.session_state["username"]
     st.session_state.role = umdb.get_user_role(username)
@@ -76,7 +108,10 @@ if st.session_state["authentication_status"]:
             all_users = umdb.get_all_users_for_admin_display()
             if search_query:
                 search_query = search_query.lower()
-                filtered_users = [user for user in all_users if search_query in user.get('name', '').lower() or search_query in user.get('username', '').lower()]
+                filtered_users = [
+                    user for user in all_users 
+                    if search_query in user.get('name', '').lower() or search_query in user.get('username', '').lower()
+                ]
                 st.dataframe(filtered_users, use_container_width=True, hide_index=True)
             else:
                 st.dataframe(all_users, use_container_width=True, hide_index=True)
@@ -100,7 +135,11 @@ if st.session_state["authentication_status"]:
 
         users_dict = {u['username']: u for u in umdb.get_all_users_for_admin_display()}
         if users_dict:
-            user_to_manage = st.selectbox("Selecione um utilizador para Editar ou Excluir:", list(users_dict.keys()), key="user_select_manage")
+            user_to_manage = st.selectbox(
+                "Selecione um utilizador para Editar ou Excluir:", 
+                list(users_dict.keys()), 
+                key="user_select_manage"
+            )
             user_data = users_dict.get(user_to_manage, {})
 
             with tab_edit:
@@ -154,15 +193,17 @@ if st.session_state["authentication_status"]:
                 with st.expander("Simulador Pessoa Física (PF)", expanded=True):
                     pf_prices = pricing_config.get("PRECOS_PF", {})
                     col1, col2 = st.columns(2)
-                    pf_prices["GPRS / Gsm"] = col1.number_input("Preço Rastreador GPRS/GSM (PF)", value=float(pf_prices.get("GPRS / Gsm", 0.0)), format="%.2f")
-                    pf_prices["Satelital"] = col2.number_input("Preço Rastreador Satelital (PF)", value=float(pf_prices.get("Satelital", 0.0)), format="%.2f")
+                    pf_prices["GPRS / Gsm"] = col1.number_input("Preço Rastreador GPRS/GSM (PF)", value=float(pf_prices.get("GPRS / Gsm", 0.0)), format="%.2f", key="pf_gprs")
+                    pf_prices["Satelital"] = col2.number_input("Preço Rastreador Satelital (PF)", value=float(pf_prices.get("Satelital", 0.0)), format="%.2f", key="pf_satelital")
                 
                 with st.expander("Simulador Licitação (Custos)", expanded=True):
                     licit_prices = pricing_config.get("PRECO_CUSTO_LICITACAO", {})
                     l_col1, l_col2, l_col3 = st.columns(3)
                     licit_prices["Rastreador GPRS/GSM 2G"] = l_col1.number_input("Custo GPRS/GSM 2G", value=float(licit_prices.get("Rastreador GPRS/GSM 2G", 0.0)), format="%.2f")
                     licit_prices["Rastreador GPRS/GSM 4G"] = l_col2.number_input("Custo GPRS/GSM 4G", value=float(licit_prices.get("Rastreador GPRS/GSM 4G", 0.0)), format="%.2f")
-                    # ... (adicione os outros campos aqui)
+                    licit_prices["Rastreador Satelital"] = l_col3.number_input("Custo Satelital", value=float(licit_prices.get("Rastreador Satelital", 0.0)), format="%.2f")
+                    licit_prices["Telemetria/CAN"] = l_col1.number_input("Custo Telemetria/CAN", value=float(licit_prices.get("Telemetria/CAN", 0.0)), format="%.2f")
+                    licit_prices["RFID - ID Motorista"] = l_col2.number_input("Custo RFID", value=float(licit_prices.get("RFID - ID Motorista", 0.0)), format="%.2f")
 
                 with st.expander("Simulador Pessoa Jurídica (PJ)", expanded=True):
                     pj_plans = pricing_config.get("PLANOS_PJ", {})
