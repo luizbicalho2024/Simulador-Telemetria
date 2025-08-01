@@ -15,10 +15,11 @@ if not st.session_state.get("authentication_status"):
     st.stop()
 
 # --- 2. FUNÇÃO AUXILIAR ---
+@st.cache_data
 def processar_planilha_terminais(uploaded_file):
     """
-    Lê a planilha, extrai o nome do cliente, os dados da tabela,
-    e realiza a análise de status com o formato de data correto.
+    Lê a planilha, extrai o nome do cliente da linha 9, coluna 5,
+    lê os dados da tabela, e realiza a análise de status com o formato de data correto.
     """
     df_cliente = pd.read_excel(uploaded_file, header=None, skiprows=8, nrows=1, engine='openpyxl')
     
@@ -43,7 +44,6 @@ def processar_planilha_terminais(uploaded_file):
 
     df_terminais.dropna(subset=['Terminal'], inplace=True)
     
-    # ***** CORREÇÃO PRINCIPAL AQUI *****
     # O parâmetro dayfirst=True garante que o Pandas leia DD/MM/YYYY corretamente
     df_terminais['Data Transmissão'] = pd.to_datetime(df_terminais['Data Transmissão'], errors='coerce', dayfirst=True)
     df_terminais.dropna(subset=['Data Transmissão'], inplace=True)
@@ -89,24 +89,25 @@ if uploaded_file:
             df_atualizados = df_analise[df_analise['Status_Atualizacao'] == 'Atualizado']
             df_desatualizados = df_analise[df_analise['Status_Atualizacao'] == 'Desatualizado']
             
+            # --- CARDS DE MÉTRICAS (LAYOUT CORRIGIDO) ---
             col1, col2 = st.columns(2)
-            # Card de Sucesso (Verde)
-            st.markdown(f"""
-            <div style="background-color: #d4edda; border-left: 5px solid #28a745; padding: 1rem; border-radius: 0.25rem; margin-bottom: 1rem;">
-                <div style="font-size: 0.9rem; color: #155724; font-weight: bold;">✅ Total de Terminais Atualizados</div>
-                <div style="font-size: 2rem; color: #155724; font-weight: bold;">{len(df_atualizados)}</div>
-                <div style="font-size: 0.8rem; color: #155724;">Terminais que transmitiram nos últimos 10 dias.</div>
-            </div>
-            """, unsafe_allow_html=True, help="Terminais que transmitiram nos últimos 10 dias.")
-
-            # Card de Alerta (Vermelho)
-            st.markdown(f"""
-            <div style="background-color: #f8d7da; border-left: 5px solid #dc3545; padding: 1rem; border-radius: 0.25rem; margin-bottom: 1rem;">
-                <div style="font-size: 0.9rem; color: #721c24; font-weight: bold;">⚠️ Total de Terminais Desatualizados</div>
-                <div style="font-size: 2rem; color: #721c24; font-weight: bold;">{len(df_desatualizados)}</div>
-                <div style="font-size: 0.8rem; color: #721c24;">Terminais que não transmitem há mais de 10 dias.</div>
-            </div>
-            """, unsafe_allow_html=True, help="Terminais que não transmitem há mais de 10 dias.")
+            with col1:
+                st.markdown(f"""
+                <div style="background-color: #d4edda; border-left: 5px solid #28a745; padding: 1rem; border-radius: 0.25rem; margin-bottom: 1rem;">
+                    <div style="font-size: 0.9rem; color: #155724; font-weight: bold;">✅ Total de Terminais Atualizados</div>
+                    <div style="font-size: 2rem; color: #155724; font-weight: bold;">{len(df_atualizados)}</div>
+                    <div style="font-size: 0.8rem; color: #155724;">Terminais que transmitiram nos últimos 10 dias.</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown(f"""
+                <div style="background-color: #f8d7da; border-left: 5px solid #dc3545; padding: 1rem; border-radius: 0.25rem; margin-bottom: 1rem;">
+                    <div style="font-size: 0.9rem; color: #721c24; font-weight: bold;">⚠️ Total de Terminais Desatualizados</div>
+                    <div style="font-size: 2rem; color: #721c24; font-weight: bold;">{len(df_desatualizados)}</div>
+                    <div style="font-size: 0.8rem; color: #721c24;">Terminais que não transmitem há mais de 10 dias.</div>
+                </div>
+                """, unsafe_allow_html=True)
 
             st.markdown("---")
             
