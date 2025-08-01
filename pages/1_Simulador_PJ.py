@@ -6,25 +6,20 @@ import streamlit as st
 from docxtpl import DocxTemplate
 import user_management_db as umdb
 
-# --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
 st.set_page_config(layout="wide", page_title="Simulador Pessoa Jurídica", page_icon="imgs/v-c.png")
-
 if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado!"); st.stop()
 
-# --- 2. CARREGAMENTO DE PREÇOS E ESTADO ---
 pricing_config = umdb.get_pricing_config()
-PLANOS_PJ = {k: {p: Decimal(str(v)) for p, v in val.items()} for k, val in pricing_config.get("PLANOS_PJ", {}).items()}
+PLANOS_PJ = {k: {p: Decimal(str(v)) for p, v in val.items()} for k, v in pricing_config.get("PLANOS_PJ", {}).items()}
 PRODUTOS_PJ_DESCRICAO = pricing_config.get("PRODUTOS_PJ_DESCRICAO", {})
 
 if 'pj_results' not in st.session_state:
     st.session_state.pj_results = {}
 
-# --- 3. FUNÇÃO AUXILIAR PARA GERAR O DOCX ---
 def gerar_proposta_docx(context):
     try:
-        template_path = "Proposta Comercial e Intenção - Verdio.docx"
-        doc = DocxTemplate(template_path)
+        doc = DocxTemplate("Proposta Comercial e Intenção - Verdio.docx")
         doc.render(context)
         buffer = BytesIO()
         doc.save(buffer)
@@ -34,7 +29,6 @@ def gerar_proposta_docx(context):
         st.error(f"Erro ao gerar o template DOCX: {e}")
         return None
 
-# --- 4. INTERFACE ---
 st.sidebar.image("imgs/v-c.png", width=120)
 if st.sidebar.button("🧹 Limpar Campos e Simulação", use_container_width=True, key="pj_clear"):
     keys_to_clear = [k for k in st.session_state if k.startswith("pj_")]
@@ -42,17 +36,12 @@ if st.sidebar.button("🧹 Limpar Campos e Simulação", use_container_width=Tru
     st.session_state.pj_results = {}
     st.toast("Campos limpos!", icon="✨"); st.rerun()
 
-try:
-    st.image("imgs/logo.png", width=250)
-except: pass
-
+st.image("imgs/logo.png", width=250)
 st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador de Venda - Pessoa Jurídica</h1>", unsafe_allow_html=True)
-st.markdown("---")
 st.write(f"Usuário: {st.session_state.get('name', 'N/A')} ({st.session_state.get('username', 'N/A')})")
 st.write(f"Nível de Acesso: {st.session_state.get('role', 'Indefinido').capitalize()}")
 st.markdown("---")
 
-# --- 5. FORMULÁRIO DE SIMULAÇÃO ---
 with st.form("form_simulacao_pj"):
     st.sidebar.header("📝 Configurações PJ")
     qtd_veiculos = st.sidebar.number_input("Quantidade de Veículos 🚗", min_value=1, value=1, step=1, key="pj_qtd")
@@ -73,17 +62,14 @@ with st.form("form_simulacao_pj"):
     submitted = st.form_submit_button("Simular e Registrar Proposta")
 
     if submitted:
-        if not all([empresa, responsavel]):
-            st.warning("Preencha o Nome da Empresa e do Responsável.")
-        elif not produtos_selecionados:
-            st.warning("Selecione pelo menos um produto para simular.")
+        if not all([empresa, responsavel, produtos_selecionados]):
+            st.warning("Preencha todos os campos e selecione pelo menos um produto.")
         else:
             soma_mensal_veiculo = sum(produtos_selecionados.values())
             valor_mensal_frota = soma_mensal_veiculo * Decimal(qtd_veiculos)
             meses_contrato = int(tempo_contrato.split()[0])
             valor_total_contrato = valor_mensal_frota * Decimal(meses_contrato)
             
-            # Guarda os resultados na sessão
             st.session_state.pj_results = {
                 'soma_mensal_veiculo': soma_mensal_veiculo,
                 'valor_mensal_frota': valor_mensal_frota,
@@ -97,13 +83,11 @@ with st.form("form_simulacao_pj"):
                     'SOMA_TOTAL_MENSAL_VEICULO': f"R$ {soma_mensal_veiculo:,.2f}"
                 }
             }
-
-            # Regista a proposta
+            
+            proposal_log_data = {"tipo": "PJ", "empresa": empresa, "consultor": st.session_state.get('name', 'N/A'), "valor_total": float(valor_total_contrato)}
+            umdb.upsert_proposal(proposal_log_data)
             umdb.add_log(st.session_state["username"], "Simulou/Registrou Proposta PJ", f"Empresa: {empresa}, Valor: R$ {valor_total_contrato:,.2f}")
-            umdb.log_proposal({"tipo": "PJ", "empresa": empresa, "consultor": st.session_state.get('name', 'N/A'), "valor_total": float(valor_total_contrato)})
-            st.toast("Proposta calculada e registrada com sucesso!", icon="📊")
 
-# --- 6. EXIBIÇÃO DOS RESULTADOS E DOWNLOAD ---
 if st.session_state.pj_results:
     res = st.session_state.pj_results
     st.markdown("---")
