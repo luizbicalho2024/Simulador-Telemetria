@@ -20,13 +20,20 @@ def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
     """
     Lê a planilha de terminais, classifica, calcula e retorna os dataframes de faturamento.
     """
-    # Lê a tabela de dados a partir da linha 12 (índice 11)
     df = pd.read_excel(uploaded_file, header=11, engine='openpyxl')
 
-    # Validação de colunas essenciais
+    # ***** CORREÇÃO DEFINITIVA AQUI *****
+    # Atribui manualmente os nomes corretos às colunas com base na sua ordem no ficheiro.
+    df.columns = [
+        'Cliente', 'Terminal', 'Placa', 'Rastreador', 'Rastreador Fabricante',
+        'Rastreador Modelo', 'Número SimCard', 'Data Ativação', 'Data Desativação',
+        'Suspenso Dias Mes'
+    ]
+    
+    # Validação para garantir que as colunas essenciais existem após a renomeação
     required_cols = ['Terminal', 'Data Desativação', 'Suspenso Dias Mes']
     if not all(col in df.columns for col in required_cols):
-        raise ValueError(f"O ficheiro não contém as colunas necessárias. Verifique se existem as colunas: {', '.join(required_cols)}")
+        raise ValueError(f"A estrutura do ficheiro parece ter mudado. Verifique as colunas.")
 
     # Limpeza e preparação dos dados
     df.dropna(subset=['Terminal'], inplace=True)
@@ -46,9 +53,12 @@ def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
 
     # Cálculo do faturamento proporcional para os desativados
     if not df_desativados.empty:
+        # Pega o número de dias no mês da primeira data de desativação (suficiente para o cálculo)
+        dias_no_mes = df_desativados['Data Desativação'].iloc[0].days_in_month
+        
         df_desativados['Dias Ativos'] = df_desativados['Data Desativação'].dt.day
         df_desativados['Dias a Faturar'] = (df_desativados['Dias Ativos'] - df_desativados['Suspenso Dias Mes']).clip(lower=0)
-        df_desativados['Valor Proporcional'] = (df_desativados['Valor Unitario'] / 30) * df_desativados['Dias a Faturar']
+        df_desativados['Valor Proporcional'] = (df_desativados['Valor Unitario'] / dias_no_mes) * df_desativados['Dias a Faturar']
     
     return df_ativos, df_desativados
 
