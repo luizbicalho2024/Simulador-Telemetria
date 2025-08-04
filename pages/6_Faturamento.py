@@ -23,21 +23,20 @@ def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
     df = pd.read_excel(uploaded_file, header=11, engine='openpyxl')
 
     # ***** CORREÇÃO DEFINITIVA AQUI *****
-    # Atribui manualmente os nomes corretos às colunas com base na sua ordem no ficheiro.
-    df.columns = [
-        'Cliente', 'Terminal', 'Placa', 'Rastreador', 'Rastreador Fabricante',
-        'Rastreador Modelo', 'Número SimCard', 'Data Ativação', 'Data Desativação',
-        'Suspenso Dias Mes'
-    ]
-    
-    # Validação para garantir que as colunas essenciais existem após a renomeação
+    # Renomeia apenas as colunas que realmente existem e que vamos usar.
+    # Isto torna o código robusto a futuras alterações no número de colunas do relatório.
+    if 'Nº SimCard' in df.columns:
+        df = df.rename(columns={'Nº SimCard': 'Número SimCard'})
+
     required_cols = ['Terminal', 'Data Desativação', 'Suspenso Dias Mes']
     if not all(col in df.columns for col in required_cols):
-        raise ValueError(f"A estrutura do ficheiro parece ter mudado. Verifique as colunas.")
+        st.error(f"O ficheiro não contém todas as colunas necessárias. Verifique se o cabeçalho na linha 12 contém: {', '.join(required_cols)}")
+        st.write("Colunas encontradas:", df.columns.tolist())
+        return None, None # Retorna None para indicar falha
 
     # Limpeza e preparação dos dados
     df.dropna(subset=['Terminal'], inplace=True)
-    df['Terminal'] = df['Terminal'].astype(str)
+    df['Terminal'] = df['Terminal'].astype(str).str.strip()
     df['Data Desativação'] = pd.to_datetime(df['Data Desativação'], errors='coerce')
     df['Suspenso Dias Mes'] = pd.to_numeric(df['Suspenso Dias Mes'], errors='coerce').fillna(0)
 
@@ -49,11 +48,10 @@ def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
 
     # Separação entre ativos e desativados
     df_ativos = df[df['Data Desativação'].isna()]
-    df_desativados = df[df['Data Desativação'].notna()]
+    df_desativados = df[df['Data Desativação'].notna()].copy() # Usa .copy() para evitar SettingWithCopyWarning
 
     # Cálculo do faturamento proporcional para os desativados
     if not df_desativados.empty:
-        # Pega o número de dias no mês da primeira data de desativação (suficiente para o cálculo)
         dias_no_mes = df_desativados['Data Desativação'].iloc[0].days_in_month
         
         df_desativados['Dias Ativos'] = df_desativados['Data Desativação'].dt.day
@@ -98,40 +96,38 @@ if uploaded_file:
         try:
             df_ativos, df_desativados = processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital)
             
-            # --- CÁLCULO DOS TOTAIS ---
-            total_faturamento_ativos = df_ativos['Valor Unitario'].sum()
-            total_faturamento_desativados = df_desativados['Valor Proporcional'].sum()
-            faturamento_total_geral = total_faturamento_ativos + total_faturamento_desativados
+            if df_ativos is not None: # Verifica se o processamento foi bem-sucedido
+                total_faturamento_ativos = df_ativos['Valor Unitario'].sum()
+                total_faturamento_desativados = df_desativados['Valor Proporcional'].sum()
+                faturamento_total_geral = total_faturamento_ativos + total_faturamento_desativados
 
-            st.header("Resumo do Faturamento")
-            
-            # --- CARDS DE MÉTRICAS ---
-            col1, col2 = st.columns(2)
-            col1.metric("Nº de Terminais Ativos (Faturamento Cheio)", value=len(df_ativos))
-            col2.metric("Nº de Terminais Desativados (Faturamento Proporcional)", value=len(df_desativados))
-            
-            col_a, col_b, col_c = st.columns(3)
-            col_a.success(f"**Faturamento (Ativos):** R$ {total_faturamento_ativos:,.2f}")
-            col_b.warning(f"**Faturamento (Desativados):** R$ {total_faturamento_desativados:,.2f}")
-            col_c.info(f"**FATURAMENTO TOTAL:** R$ {faturamento_total_geral:,.2f}")
+                st.header("Resumo do Faturamento")
+                
+                col1, col2 = st.columns(2)
+                col1.metric("Nº de Terminais Ativos (Faturamento Cheio)", value=len(df_ativos))
+                col2.metric("Nº de Terminais Desativados (Faturamento Proporcional)", value=len(df_desativados))
+                
+                col_a, col_b, col_c = st.columns(3)
+                col_a.success(f"**Faturamento (Ativos):** R$ {total_faturamento_ativos:,.2f}")
+                col_b.warning(f"**Faturamento (Desativados):** R$ {total_faturamento_desativados:,.2f}")
+                col_c.info(f"**FATURAMENTO TOTAL:** R$ {faturamento_total_geral:,.2f}")
 
-            st.markdown("---")
-            
-            # --- TABELA DE TERMINAIS DESATIVADOS ---
-            st.subheader("Detalhamento do Faturamento Proporcional (Terminais Desativados)")
-            if not df_desativados.empty:
-                st.dataframe(
-                    df_desativados[['Terminal', 'Placa', 'Tipo', 'Data Desativação', 'Dias Ativos', 'Suspenso Dias Mes', 'Dias a Faturar', 'Valor Unitario', 'Valor Proporcional']],
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "Data Desativação": st.column_config.DatetimeColumn("Data Desativação", format="DD/MM/YYYY"),
-                        "Valor Unitario": st.column_config.NumberColumn("Valor Mensal Cheio (R$)", format="R$ %.2f"),
-                        "Valor Proporcional": st.column_config.NumberColumn("Valor a Faturar (R$)", format="R$ %.2f")
-                    }
-                )
-            else:
-                st.info("Nenhum terminal foi desativado no período analisado.")
+                st.markdown("---")
+                
+                st.subheader("Detalhamento do Faturamento Proporcional (Terminais Desativados)")
+                if not df_desativados.empty:
+                    st.dataframe(
+                        df_desativados[['Terminal', 'Placa', 'Tipo', 'Data Desativação', 'Dias Ativos', 'Suspenso Dias Mes', 'Dias a Faturar', 'Valor Unitario', 'Valor Proporcional']],
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            "Data Desativação": st.column_config.DatetimeColumn("Data Desativação", format="DD/MM/YYYY"),
+                            "Valor Unitario": st.column_config.NumberColumn("Valor Mensal Cheio (R$)", format="R$ %.2f"),
+                            "Valor Proporcional": st.column_config.NumberColumn("Valor a Faturar (R$)", format="R$ %.2f")
+                        }
+                    )
+                else:
+                    st.info("Nenhum terminal foi desativado no período analisado.")
 
         except Exception as e:
             st.error(f"Ocorreu um erro ao processar o ficheiro: {e}")
