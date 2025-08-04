@@ -23,10 +23,8 @@ def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
     df = pd.read_excel(uploaded_file, header=11, engine='openpyxl')
 
     # ***** CORREÇÃO DEFINITIVA AQUI *****
-    # Renomeia apenas as colunas que realmente existem e que vamos usar.
-    # Isto torna o código robusto a futuras alterações no número de colunas do relatório.
-    if 'Nº SimCard' in df.columns:
-        df = df.rename(columns={'Nº SimCard': 'Número SimCard'})
+    # Renomeia a coluna do ficheiro para o padrão que o script espera.
+    df = df.rename(columns={'Suspenso Dias Mês': 'Suspenso Dias Mes'})
 
     required_cols = ['Terminal', 'Data Desativação', 'Suspenso Dias Mes']
     if not all(col in df.columns for col in required_cols):
