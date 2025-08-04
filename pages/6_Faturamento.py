@@ -22,6 +22,7 @@ def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
     """
     df = pd.read_excel(uploaded_file, header=11, engine='openpyxl')
 
+    # Renomeia a coluna para o padrão que o script espera.
     df = df.rename(columns={'Suspenso Dias Mês': 'Suspenso Dias Mes'})
 
     required_cols = ['Terminal', 'Data Desativação', 'Suspenso Dias Mes']
@@ -30,27 +31,32 @@ def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
         st.write("Colunas encontradas:", df.columns.tolist())
         return None, None
 
+    # Limpeza e preparação dos dados
     df.dropna(subset=['Terminal'], inplace=True)
     df['Terminal'] = df['Terminal'].astype(str).str.strip()
     df['Data Desativação'] = pd.to_datetime(df['Data Desativação'], errors='coerce')
     df['Suspenso Dias Mes'] = pd.to_numeric(df['Suspenso Dias Mes'], errors='coerce').fillna(0)
 
+    # Classificação por tipo de equipamento
     df['Tipo'] = df['Terminal'].apply(lambda x: 'Satelital' if len(x) == 8 else 'GPRS')
+    
+    # Atribuição do valor unitário
     df['Valor Unitario'] = df['Tipo'].apply(lambda x: valor_satelital if x == 'Satelital' else valor_gprs)
 
+    # Separação entre ativos e desativados
     df_ativos = df[df['Data Desativação'].isna()]
     df_desativados = df[df['Data Desativação'].notna()].copy()
 
-    # ***** CORREÇÃO PRINCIPAL AQUI *****
-    # Garante que as colunas existam mesmo que o dataframe esteja vazio
-    df_desativados['Dias Ativos'] = 0
-    df_desativados['Dias a Faturar'] = 0
-    df_desativados['Valor Proporcional'] = 0.0
-
+    # Cálculo do faturamento proporcional para os desativados
     if not df_desativados.empty:
         dias_no_mes = df_desativados['Data Desativação'].iloc[0].days_in_month
+        
         df_desativados['Dias Ativos'] = df_desativados['Data Desativação'].dt.day
+        
+        # ***** CORREÇÃO PRINCIPAL AQUI *****
+        # Garante que os 'Dias a Faturar' nunca sejam negativos
         df_desativados['Dias a Faturar'] = (df_desativados['Dias Ativos'] - df_desativados['Suspenso Dias Mes']).clip(lower=0)
+        
         df_desativados['Valor Proporcional'] = (df_desativados['Valor Unitario'] / dias_no_mes) * df_desativados['Dias a Faturar']
     
     return df_ativos, df_desativados
@@ -93,7 +99,6 @@ if uploaded_file:
             
             if df_ativos is not None:
                 total_faturamento_ativos = df_ativos['Valor Unitario'].sum()
-                # A soma agora é segura, mesmo que df_desativados esteja vazio
                 total_faturamento_desativados = df_desativados['Valor Proporcional'].sum()
                 faturamento_total_geral = total_faturamento_ativos + total_faturamento_desativados
 
