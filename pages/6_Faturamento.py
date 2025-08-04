@@ -22,15 +22,14 @@ def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
     """
     df = pd.read_excel(uploaded_file, header=11, engine='openpyxl')
 
-    # ***** CORREÇÃO DEFINITIVA AQUI *****
-    # Renomeia a coluna do ficheiro para o padrão que o script espera.
+    # Renomeia a coluna para o padrão que o script espera.
     df = df.rename(columns={'Suspenso Dias Mês': 'Suspenso Dias Mes'})
 
     required_cols = ['Terminal', 'Data Desativação', 'Suspenso Dias Mes']
     if not all(col in df.columns for col in required_cols):
         st.error(f"O ficheiro não contém todas as colunas necessárias. Verifique se o cabeçalho na linha 12 contém: {', '.join(required_cols)}")
         st.write("Colunas encontradas:", df.columns.tolist())
-        return None, None # Retorna None para indicar falha
+        return None, None
 
     # Limpeza e preparação dos dados
     df.dropna(subset=['Terminal'], inplace=True)
@@ -46,14 +45,18 @@ def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
 
     # Separação entre ativos e desativados
     df_ativos = df[df['Data Desativação'].isna()]
-    df_desativados = df[df['Data Desativação'].notna()].copy() # Usa .copy() para evitar SettingWithCopyWarning
+    df_desativados = df[df['Data Desativação'].notna()].copy()
 
     # Cálculo do faturamento proporcional para os desativados
     if not df_desativados.empty:
         dias_no_mes = df_desativados['Data Desativação'].iloc[0].days_in_month
         
         df_desativados['Dias Ativos'] = df_desativados['Data Desativação'].dt.day
+        
+        # ***** CORREÇÃO PRINCIPAL AQUI *****
+        # Garante que os 'Dias a Faturar' nunca sejam negativos
         df_desativados['Dias a Faturar'] = (df_desativados['Dias Ativos'] - df_desativados['Suspenso Dias Mes']).clip(lower=0)
+        
         df_desativados['Valor Proporcional'] = (df_desativados['Valor Unitario'] / dias_no_mes) * df_desativados['Dias a Faturar']
     
     return df_ativos, df_desativados
@@ -94,7 +97,7 @@ if uploaded_file:
         try:
             df_ativos, df_desativados = processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital)
             
-            if df_ativos is not None: # Verifica se o processamento foi bem-sucedido
+            if df_ativos is not None:
                 total_faturamento_ativos = df_ativos['Valor Unitario'].sum()
                 total_faturamento_desativados = df_desativados['Valor Proporcional'].sum()
                 faturamento_total_geral = total_faturamento_ativos + total_faturamento_desativados
