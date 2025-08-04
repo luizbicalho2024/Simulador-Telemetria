@@ -18,35 +18,26 @@ if not st.session_state.get("authentication_status"):
 @st.cache_data
 def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
     """
-    Lê a planilha, extrai o nome do cliente da coluna "Cliente",
-    classifica, calcula e retorna os dataframes.
+    Lê a planilha de terminais, classifica por Nº Equipamento, calcula e retorna os dataframes.
     """
     df = pd.read_excel(
         uploaded_file,
         header=11,
         engine='openpyxl',
-        dtype={'Equipamento': str}
+        dtype={'Equipamento': str} # Força a leitura da coluna correta como texto
     )
 
+    # Renomeia as colunas do ficheiro para o padrão que o script espera.
     df = df.rename(columns={
         'Suspenso Dias Mês': 'Suspenso Dias Mes',
         'Equipamento': 'Nº Equipamento'
     })
 
-    required_cols = ['Cliente', 'Terminal', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Nº Equipamento']
+    required_cols = ['Terminal', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Nº Equipamento']
     if not all(col in df.columns for col in required_cols):
         st.error(f"O ficheiro não contém todas as colunas necessárias. Verifique o cabeçalho na linha 12.")
         st.write("Colunas encontradas:", df.columns.tolist())
         return None, None, None
-
-    # ***** CORREÇÃO DEFINITIVA AQUI *****
-    # Extrai o nome do cliente da primeira linha da coluna "Cliente"
-    nome_cliente = "Cliente não identificado"
-    if not df.empty and 'Cliente' in df.columns:
-        # Pega o primeiro valor não nulo da coluna Cliente
-        first_valid_client = df['Cliente'].dropna().iloc[0]
-        if pd.notna(first_valid_client):
-            nome_cliente = str(first_valid_client).strip()
 
     # Limpeza e preparação dos dados
     df.dropna(subset=['Terminal'], inplace=True)
@@ -55,16 +46,28 @@ def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
     df['Dias Ativos Mês'] = pd.to_numeric(df['Dias Ativos Mês'], errors='coerce').fillna(0)
     df['Suspenso Dias Mes'] = pd.to_numeric(df['Suspenso Dias Mes'], errors='coerce').fillna(0)
 
+    # Classificação por tipo de equipamento
     df['Tipo'] = df['Nº Equipamento'].apply(lambda x: 'Satelital' if len(str(x).strip()) == 8 else 'GPRS')
+    
+    # Atribuição do valor unitário
     df['Valor Unitario'] = df['Tipo'].apply(lambda x: valor_satelital if x == 'Satelital' else valor_gprs)
 
+    # Cálculo do faturamento
     dias_no_mes = pd.Timestamp(datetime.now()).days_in_month
     df['Dias a Faturar'] = (df['Dias Ativos Mês'] - df['Suspenso Dias Mes']).clip(lower=0)
     df['Valor a Faturar'] = (df['Valor Unitario'] / dias_no_mes) * df['Dias a Faturar']
     
-    df_faturamento_cheio = df[df['Dias a Faturar'] == dias_no_mes]
+    # Separação entre faturamento cheio e proporcional
+    df_faturamento_cheio = df[df['Dias a Faturar'] >= dias_no_mes]
     df_faturamento_proporcional = df[df['Dias a Faturar'] < dias_no_mes]
     
+    # Extrai o nome do cliente da primeira linha da coluna "Cliente"
+    nome_cliente = "Cliente não identificado"
+    if not df.empty and 'Cliente' in df.columns:
+        first_valid_client = df['Cliente'].dropna().iloc[0]
+        if pd.notna(first_valid_client):
+            nome_cliente = str(first_valid_client).strip()
+
     return nome_cliente, df_faturamento_cheio, df_faturamento_proporcional
 
 # --- 3. INTERFACE DA PÁGINA ---
@@ -122,20 +125,34 @@ if uploaded_file:
 
                 st.markdown("---")
                 
-                st.subheader("Detalhamento do Faturamento Proporcional")
-                if not df_proporcional.empty:
-                    st.dataframe(
-                        df_proporcional[['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Dias a Faturar', 'Valor Unitario', 'Valor a Faturar']],
-                        use_container_width=True,
-                        hide_index=True,
-                        column_config={
-                            "Data Desativação": st.column_config.DatetimeColumn("Data Desativação", format="DD/MM/YYYY"),
-                            "Valor Unitario": st.column_config.NumberColumn("Valor Mensal Cheio (R$)", format="R$ %.2f"),
-                            "Valor a Faturar": st.column_config.NumberColumn("Valor a Faturar (R$)", format="R$ %.2f")
-                        }
-                    )
-                else:
-                    st.info("Nenhum terminal com faturamento proporcional neste período.")
+                with st.expander("Detalhamento do Faturamento Proporcional", expanded=False):
+                    if not df_proporcional.empty:
+                        st.dataframe(
+                            df_proporcional[['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Dias a Faturar', 'Valor Unitario', 'Valor a Faturar']],
+                            use_container_width=True,
+                            hide_index=True,
+                            column_config={
+                                "Data Desativação": st.column_config.DatetimeColumn("Data Desativação", format="DD/MM/YYYY"),
+                                "Valor Unitario": st.column_config.NumberColumn("Valor Mensal Cheio (R$)", format="R$ %.2f"),
+                                "Valor a Faturar": st.column_config.NumberColumn("Valor a Faturar (R$)", format="R$ %.2f")
+                            }
+                        )
+                    else:
+                        st.info("Nenhum terminal com faturamento proporcional neste período.")
+                
+                # ***** NOVA TABELA AQUI *****
+                with st.expander("Detalhamento do Faturamento Cheio", expanded=False):
+                    if not df_cheio.empty:
+                        st.dataframe(
+                            df_cheio[['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Valor a Faturar']],
+                            use_container_width=True,
+                            hide_index=True,
+                            column_config={
+                                "Valor a Faturar": st.column_config.NumberColumn("Valor Faturado (R$)", format="R$ %.2f")
+                            }
+                        )
+                    else:
+                        st.info("Nenhum terminal com faturamento cheio neste período.")
 
         except Exception as e:
             st.error(f"Ocorreu um erro ao processar o ficheiro: {e}")
