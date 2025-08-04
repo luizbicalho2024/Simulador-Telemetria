@@ -18,16 +18,20 @@ if not st.session_state.get("authentication_status"):
 @st.cache_data
 def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
     """
-    Lê a planilha, classifica, e aplica as regras de negócio para o faturamento.
+    Lê a planilha, classifica por Nº Equipamento, calcula e retorna os dataframes.
     """
-    df = pd.read_excel(uploaded_file, header=11, engine='openpyxl')
+    # Lê a planilha, garantindo que 'Nº Equipamento' seja lido como texto
+    df = pd.read_excel(
+        uploaded_file,
+        header=11,
+        engine='openpyxl',
+        dtype={'Nº Equipamento': str} # Força a leitura como texto para preservar zeros
+    )
 
     # Renomeia as colunas para um padrão limpo e previsível
-    df = df.rename(columns={
-        'Suspenso Dias Mês': 'Suspenso Dias Mes'
-    })
+    df = df.rename(columns={'Suspenso Dias Mês': 'Suspenso Dias Mes'})
 
-    required_cols = ['Terminal', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes']
+    required_cols = ['Terminal', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Nº Equipamento']
     if not all(col in df.columns for col in required_cols):
         st.error(f"O ficheiro não contém todas as colunas necessárias. Verifique o cabeçalho na linha 12.")
         st.write("Colunas encontradas:", df.columns.tolist())
@@ -40,22 +44,19 @@ def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
     df['Dias Ativos Mês'] = pd.to_numeric(df['Dias Ativos Mês'], errors='coerce').fillna(0)
     df['Suspenso Dias Mes'] = pd.to_numeric(df['Suspenso Dias Mes'], errors='coerce').fillna(0)
 
-    # Classificação por tipo de equipamento
-    df['Tipo'] = df['Terminal'].apply(lambda x: 'Satelital' if len(x) == 8 else 'GPRS')
+    # ***** LÓGICA DE CLASSIFICAÇÃO CORRIGIDA *****
+    # Usa a coluna 'Nº Equipamento' para determinar o tipo
+    df['Tipo'] = df['Nº Equipamento'].apply(lambda x: 'Satelital' if len(str(x).strip()) == 8 else 'GPRS')
+    
+    # Atribuição do valor unitário
     df['Valor Unitario'] = df['Tipo'].apply(lambda x: valor_satelital if x == 'Satelital' else valor_gprs)
 
-    # ***** LÓGICA DE FATURAMENTO CORRIGIDA *****
-    # Determina o número de dias no mês (baseado na data de hoje, pode ser ajustado se o relatório for de outro mês)
+    # Cálculo do faturamento
     dias_no_mes = pd.Timestamp(datetime.now()).days_in_month
-    
-    # Calcula os dias a faturar, garantindo que nunca seja negativo
     df['Dias a Faturar'] = (df['Dias Ativos Mês'] - df['Suspenso Dias Mes']).clip(lower=0)
-    
-    # Calcula o valor a faturar para todos
     df['Valor a Faturar'] = (df['Valor Unitario'] / dias_no_mes) * df['Dias a Faturar']
     
-    # Separa os terminais: 'Ativos' são os que serão cobrados pelo mês completo
-    # (Dias a Faturar = Dias no Mês), todos os outros são proporcionais.
+    # Separação entre faturamento cheio e proporcional
     df_faturamento_cheio = df[df['Dias a Faturar'] == dias_no_mes]
     df_faturamento_proporcional = df[df['Dias a Faturar'] < dias_no_mes]
     
@@ -118,7 +119,7 @@ if uploaded_file:
                 st.subheader("Detalhamento do Faturamento Proporcional")
                 if not df_proporcional.empty:
                     st.dataframe(
-                        df_proporcional[['Terminal', 'Placa', 'Tipo', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Dias a Faturar', 'Valor Unitario', 'Valor a Faturar']],
+                        df_proporcional[['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Dias a Faturar', 'Valor Unitario', 'Valor a Faturar']],
                         use_container_width=True,
                         hide_index=True,
                         column_config={
