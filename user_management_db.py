@@ -3,7 +3,7 @@ import streamlit as st
 import pymongo
 from bson import ObjectId
 from passlib.context import CryptContext
-from datetime import datetime
+from datetime import datetime, time
 from config import get_default_pricing
 
 # --- 1. CONFIGURAÇÃO DE SEGURANÇA E CONEXÃO ---
@@ -177,5 +177,24 @@ def delete_proposal(proposal_id: str):
             return result.deleted_count > 0
         except Exception as e:
             print(f"ERROR: Falha ao excluir proposta (ID: {proposal_id}): {e}")
+            return False
+    return False
+
+def log_faturamento(faturamento_data: dict):
+    """Guarda um resumo do faturamento gerado no histórico."""
+    history_collection = get_collection("billing_history")
+    if history_collection is not None:
+        try:
+            faturamento_data["data_geracao"] = datetime.now()
+            faturamento_data["gerado_por"] = st.session_state.get("name", "N/A")
+            history_collection.insert_one(faturamento_data)
+            add_log(
+                st.session_state["username"], 
+                "Exportou e Salvou Faturamento", 
+                f"Cliente: {faturamento_data.get('cliente')}, Valor: R$ {faturamento_data.get('valor_total'):,.2f}"
+            )
+            return True
+        except Exception as e:
+            print(f"ERROR: Falha ao registar histórico de faturamento: {e}")
             return False
     return False
