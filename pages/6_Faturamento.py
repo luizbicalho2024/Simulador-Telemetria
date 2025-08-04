@@ -18,17 +18,9 @@ if not st.session_state.get("authentication_status"):
 @st.cache_data
 def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
     """
-    Lê a planilha, extrai o nome do cliente, os dados da tabela,
-    e realiza a análise de status.
+    Lê a planilha, extrai o nome do cliente da coluna "Cliente",
+    classifica, calcula e retorna os dataframes.
     """
-    df_cliente = pd.read_excel(uploaded_file, header=None, skiprows=8, nrows=1, engine='openpyxl')
-    
-    nome_cliente = "Cliente não identificado"
-    if not df_cliente.empty and len(df_cliente.columns) > 4:
-        nome_cliente_raw = df_cliente.iloc[0, 4]
-        if pd.notna(nome_cliente_raw):
-            nome_cliente = str(nome_cliente_raw).strip()
-
     df = pd.read_excel(
         uploaded_file,
         header=11,
@@ -41,12 +33,22 @@ def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
         'Equipamento': 'Nº Equipamento'
     })
 
-    required_cols = ['Terminal', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Nº Equipamento']
+    required_cols = ['Cliente', 'Terminal', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Nº Equipamento']
     if not all(col in df.columns for col in required_cols):
         st.error(f"O ficheiro não contém todas as colunas necessárias. Verifique o cabeçalho na linha 12.")
         st.write("Colunas encontradas:", df.columns.tolist())
         return None, None, None
 
+    # ***** CORREÇÃO DEFINITIVA AQUI *****
+    # Extrai o nome do cliente da primeira linha da coluna "Cliente"
+    nome_cliente = "Cliente não identificado"
+    if not df.empty and 'Cliente' in df.columns:
+        # Pega o primeiro valor não nulo da coluna Cliente
+        first_valid_client = df['Cliente'].dropna().iloc[0]
+        if pd.notna(first_valid_client):
+            nome_cliente = str(first_valid_client).strip()
+
+    # Limpeza e preparação dos dados
     df.dropna(subset=['Terminal'], inplace=True)
     df['Terminal'] = df['Terminal'].astype(str).str.strip()
     df['Data Desativação'] = pd.to_datetime(df['Data Desativação'], errors='coerce')
@@ -107,7 +109,6 @@ if uploaded_file:
                 faturamento_total_geral = total_faturamento_cheio + total_faturamento_proporcional
 
                 st.header("Resumo do Faturamento")
-                # ***** MELHORIA ADICIONADA AQUI *****
                 st.subheader(f"Cliente: {nome_cliente}")
                 
                 col1, col2 = st.columns(2)
