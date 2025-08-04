@@ -1,28 +1,40 @@
-# pages/Faturamento.py
+# pages/6_Faturamento.py
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import io
-import user_management_db as umdb
 
 # --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
-st.set_page_config(layout="wide", page_title="Assistente de Faturamento", icon="💲")
+st.set_page_config(
+    layout="wide",
+    page_title="Assistente de Faturamento",
+    page_icon="💲"
+)
 
 if not st.session_state.get("authentication_status"):
-    st.error("🔒 Acesso Negado!"); st.stop()
+    st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
+    st.stop()
 
-# --- 2. FUNÇÕES AUXILIARES ---
+# --- 2. FUNÇÃO AUXILIAR ---
 @st.cache_data
 def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
+    """
+    Lê a planilha de terminais, classifica por Nº Equipamento, calcula e retorna os dataframes.
+    """
     df = pd.read_excel(
-        uploaded_file, header=11, engine='openpyxl',
+        uploaded_file,
+        header=11,
+        engine='openpyxl',
         dtype={'Equipamento': str}
     )
-    df = df.rename(columns={'Suspenso Dias Mês': 'Suspenso Dias Mes', 'Equipamento': 'Nº Equipamento'})
 
-    required_cols = ['Cliente', 'Terminal', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Nº Equipamento']
+    df = df.rename(columns={
+        'Suspenso Dias Mês': 'Suspenso Dias Mes',
+        'Equipamento': 'Nº Equipamento'
+    })
+
+    required_cols = ['Terminal', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Nº Equipamento']
     if not all(col in df.columns for col in required_cols):
-        st.error(f"O ficheiro não contém todas as colunas necessárias.")
+        st.error(f"O ficheiro não contém todas as colunas necessárias. Verifique o cabeçalho na linha 12.")
         st.write("Colunas encontradas:", df.columns.tolist())
         return None, None, None
 
@@ -50,16 +62,6 @@ def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
     
     return nome_cliente, df_faturamento_cheio, df_faturamento_proporcional
 
-@st.cache_data
-def to_excel(df_cheio, df_proporcional):
-    """Cria um ficheiro Excel em memória com duas abas."""
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df_cheio.to_excel(writer, index=False, sheet_name='Faturamento Cheio')
-        df_proporcional.to_excel(writer, index=False, sheet_name='Faturamento Proporcional')
-    processed_data = output.getvalue()
-    return processed_data
-
 # --- 3. INTERFACE DA PÁGINA ---
 st.sidebar.image("imgs/v-c.png", width=120)
 st.sidebar.title(f"Olá, {st.session_state.get('name', 'N/A')}! 👋")
@@ -81,7 +83,10 @@ valor_satelital = st.sidebar.number_input("Valor Unitário Mensal (Satelital)", 
 st.subheader("Carregamento do Relatório de Terminais")
 st.info("Por favor, carregue o ficheiro `relatorio_terminal_xx-xx-xxxx_xx-xx-xxxx.xlsx` exportado do sistema.")
 
-uploaded_file = st.file_uploader("Selecione o relatório", type=['xlsx'])
+uploaded_file = st.file_uploader(
+    "Selecione o relatório",
+    type=['xlsx']
+)
 
 st.markdown("---")
 
@@ -112,30 +117,12 @@ if uploaded_file:
 
                 st.markdown("---")
                 
-                st.subheader("Ações Finais")
-                
-                excel_data = to_excel(df_cheio, df_proporcional)
-                faturamento_data_log = {
-                    "cliente": nome_cliente, "periodo_relatorio": uploaded_file.name,
-                    "valor_total": faturamento_total_geral, "terminais_cheio": len(df_cheio),
-                    "terminais_proporcional": len(df_proporcional)
-                }
-
-                st.download_button(
-                   label="📥 Exportar e Salvar Histórico (.xlsx)",
-                   data=excel_data,
-                   file_name=f"Faturamento_{nome_cliente.replace(' ', '_')}_{datetime.now().strftime('%Y-%m')}.xlsx",
-                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                   on_click=umdb.log_faturamento, args=(faturamento_data_log,)
-                )
-
-                st.markdown("---")
-
                 with st.expander("Detalhamento do Faturamento Proporcional"):
                     if not df_proporcional.empty:
                         st.dataframe(
                             df_proporcional[['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Dias a Faturar', 'Valor Unitario', 'Valor a Faturar']],
-                            use_container_width=True, hide_index=True,
+                            use_container_width=True,
+                            hide_index=True,
                             column_config={
                                 "Data Desativação": st.column_config.DatetimeColumn("Data Desativação", format="DD/MM/YYYY"),
                                 "Valor Unitario": st.column_config.NumberColumn("Valor Mensal Cheio (R$)", format="R$ %.2f"),
@@ -149,7 +136,8 @@ if uploaded_file:
                     if not df_cheio.empty:
                         st.dataframe(
                             df_cheio[['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Valor a Faturar']],
-                            use_container_width=True, hide_index=True,
+                            use_container_width=True,
+                            hide_index=True,
                             column_config={
                                 "Valor a Faturar": st.column_config.NumberColumn("Valor Faturado (R$)", format="R$ %.2f")
                             }
