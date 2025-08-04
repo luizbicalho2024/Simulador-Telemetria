@@ -33,6 +33,7 @@ def get_users_collection():
 # --- 2. FUNÇÕES DE GESTÃO DE SENHAS ---
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
+
 def get_password_hash(password):
     return pwd_context.hash(password)
 
@@ -76,6 +77,9 @@ def update_user_password(username, new_password):
     result = users_collection.update_one({"username": username}, {"$set": {"hashed_password": new_hashed_password}})
     return result.modified_count > 0
 
+def reset_user_password_by_admin(username: str, new_password: str):
+    return update_user_password(username, new_password)
+
 def update_user_details(username, name, email, role):
     users_collection = get_users_collection()
     if users_collection is None: return False
@@ -96,10 +100,6 @@ def get_all_users_for_admin_display():
     if users_collection is not None:
         return list(users_collection.find({}, {"_id": 0, "hashed_password": 0}))
     return []
-
-def reset_user_password_by_admin(username: str, new_password: str):
-    """Permite que um admin redefina a senha de qualquer utilizador."""
-    return update_user_password(username, new_password)
 
 # --- 4. FUNÇÕES PARA GESTÃO DE PREÇOS ---
 @st.cache_data(ttl=300)
@@ -148,15 +148,30 @@ def get_all_logs():
         return list(logs_collection.find({}, {"_id": 0}).sort("timestamp", -1))
     return []
 
-def log_proposal(proposal_data: dict):
+def upsert_proposal(proposal_data: dict):
     proposals_collection = get_collection("proposals")
     if proposals_collection is not None:
         try:
-            proposal_data["data_geracao"] = datetime.now()
-            proposals_collection.insert_one(proposal_data)
+            today_start = datetime.combine(datetime.now().date(), time.min)
+            today_end = datetime.combine(datetime.now().date(), time.max)
+            query_filter = {
+                "empresa": proposal_data.get("empresa"), "consultor": proposal_data.get("consultor"),
+                "tipo": proposal_data.get("tipo"), "data_geracao": {"$gte": today_start, "$lt": today_end}
+            }
+            update_data = {
+                "$set": {"valor_total": proposal_data.get("valor_total"), "data_geracao": datetime.now()},
+                "$setOnInsert": {
+                    "empresa": proposal_data.get("empresa"), "consultor": proposal_data.get("consultor"), "tipo": proposal_data.get("tipo"),
+                }
+            }
+            result = proposals_collection.update_one(query_filter, update_data, upsert=True)
+            if result.upserted_id is not None:
+                st.toast("Nova proposta registrada no dashboard!", icon="📊")
+            else:
+                st.toast("Proposta de hoje foi atualizada no dashboard!", icon="🔄")
             return True
         except Exception as e:
-            print(f"ERROR: Falha ao registar proposta: {e}")
+            print(f"ERROR: Falha ao fazer upsert da proposta: {e}")
             return False
     return False
 
@@ -193,6 +208,7 @@ def log_faturamento(faturamento_data: dict):
                 "Exportou e Salvou Faturamento", 
                 f"Cliente: {faturamento_data.get('cliente')}, Valor: R$ {faturamento_data.get('valor_total'):,.2f}"
             )
+            st.toast("Histórico de faturamento salvo com sucesso!", icon="💾")
             return True
         except Exception as e:
             print(f"ERROR: Falha ao registar histórico de faturamento: {e}")
