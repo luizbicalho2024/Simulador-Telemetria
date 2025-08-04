@@ -18,18 +18,21 @@ if not st.session_state.get("authentication_status"):
 @st.cache_data
 def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
     """
-    Lê a planilha, classifica por Nº Equipamento, calcula e retorna os dataframes.
+    Lê a planilha de terminais, classifica por Nº Equipamento, calcula e retorna os dataframes.
     """
-    # Lê a planilha, garantindo que 'Nº Equipamento' seja lido como texto
     df = pd.read_excel(
         uploaded_file,
         header=11,
         engine='openpyxl',
-        dtype={'Nº Equipamento': str} # Força a leitura como texto para preservar zeros
+        dtype={'Equipamento': str} # Força a leitura da coluna correta como texto
     )
 
-    # Renomeia as colunas para um padrão limpo e previsível
-    df = df.rename(columns={'Suspenso Dias Mês': 'Suspenso Dias Mes'})
+    # ***** CORREÇÃO DEFINITIVA AQUI *****
+    # Renomeia as colunas do ficheiro para o padrão que o script espera.
+    df = df.rename(columns={
+        'Suspenso Dias Mês': 'Suspenso Dias Mes',
+        'Equipamento': 'Nº Equipamento'
+    })
 
     required_cols = ['Terminal', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Nº Equipamento']
     if not all(col in df.columns for col in required_cols):
@@ -44,8 +47,7 @@ def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
     df['Dias Ativos Mês'] = pd.to_numeric(df['Dias Ativos Mês'], errors='coerce').fillna(0)
     df['Suspenso Dias Mes'] = pd.to_numeric(df['Suspenso Dias Mes'], errors='coerce').fillna(0)
 
-    # ***** LÓGICA DE CLASSIFICAÇÃO CORRIGIDA *****
-    # Usa a coluna 'Nº Equipamento' para determinar o tipo
+    # Classificação por tipo de equipamento
     df['Tipo'] = df['Nº Equipamento'].apply(lambda x: 'Satelital' if len(str(x).strip()) == 8 else 'GPRS')
     
     # Atribuição do valor unitário
