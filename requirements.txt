@@ -21,3 +21,4 @@ html5lib
 lxml
 folium
 streamlit-folium
+fpdf2
