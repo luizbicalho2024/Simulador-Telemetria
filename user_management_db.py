@@ -215,8 +215,23 @@ def log_faturamento(faturamento_data: dict):
     return False
 
 def get_billing_history():
-    """Busca todos os resumos de faturamento do histórico."""
+    """Busca todos os resumos de faturamento, retornando também o _id."""
     history_collection = get_collection("billing_history")
     if history_collection is not None:
-        return list(history_collection.find({}, {"_id": 0}).sort("data_geracao", -1))
+        return list(history_collection.find({}).sort("data_geracao", -1))
     return []
+
+def delete_billing_history(history_id: str):
+    """Exclui um registo de histórico de faturamento pelo seu _id."""
+    history_collection = get_collection("billing_history")
+    if history_collection is not None:
+        try:
+            result = history_collection.delete_one({"_id": ObjectId(history_id)})
+            if result.deleted_count > 0:
+                add_log(st.session_state["username"], "Excluiu Histórico de Faturamento", f"ID do registo: {history_id}")
+                st.toast("Registo de histórico excluído com sucesso!", icon="🗑️")
+            return result.deleted_count > 0
+        except Exception as e:
+            print(f"ERROR: Falha ao excluir histórico de faturamento (ID: {history_id}): {e}")
+            return False
+    return False
