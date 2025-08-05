@@ -23,7 +23,6 @@ def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
     """
     Lê a planilha, extrai informações, classifica, calcula e retorna os dataframes.
     """
-    # Lê as primeiras 11 linhas para extrair informações do cabeçalho
     header_info = pd.read_excel(uploaded_file, header=None, nrows=11, engine='openpyxl')
     
     periodo_relatorio = "Período não identificado"
@@ -37,7 +36,6 @@ def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
         except Exception:
             periodo_relatorio = f"{data_inicio_raw} a {data_fim_raw}"
 
-    # Lê a tabela de dados principal
     df = pd.read_excel(uploaded_file, header=11, engine='openpyxl', dtype={'Equipamento': str})
     df = df.rename(columns={'Suspenso Dias Mês': 'Suspenso Dias Mes', 'Equipamento': 'Nº Equipamento'})
 
@@ -76,7 +74,7 @@ def to_excel(df_cheio, df_proporcional):
     return output.getvalue()
 
 def create_pdf_report(nome_cliente, periodo, totais, df_cheio, df_proporcional):
-    """Cria um relatório de faturamento em PDF em memória, com a logo."""
+    """Cria um relatório de faturamento em PDF em memória, com logo e todos os detalhes."""
     pdf = FPDF()
     pdf.add_page()
     
@@ -84,20 +82,32 @@ def create_pdf_report(nome_cliente, periodo, totais, df_cheio, df_proporcional):
     try:
         pdf.image("imgs/logo.png", x=10, y=8, w=50)
     except Exception:
-        # Se a logo falhar, escreve o nome da empresa
         pdf.set_font("Arial", "B", 20)
         pdf.cell(0, 10, "Verdio", 0, 1, "L")
     
     pdf.set_font("Arial", "B", 16)
     pdf.cell(0, 10, "Resumo do Faturamento", 0, 1, "C")
-    pdf.ln(15) # Pula uma linha extra
+    pdf.ln(15)
 
     pdf.set_font("Arial", "", 12)
     pdf.cell(0, 8, f"Cliente: {nome_cliente}", 0, 1, "L")
     pdf.cell(0, 8, f"Periodo: {periodo}", 0, 1, "L")
     pdf.ln(5)
 
-    # Tabela de Resumo
+    # Tabela de Resumo Numérico
+    pdf.set_font("Arial", "B", 10)
+    pdf.cell(47.5, 8, "Fat. Cheio", 1, 0, "C")
+    pdf.cell(47.5, 8, "Fat. Proporcional", 1, 0, "C")
+    pdf.cell(47.5, 8, "Total GPRS", 1, 0, "C")
+    pdf.cell(47.5, 8, "Total Satelital", 1, 1, "C")
+    pdf.set_font("Arial", "", 10)
+    pdf.cell(47.5, 8, str(totais['terminais_cheio']), 1, 0, "C")
+    pdf.cell(47.5, 8, str(totais['terminais_proporcional']), 1, 0, "C")
+    pdf.cell(47.5, 8, str(totais['terminais_gprs']), 1, 0, "C")
+    pdf.cell(47.5, 8, str(totais['terminais_satelitais']), 1, 1, "C")
+    pdf.ln(5)
+
+    # Tabela de Resumo Financeiro
     pdf.set_font("Arial", "B", 11)
     pdf.cell(95, 8, "Faturamento (Cheio)", 1, 0, "C")
     pdf.cell(95, 8, "Faturamento (Proporcional)", 1, 1, "C")
@@ -108,12 +118,44 @@ def create_pdf_report(nome_cliente, periodo, totais, df_cheio, df_proporcional):
     pdf.cell(0, 10, f"FATURAMENTO TOTAL: R$ {totais['geral']:,.2f}", 1, 1, "C")
     pdf.ln(10)
 
-    def draw_table(title, df):
-        # ... (código da função draw_table como antes)
-        pass
+    # Função interna para desenhar DataFrames
+    def draw_table(title, df, col_widths, available_cols):
+        if not df.empty:
+            pdf.set_font("Arial", "B", 12)
+            pdf.cell(0, 10, title, 0, 1, "L")
+            pdf.set_font("Arial", "B", 7)
+            
+            header = [h for h in available_cols if h in df.columns]
+            
+            for h in header:
+                pdf.cell(col_widths[h], 7, h, 1, 0, 'C')
+            pdf.ln()
 
-    draw_table("Detalhamento do Faturamento Cheio", df_cheio[['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Valor a Faturar']])
-    draw_table("Detalhamento do Faturamento Proporcional", df_proporcional[['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Dias a Faturar', 'Valor Unitario', 'Valor a Faturar']])
+            pdf.set_font("Arial", "", 7)
+            for _, row in df.iterrows():
+                for h in header:
+                    cell_text = str(row[h])
+                    if isinstance(row[h], datetime) and pd.notna(row[h]):
+                        cell_text = row[h].strftime('%d/%m/%Y')
+                    elif isinstance(row[h], (float, int)):
+                        cell_text = f"R$ {row[h]:,.2f}" if 'Valor' in h else str(int(row[h]))
+                    elif pd.isna(row[h]):
+                        cell_text = ""
+                    pdf.cell(col_widths[h], 6, cell_text, 1, 0, 'C')
+                pdf.ln()
+            pdf.ln(5)
+
+    col_widths_cheio = {'Terminal': 25, 'Nº Equipamento': 30, 'Placa': 25, 'Tipo': 20, 'Valor a Faturar': 30}
+    cols_cheio = ['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Valor a Faturar']
+    draw_table("Detalhamento do Faturamento Cheio", df_cheio[cols_cheio])
+    
+    col_widths_prop = {
+        'Terminal': 20, 'Nº Equipamento': 25, 'Placa': 18, 'Tipo': 15,
+        'Data Desativação': 22, 'Dias Ativos Mês': 15, 'Suspenso Dias Mes': 15,
+        'Dias a Faturar': 15, 'Valor Unitario': 20, 'Valor a Faturar': 25
+    }
+    cols_prop = ['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Dias a Faturar', 'Valor Unitario', 'Valor a Faturar']
+    draw_table("Detalhamento do Faturamento Proporcional", df_proporcional[cols_prop])
     
     return bytes(pdf.output())
 
@@ -181,7 +223,11 @@ if uploaded_file:
                 st.subheader("Ações Finais")
                 
                 excel_data = to_excel(df_cheio, df_proporcional)
-                totais_pdf = {"cheio": total_faturamento_cheio, "proporcional": total_faturamento_proporcional, "geral": faturamento_total_geral}
+                totais_pdf = {
+                    "cheio": total_faturamento_cheio, "proporcional": total_faturamento_proporcional, "geral": faturamento_total_geral,
+                    "terminais_cheio": len(df_cheio), "terminais_proporcional": len(df_proporcional),
+                    "terminais_gprs": total_gprs, "terminais_satelitais": total_satelital
+                }
                 pdf_data = create_pdf_report(nome_cliente, periodo_relatorio, totais_pdf, df_cheio, df_proporcional)
                 faturamento_data_log = {
                     "cliente": nome_cliente, "periodo_relatorio": periodo_relatorio,
