@@ -196,6 +196,7 @@ def delete_proposal(proposal_id: str):
     return False
 
 def log_faturamento(faturamento_data: dict):
+    """Guarda um resumo do faturamento gerado no histórico."""
     history_collection = get_collection("billing_history")
     if history_collection is not None:
         try:
