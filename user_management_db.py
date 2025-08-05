@@ -127,13 +127,13 @@ def update_pricing_config(new_config: dict):
     return False
 
 # --- 5. FUNÇÕES PARA DASHBOARD, LOGS E FATURAMENTO ---
-def add_log(user: str, action: str, details: str = ""):
+def add_log(user: str, action: str, details: dict = None):
     logs_collection = get_collection("activity_logs")
     if logs_collection is not None:
         try:
             log_entry = {
                 "timestamp": datetime.now(), "user": user,
-                "action": action, "details": details
+                "action": action, "details": details if details is not None else {}
             }
             logs_collection.insert_one(log_entry)
             return True
@@ -145,7 +145,7 @@ def add_log(user: str, action: str, details: str = ""):
 def get_all_logs():
     logs_collection = get_collection("activity_logs")
     if logs_collection is not None:
-        return list(logs_collection.find({}, {"_id": 0}).sort("timestamp", -1))
+        return list(logs_collection.find({}).sort("timestamp", -1))
     return []
 
 def upsert_proposal(proposal_data: dict):
@@ -187,7 +187,7 @@ def delete_proposal(proposal_id: str):
         try:
             result = proposals_collection.delete_one({"_id": ObjectId(proposal_id)})
             if result.deleted_count > 0:
-                add_log(st.session_state["username"], "Excluiu Proposta", f"ID da proposta: {proposal_id}")
+                add_log(st.session_state["username"], "Excluiu Proposta", details={"id_proposta": proposal_id})
                 st.toast("Proposta excluída com sucesso!", icon="🗑️")
             return result.deleted_count > 0
         except Exception as e:
@@ -196,7 +196,6 @@ def delete_proposal(proposal_id: str):
     return False
 
 def log_faturamento(faturamento_data: dict):
-    """Guarda um resumo do faturamento gerado no histórico."""
     history_collection = get_collection("billing_history")
     if history_collection is not None:
         try:
@@ -206,7 +205,7 @@ def log_faturamento(faturamento_data: dict):
             add_log(
                 st.session_state["username"], 
                 "Exportou e Salvou Faturamento", 
-                f"Cliente: {faturamento_data.get('cliente')}, Valor: R$ {faturamento_data.get('valor_total'):,.2f}"
+                details={"cliente": faturamento_data.get('cliente'), "valor": f"R$ {faturamento_data.get('valor_total'):,.2f}"}
             )
             st.toast("Histórico de faturamento salvo com sucesso!", icon="💾")
             return True
@@ -227,7 +226,7 @@ def delete_billing_history(history_id: str):
         try:
             result = history_collection.delete_one({"_id": ObjectId(history_id)})
             if result.deleted_count > 0:
-                add_log(st.session_state["username"], "Excluiu Histórico de Faturamento", f"ID do registo: {history_id}")
+                add_log(st.session_state["username"], "Excluiu Histórico de Faturamento", details={"id_registo": history_id})
                 st.toast("Registo de histórico excluído com sucesso!", icon="🗑️")
             return result.deleted_count > 0
         except Exception as e:
