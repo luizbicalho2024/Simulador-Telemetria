@@ -7,22 +7,14 @@ import user_management_db as umdb
 from fpdf import FPDF
 
 # --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
-st.set_page_config(
-    layout="wide",
-    page_title="Assistente de Faturamento",
-    page_icon="💲"
-)
+st.set_page_config(layout="wide", page_title="Assistente de Faturamento", page_icon="💲")
 
 if not st.session_state.get("authentication_status"):
-    st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
-    st.stop()
+    st.error("🔒 Acesso Negado!"); st.stop()
 
 # --- 2. FUNÇÕES AUXILIARES ---
 @st.cache_data
 def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
-    """
-    Lê a planilha, extrai informações, classifica, calcula e retorna os dataframes.
-    """
     header_info = pd.read_excel(uploaded_file, header=None, nrows=11, engine='openpyxl')
     
     periodo_relatorio = "Período não identificado"
@@ -74,7 +66,6 @@ def to_excel(df_cheio, df_proporcional):
     return output.getvalue()
 
 def create_pdf_report(nome_cliente, periodo, totais, df_cheio, df_proporcional):
-    """Cria um relatório de faturamento em PDF em memória, com logo e todos os detalhes."""
     pdf = FPDF()
     pdf.add_page()
     
@@ -141,12 +132,10 @@ def create_pdf_report(nome_cliente, periodo, totais, df_cheio, df_proporcional):
                 pdf.ln()
             pdf.ln(5)
 
-    # Define as colunas e larguras para a tabela de faturamento cheio
     cols_cheio = ['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Valor a Faturar']
     widths_cheio = {'Terminal': 40, 'Nº Equipamento': 40, 'Placa': 40, 'Tipo': 30, 'Valor a Faturar': 40}
     draw_table("Detalhamento do Faturamento Cheio", df_cheio, widths_cheio, cols_cheio)
     
-    # Define as colunas e larguras para a tabela de faturamento proporcional
     cols_prop = ['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Dias a Faturar', 'Valor Unitario', 'Valor a Faturar']
     widths_prop = {
         'Terminal': 20, 'Nº Equipamento': 25, 'Placa': 18, 'Tipo': 15,
@@ -171,8 +160,12 @@ st.markdown("---")
 
 # --- 4. INPUTS DE CONFIGURAÇÃO ---
 st.sidebar.header("Valores de Faturamento")
-valor_gprs = st.sidebar.number_input("Valor Unitário Mensal (GPRS)", min_value=0.0, step=1.0, format="%.2f")
-valor_satelital = st.sidebar.number_input("Valor Unitário Mensal (Satelital)", min_value=0.0, step=1.0, format="%.2f")
+pricing_config = umdb.get_pricing_config()
+default_gprs = float(pricing_config.get("PRECOS_PF", {}).get("GPRS / Gsm", 0.0))
+default_satelital = float(pricing_config.get("PLANOS_PJ", {}).get("36 Meses", {}).get("Satélite", 0.0))
+
+valor_gprs = st.sidebar.number_input("Valor Unitário Mensal (GPRS)", min_value=0.0, value=default_gprs, step=1.0, format="%.2f")
+valor_satelital = st.sidebar.number_input("Valor Unitário Mensal (Satelital)", min_value=0.0, value=default_satelital, step=1.0, format="%.2f")
 
 # --- 5. UPLOAD DO FICHEIRO ---
 st.subheader("Carregamento do Relatório de Terminais")
@@ -231,7 +224,9 @@ if uploaded_file:
                     "cliente": nome_cliente, "periodo_relatorio": periodo_relatorio,
                     "valor_total": faturamento_total_geral, "terminais_cheio": len(df_cheio),
                     "terminais_proporcional": len(df_proporcional), "terminais_gprs": total_gprs,
-                    "terminais_satelitais": total_satelital
+                    "terminais_satelitais": total_satelital,
+                    "valor_unitario_gprs": valor_gprs,
+                    "valor_unitario_satelital": valor_satelital
                 }
 
                 col_btn1, col_btn2 = st.columns(2)
