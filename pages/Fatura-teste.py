@@ -20,31 +20,48 @@ if not st.session_state.get("authentication_status"):
 # --- 2. FUNÇÕES AUXILIARES ---
 @st.cache_data
 def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
-    # (A sua função de processamento de dados permanece aqui, sem alterações)
-    df = pd.read_excel(
-        uploaded_file, header=11, engine='openpyxl',
-        dtype={'Equipamento': str}
-    )
+    # Lê as primeiras 11 linhas para extrair informações do cabeçalho
+    header_info = pd.read_excel(uploaded_file, header=None, nrows=11, engine='openpyxl')
+    
+    periodo_relatorio = "Período não identificado"
+    if len(header_info.columns) > 8:
+        data_inicio_raw = header_info.iloc[8, 8]
+        data_fim_raw = header_info.iloc[9, 8]
+        try:
+            data_inicio = pd.to_datetime(data_inicio_raw).strftime('%d/%m/%Y')
+            data_fim = pd.to_datetime(data_fim_raw).strftime('%d/%m/%Y')
+            periodo_relatorio = f"{data_inicio} a {data_fim}"
+        except Exception:
+            periodo_relatorio = f"{data_inicio_raw} a {data_fim_raw}"
+
+    # Lê a tabela de dados principal
+    df = pd.read_excel(uploaded_file, header=11, engine='openpyxl', dtype={'Equipamento': str})
     df = df.rename(columns={'Suspenso Dias Mês': 'Suspenso Dias Mes', 'Equipamento': 'Nº Equipamento'})
+
     required_cols = ['Cliente', 'Terminal', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Nº Equipamento']
     if not all(col in df.columns for col in required_cols):
         return None, None, None, None, "Erro de Colunas: Verifique o cabeçalho na linha 12."
+
     nome_cliente = "Cliente não identificado"
     if not df.empty and 'Cliente' in df.columns and pd.notna(df['Cliente'].iloc[0]):
         nome_cliente = str(df['Cliente'].iloc[0]).strip()
-    periodo_relatorio = "Período não identificado" # (A lógica para extrair o período pode ser adicionada aqui)
+            
     df.dropna(subset=['Terminal'], inplace=True)
     df['Terminal'] = df['Terminal'].astype(str).str.strip()
     df['Data Desativação'] = pd.to_datetime(df['Data Desativação'], errors='coerce')
     df['Dias Ativos Mês'] = pd.to_numeric(df['Dias Ativos Mês'], errors='coerce').fillna(0)
     df['Suspenso Dias Mes'] = pd.to_numeric(df['Suspenso Dias Mes'], errors='coerce').fillna(0)
+
     df['Tipo'] = df['Nº Equipamento'].apply(lambda x: 'Satelital' if len(str(x).strip()) == 8 else 'GPRS')
     df['Valor Unitario'] = df['Tipo'].apply(lambda x: valor_satelital if x == 'Satelital' else valor_gprs)
+
     dias_no_mes = pd.Timestamp(datetime.now()).days_in_month
     df['Dias a Faturar'] = (df['Dias Ativos Mês'] - df['Suspenso Dias Mes']).clip(lower=0)
     df['Valor a Faturar'] = (df['Valor Unitario'] / dias_no_mes) * df['Dias a Faturar']
+    
     df_faturamento_cheio = df[df['Dias a Faturar'] >= dias_no_mes]
     df_faturamento_proporcional = df[df['Dias a Faturar'] < dias_no_mes]
+    
     return nome_cliente, periodo_relatorio, df_faturamento_cheio, df_faturamento_proporcional, None
 
 @st.cache_data
@@ -56,7 +73,6 @@ def to_excel(df_cheio, df_proporcional):
     return output.getvalue()
 
 def create_pdf_report(nome_cliente, periodo, totais, df_cheio, df_proporcional):
-    """Cria um relatório de faturamento em PDF em memória."""
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 16)
@@ -112,8 +128,8 @@ def create_pdf_report(nome_cliente, periodo, totais, df_cheio, df_proporcional):
     draw_table("Detalhamento do Faturamento Proporcional", df_proporcional[['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Dias a Faturar', 'Valor Unitario', 'Valor a Faturar']])
     
     # ***** CORREÇÃO DEFINITIVA AQUI *****
-    # Remove o .encode('latin-1'), pois pdf.output() já retorna bytes.
-    return pdf.output(dest='S')
+    # Converte o output do FPDF para bytes, que é o formato esperado pelo Streamlit
+    return bytes(pdf.output())
 
 # --- 3. INTERFACE DA PÁGINA ---
 st.sidebar.image("imgs/v-c.png", width=120)
