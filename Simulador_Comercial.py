@@ -127,7 +127,8 @@ if st.session_state["authentication_status"]:
                 if st.form_submit_button("Cadastrar Utilizador"):
                     if all([uname, nome_completo, mail, pwd, role]):
                         if umdb.add_user(uname, nome_completo, mail, pwd, role):
-                            umdb.add_log(username, "Criou Utilizador", f"Novo utilizador: {uname}, Papel: {role}")
+                            log_details = {"utilizador_criado": uname, "nome": nome_completo, "email": mail, "papel": role}
+                            umdb.add_log(username, "Criou Utilizador", details=log_details)
                             st.toast(f"Utilizador '{uname}' criado.", icon="➕")
                             st.rerun()
                     else:
@@ -136,7 +137,7 @@ if st.session_state["authentication_status"]:
         users_dict = {u['username']: u for u in umdb.get_all_users_for_admin_display()}
         if users_dict:
             user_to_manage = st.selectbox(
-                "Selecione um utilizador para Editar ou Excluir:", 
+                "Selecione um utilizador para gerir:", 
                 list(users_dict.keys()), 
                 key="user_select_manage"
             )
@@ -150,8 +151,16 @@ if st.session_state["authentication_status"]:
                     role_idx = ["user", "admin"].index(user_data.get('role', 'user'))
                     new_role = st.selectbox("Papel", ["user", "admin"], index=role_idx, format_func=str.capitalize)
                     if st.form_submit_button("Salvar Alterações"):
+                        log_details = {
+                            "utilizador_alvo": user_to_manage,
+                            "alteracoes": {
+                                "nome": {"de": user_data.get('name', ''), "para": new_name},
+                                "email": {"de": user_data.get('email', ''), "para": new_email},
+                                "papel": {"de": user_data.get('role', 'user'), "para": new_role}
+                            }
+                        }
                         if umdb.update_user_details(user_to_manage, new_name, new_email, new_role):
-                            umdb.add_log(username, "Editou Utilizador", f"Utilizador editado: {user_to_manage}")
+                            umdb.add_log(username, "Editou Utilizador", details=log_details)
                             st.toast("Detalhes atualizados.", icon="✏️")
                             st.rerun()
 
@@ -159,8 +168,9 @@ if st.session_state["authentication_status"]:
                 st.subheader(f"Excluir: {user_to_manage}")
                 st.warning(f"⚠️ Atenção: esta ação é irreversível.")
                 if st.button(f"Excluir Permanentemente '{user_to_manage}'", type="primary"):
+                    user_details_before_delete = user_data.copy()
                     if umdb.delete_user(user_to_manage):
-                        umdb.add_log(username, "Excluiu Utilizador", f"Utilizador excluído: {user_to_manage}")
+                        umdb.add_log(username, "Excluiu Utilizador", details={"utilizador_excluido": user_details_before_delete})
                         st.toast(f"Utilizador '{user_to_manage}' excluído.", icon="🗑️")
                         st.rerun()
         else:
@@ -179,7 +189,7 @@ if st.session_state["authentication_status"]:
                     if st.form_submit_button("Resetar Senha"):
                         if new_password:
                             if umdb.reset_user_password_by_admin(user_to_reset, new_password):
-                                umdb.add_log(username, "Resetou Senha", f"Senha resetada para o utilizador: {user_to_reset}")
+                                umdb.add_log(username, "Resetou Senha", details={"utilizador_alvo": user_to_reset})
                                 st.toast(f"Senha para '{user_to_reset}' resetada com sucesso!", icon="🔑")
                             else:
                                 st.error("Falha ao resetar a senha.")
@@ -193,8 +203,8 @@ if st.session_state["authentication_status"]:
                 with st.expander("Simulador Pessoa Física (PF)", expanded=True):
                     pf_prices = pricing_config.get("PRECOS_PF", {})
                     col1, col2 = st.columns(2)
-                    pf_prices["GPRS / Gsm"] = col1.number_input("Preço Rastreador GPRS/GSM (PF)", value=float(pf_prices.get("GPRS / Gsm", 0.0)), format="%.2f", key="pf_gprs")
-                    pf_prices["Satelital"] = col2.number_input("Preço Rastreador Satelital (PF)", value=float(pf_prices.get("Satelital", 0.0)), format="%.2f", key="pf_satelital")
+                    pf_prices["GPRS / Gsm"] = col1.number_input("Preço Rastreador GPRS/GSM (PF)", value=float(pf_prices.get("GPRS / Gsm", 0.0)), format="%.2f")
+                    pf_prices["Satelital"] = col2.number_input("Preço Rastreador Satelital (PF)", value=float(pf_prices.get("Satelital", 0.0)), format="%.2f")
                 
                 with st.expander("Simulador Licitação (Custos)", expanded=True):
                     licit_prices = pricing_config.get("PRECO_CUSTO_LICITACAO", {})
@@ -221,7 +231,7 @@ if st.session_state["authentication_status"]:
                     new_config_data["PLANOS_PJ"] = pj_plans
                     
                     if umdb.update_pricing_config(new_config_data):
-                        umdb.add_log(username, "Atualizou Preços", "Todos os preços da plataforma foram alterados.")
+                        umdb.add_log(username, "Atualizou Preços", details={"mensagem": "Todos os preços da plataforma foram alterados."})
                         st.toast("Preços atualizados com sucesso!", icon="🎉")
                     else:
                         st.error("Falha ao atualizar os preços.")
