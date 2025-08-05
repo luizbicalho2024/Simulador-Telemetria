@@ -7,22 +7,14 @@ import user_management_db as umdb
 from fpdf import FPDF
 
 # --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
-st.set_page_config(
-    layout="wide",
-    page_title="Assistente de Faturamento",
-    page_icon="💲"
-)
+st.set_page_config(layout="wide", page_title="Assistente de Faturamento", page_icon="💲")
 
 if not st.session_state.get("authentication_status"):
-    st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
-    st.stop()
+    st.error("🔒 Acesso Negado!"); st.stop()
 
 # --- 2. FUNÇÕES AUXILIARES ---
 @st.cache_data
 def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
-    """
-    Lê a planilha, extrai informações, classifica, calcula e retorna os dataframes.
-    """
     header_info = pd.read_excel(uploaded_file, header=None, nrows=11, engine='openpyxl')
     
     periodo_relatorio = "Período não identificado"
@@ -248,7 +240,7 @@ if uploaded_file:
                     )
                 with col_btn2:
                     st.download_button(
-                       label="📄 Exportar PDF e Salvar Histórico",
+                       label="📄 Exportar Resumo em PDF",
                        data=pdf_data,
                        file_name=f"Resumo_Faturamento_{nome_cliente.replace(' ', '_')}_{datetime.now().strftime('%Y-%m')}.pdf",
                        mime="application/pdf",
