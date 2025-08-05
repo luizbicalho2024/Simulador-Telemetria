@@ -196,7 +196,6 @@ def delete_proposal(proposal_id: str):
     return False
 
 def log_faturamento(faturamento_data: dict):
-    """Guarda um resumo do faturamento gerado no histórico."""
     history_collection = get_collection("billing_history")
     if history_collection is not None:
         try:
@@ -214,3 +213,10 @@ def log_faturamento(faturamento_data: dict):
             print(f"ERROR: Falha ao registar histórico de faturamento: {e}")
             return False
     return False
+
+def get_billing_history():
+    """Busca todos os resumos de faturamento do histórico."""
+    history_collection = get_collection("billing_history")
+    if history_collection is not None:
+        return list(history_collection.find({}, {"_id": 0}).sort("data_geracao", -1))
+    return []
