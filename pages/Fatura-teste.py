@@ -78,7 +78,6 @@ def create_pdf_report(nome_cliente, periodo, totais, df_cheio, df_proporcional):
     pdf = FPDF()
     pdf.add_page()
     
-    # Adiciona a logo no topo
     try:
         pdf.image("imgs/logo.png", x=10, y=8, w=50)
     except Exception:
@@ -94,7 +93,6 @@ def create_pdf_report(nome_cliente, periodo, totais, df_cheio, df_proporcional):
     pdf.cell(0, 8, f"Periodo: {periodo}", 0, 1, "L")
     pdf.ln(5)
 
-    # Tabela de Resumo Numérico
     pdf.set_font("Arial", "B", 10)
     pdf.cell(47.5, 8, "Fat. Cheio", 1, 0, "C")
     pdf.cell(47.5, 8, "Fat. Proporcional", 1, 0, "C")
@@ -107,7 +105,6 @@ def create_pdf_report(nome_cliente, periodo, totais, df_cheio, df_proporcional):
     pdf.cell(47.5, 8, str(totais['terminais_satelitais']), 1, 1, "C")
     pdf.ln(5)
 
-    # Tabela de Resumo Financeiro
     pdf.set_font("Arial", "B", 11)
     pdf.cell(95, 8, "Faturamento (Cheio)", 1, 0, "C")
     pdf.cell(95, 8, "Faturamento (Proporcional)", 1, 1, "C")
@@ -118,7 +115,6 @@ def create_pdf_report(nome_cliente, periodo, totais, df_cheio, df_proporcional):
     pdf.cell(0, 10, f"FATURAMENTO TOTAL: R$ {totais['geral']:,.2f}", 1, 1, "C")
     pdf.ln(10)
 
-    # Função interna para desenhar DataFrames
     def draw_table(title, df, col_widths, available_cols):
         if not df.empty:
             pdf.set_font("Arial", "B", 12)
@@ -145,17 +141,19 @@ def create_pdf_report(nome_cliente, periodo, totais, df_cheio, df_proporcional):
                 pdf.ln()
             pdf.ln(5)
 
-    col_widths_cheio = {'Terminal': 25, 'Nº Equipamento': 30, 'Placa': 25, 'Tipo': 20, 'Valor a Faturar': 30}
+    # Define as colunas e larguras para a tabela de faturamento cheio
     cols_cheio = ['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Valor a Faturar']
-    draw_table("Detalhamento do Faturamento Cheio", df_cheio[cols_cheio])
+    widths_cheio = {'Terminal': 40, 'Nº Equipamento': 40, 'Placa': 40, 'Tipo': 30, 'Valor a Faturar': 40}
+    draw_table("Detalhamento do Faturamento Cheio", df_cheio, widths_cheio, cols_cheio)
     
-    col_widths_prop = {
+    # Define as colunas e larguras para a tabela de faturamento proporcional
+    cols_prop = ['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Dias a Faturar', 'Valor Unitario', 'Valor a Faturar']
+    widths_prop = {
         'Terminal': 20, 'Nº Equipamento': 25, 'Placa': 18, 'Tipo': 15,
         'Data Desativação': 22, 'Dias Ativos Mês': 15, 'Suspenso Dias Mes': 15,
         'Dias a Faturar': 15, 'Valor Unitario': 20, 'Valor a Faturar': 25
     }
-    cols_prop = ['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Dias a Faturar', 'Valor Unitario', 'Valor a Faturar']
-    draw_table("Detalhamento do Faturamento Proporcional", df_proporcional[cols_prop])
+    draw_table("Detalhamento do Faturamento Proporcional", df_proporcional, widths_prop, cols_prop)
     
     return bytes(pdf.output())
 
