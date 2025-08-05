@@ -1,9 +1,10 @@
-# pages/Faturamento.py
+# pages/6_Faturamento.py
 import streamlit as st
 import pandas as pd
 from datetime import datetime
 import io
 import user_management_db as umdb
+from fpdf import FPDF
 
 # --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
 st.set_page_config(
@@ -19,18 +20,13 @@ if not st.session_state.get("authentication_status"):
 # --- 2. FUNÇÕES AUXILIARES ---
 @st.cache_data
 def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
-    """
-    Lê a planilha, extrai o nome do cliente da coluna "Cliente", o período do cabeçalho,
-    classifica, calcula e retorna os dataframes de faturamento.
-    """
     # Lê as primeiras 11 linhas para extrair informações do cabeçalho
     header_info = pd.read_excel(uploaded_file, header=None, nrows=11, engine='openpyxl')
     
-    # Extrai o período das linhas 9 e 10, coluna 9 (índice 8)
     periodo_relatorio = "Período não identificado"
     if len(header_info.columns) > 8:
-        data_inicio_raw = header_info.iloc[8, 8] # Linha 9, Coluna 9
-        data_fim_raw = header_info.iloc[9, 8]    # Linha 10, Coluna 9
+        data_inicio_raw = header_info.iloc[8, 8]
+        data_fim_raw = header_info.iloc[9, 8]
         try:
             data_inicio = pd.to_datetime(data_inicio_raw).strftime('%d/%m/%Y')
             data_fim = pd.to_datetime(data_fim_raw).strftime('%d/%m/%Y')
@@ -38,64 +34,102 @@ def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
         except Exception:
             periodo_relatorio = f"{data_inicio_raw} a {data_fim_raw}"
 
-    # Lê a tabela de dados principal a partir da linha 12 (índice 11)
-    df = pd.read_excel(
-        uploaded_file,
-        header=11,
-        engine='openpyxl',
-        dtype={'Equipamento': str}
-    )
-
-    # Renomeia as colunas para um padrão limpo e previsível
-    df = df.rename(columns={
-        'Suspenso Dias Mês': 'Suspenso Dias Mes',
-        'Equipamento': 'Nº Equipamento'
-    })
+    # Lê a tabela de dados principal
+    df = pd.read_excel(uploaded_file, header=11, engine='openpyxl', dtype={'Equipamento': str})
+    df = df.rename(columns={'Suspenso Dias Mês': 'Suspenso Dias Mes', 'Equipamento': 'Nº Equipamento'})
 
     required_cols = ['Cliente', 'Terminal', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Nº Equipamento']
     if not all(col in df.columns for col in required_cols):
-        st.error(f"O ficheiro não contém todas as colunas necessárias. Verifique o cabeçalho na linha 12.")
-        st.write("Colunas encontradas:", df.columns.tolist())
-        return None, None, None, None
+        return None, None, None, None, "Erro de Colunas: Verifique o cabeçalho na linha 12."
 
-    # Extrai o nome do cliente diretamente da primeira linha da coluna "Cliente"
     nome_cliente = "Cliente não identificado"
-    if not df.empty and 'Cliente' in df.columns:
-        if pd.notna(df['Cliente'].iloc[0]):
-            nome_cliente = str(df['Cliente'].iloc[0]).strip()
-
-    # Limpeza e preparação dos dados
+    if not df.empty and 'Cliente' in df.columns and pd.notna(df['Cliente'].iloc[0]):
+        nome_cliente = str(df['Cliente'].iloc[0]).strip()
+            
     df.dropna(subset=['Terminal'], inplace=True)
     df['Terminal'] = df['Terminal'].astype(str).str.strip()
     df['Data Desativação'] = pd.to_datetime(df['Data Desativação'], errors='coerce')
     df['Dias Ativos Mês'] = pd.to_numeric(df['Dias Ativos Mês'], errors='coerce').fillna(0)
     df['Suspenso Dias Mes'] = pd.to_numeric(df['Suspenso Dias Mes'], errors='coerce').fillna(0)
 
-    # Classificação por tipo de equipamento
     df['Tipo'] = df['Nº Equipamento'].apply(lambda x: 'Satelital' if len(str(x).strip()) == 8 else 'GPRS')
-    
-    # Atribuição do valor unitário
     df['Valor Unitario'] = df['Tipo'].apply(lambda x: valor_satelital if x == 'Satelital' else valor_gprs)
 
-    # Cálculo do faturamento
     dias_no_mes = pd.Timestamp(datetime.now()).days_in_month
     df['Dias a Faturar'] = (df['Dias Ativos Mês'] - df['Suspenso Dias Mes']).clip(lower=0)
     df['Valor a Faturar'] = (df['Valor Unitario'] / dias_no_mes) * df['Dias a Faturar']
     
-    # Separação entre faturamento cheio e proporcional
     df_faturamento_cheio = df[df['Dias a Faturar'] >= dias_no_mes]
     df_faturamento_proporcional = df[df['Dias a Faturar'] < dias_no_mes]
     
-    return nome_cliente, periodo_relatorio, df_faturamento_cheio, df_faturamento_proporcional
+    return nome_cliente, periodo_relatorio, df_faturamento_cheio, df_faturamento_proporcional, None
 
 @st.cache_data
 def to_excel(df_cheio, df_proporcional):
-    """Cria um ficheiro Excel em memória com duas abas."""
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df_cheio.to_excel(writer, index=False, sheet_name='Faturamento Cheio')
         df_proporcional.to_excel(writer, index=False, sheet_name='Faturamento Proporcional')
     return output.getvalue()
+
+def create_pdf_report(nome_cliente, periodo, totais, df_cheio, df_proporcional):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 16)
+    
+    pdf.cell(0, 10, "Resumo do Faturamento", 0, 1, "C")
+    pdf.set_font("Arial", "", 12)
+    pdf.cell(0, 10, f"Cliente: {nome_cliente}", 0, 1, "L")
+    pdf.cell(0, 10, f"Periodo: {periodo}", 0, 1, "L")
+    pdf.ln(10)
+
+    pdf.set_font("Arial", "B", 11)
+    pdf.cell(95, 8, "Faturamento (Cheio)", 1, 0, "C")
+    pdf.cell(95, 8, "Faturamento (Proporcional)", 1, 1, "C")
+    pdf.set_font("Arial", "", 11)
+    pdf.cell(95, 8, f"R$ {totais['cheio']:,.2f}", 1, 0, "C")
+    pdf.cell(95, 8, f"R$ {totais['proporcional']:,.2f}", 1, 1, "C")
+    pdf.set_font("Arial", "B", 11)
+    pdf.cell(0, 10, f"FATURAMENTO TOTAL: R$ {totais['geral']:,.2f}", 1, 1, "C")
+    pdf.ln(10)
+
+    def draw_table(title, df):
+        if not df.empty:
+            pdf.set_font("Arial", "B", 12)
+            pdf.cell(0, 10, title, 0, 1, "L")
+            pdf.set_font("Arial", "B", 7)
+            
+            col_widths = {
+                'Terminal': 20, 'Nº Equipamento': 25, 'Placa': 18, 'Tipo': 15,
+                'Data Desativação': 22, 'Dias Ativos Mês': 15, 'Suspenso Dias Mes': 15,
+                'Dias a Faturar': 15, 'Valor Unitario': 20, 'Valor a Faturar': 25
+            }
+            header = [h for h in list(df.columns) if h in col_widths]
+            
+            for h in header:
+                pdf.cell(col_widths[h], 7, h, 1, 0, 'C')
+            pdf.ln()
+
+            pdf.set_font("Arial", "", 7)
+            for _, row in df.iterrows():
+                for h in header:
+                    cell_text = str(row[h])
+                    if isinstance(row[h], datetime) and pd.notna(row[h]):
+                        cell_text = row[h].strftime('%d/%m/%Y')
+                    elif isinstance(row[h], float) or isinstance(row[h], int):
+                        cell_text = f"R$ {row[h]:,.2f}" if 'Valor' in h else str(int(row[h]))
+                    elif pd.isna(row[h]):
+                        cell_text = ""
+                    pdf.cell(col_widths[h], 6, cell_text, 1, 0, 'C')
+                pdf.ln()
+            pdf.ln(5)
+
+    draw_table("Detalhamento do Faturamento Cheio", df_cheio[['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Valor a Faturar']])
+    draw_table("Detalhamento do Faturamento Proporcional", df_proporcional[['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Dias a Faturar', 'Valor Unitario', 'Valor a Faturar']])
+    
+    # ***** CORREÇÃO DEFINITIVA AQUI *****
+    # Converte o output do FPDF para bytes, que é o formato esperado pelo Streamlit
+    return bytes(pdf.output())
 
 # --- 3. INTERFACE DA PÁGINA ---
 st.sidebar.image("imgs/v-c.png", width=120)
@@ -128,9 +162,11 @@ if uploaded_file:
         st.warning("Por favor, insira os valores unitários de GPRS e Satelital na barra lateral para continuar.")
     else:
         try:
-            nome_cliente, periodo_relatorio, df_cheio, df_proporcional = processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital)
+            nome_cliente, periodo_relatorio, df_cheio, df_proporcional, error_message = processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital)
             
-            if df_cheio is not None:
+            if error_message:
+                st.error(error_message)
+            elif df_cheio is not None:
                 total_faturamento_cheio = df_cheio['Valor a Faturar'].sum()
                 total_faturamento_proporcional = df_proporcional['Valor a Faturar'].sum()
                 faturamento_total_geral = total_faturamento_cheio + total_faturamento_proporcional
@@ -139,8 +175,9 @@ if uploaded_file:
                 st.subheader(f"Cliente: {nome_cliente}")
                 st.caption(f"Período: {periodo_relatorio}")
                 
-                total_gprs = len(df_cheio[df_cheio['Tipo'] == 'GPRS']) + len(df_proporcional[df_proporcional['Tipo'] == 'GPRS'])
-                total_satelital = len(df_cheio[df_cheio['Tipo'] == 'Satelital']) + len(df_proporcional[df_proporcional['Tipo'] == 'Satelital'])
+                df_total = pd.concat([df_cheio, df_proporcional])
+                total_gprs = len(df_total[df_total['Tipo'] == 'GPRS'])
+                total_satelital = len(df_total[df_total['Tipo'] == 'Satelital'])
                 
                 col1, col2, col3, col4 = st.columns(4)
                 col1.metric("Nº Faturamento Cheio", value=len(df_cheio))
@@ -158,6 +195,8 @@ if uploaded_file:
                 st.subheader("Ações Finais")
                 
                 excel_data = to_excel(df_cheio, df_proporcional)
+                totais_pdf = {"cheio": total_faturamento_cheio, "proporcional": total_faturamento_proporcional, "geral": faturamento_total_geral}
+                pdf_data = create_pdf_report(nome_cliente, periodo_relatorio, totais_pdf, df_cheio, df_proporcional)
                 faturamento_data_log = {
                     "cliente": nome_cliente, "periodo_relatorio": periodo_relatorio,
                     "valor_total": faturamento_total_geral, "terminais_cheio": len(df_cheio),
@@ -165,13 +204,22 @@ if uploaded_file:
                     "terminais_satelitais": total_satelital
                 }
 
-                st.download_button(
-                   label="📥 Exportar e Salvar Histórico (.xlsx)",
-                   data=excel_data,
-                   file_name=f"Faturamento_{nome_cliente.replace(' ', '_')}_{datetime.now().strftime('%Y-%m')}.xlsx",
-                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                   on_click=umdb.log_faturamento, args=(faturamento_data_log,)
-                )
+                col_btn1, col_btn2 = st.columns(2)
+                with col_btn1:
+                    st.download_button(
+                       label="📥 Exportar Excel e Salvar Histórico",
+                       data=excel_data,
+                       file_name=f"Faturamento_{nome_cliente.replace(' ', '_')}_{datetime.now().strftime('%Y-%m')}.xlsx",
+                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                       on_click=umdb.log_faturamento, args=(faturamento_data_log,)
+                    )
+                with col_btn2:
+                    st.download_button(
+                       label="📄 Exportar Resumo em PDF",
+                       data=pdf_data,
+                       file_name=f"Resumo_Faturamento_{nome_cliente.replace(' ', '_')}_{datetime.now().strftime('%Y-%m')}.pdf",
+                       mime="application/pdf"
+                    )
 
                 st.markdown("---")
 
