@@ -216,14 +216,12 @@ def log_faturamento(faturamento_data: dict):
     return False
 
 def get_billing_history():
-    """Busca todos os resumos de faturamento, retornando também o _id."""
     history_collection = get_collection("billing_history")
     if history_collection is not None:
         return list(history_collection.find({}).sort("data_geracao", -1))
     return []
 
 def delete_billing_history(history_id: str):
-    """Exclui um registo de histórico de faturamento pelo seu _id."""
     history_collection = get_collection("billing_history")
     if history_collection is not None:
         try:
