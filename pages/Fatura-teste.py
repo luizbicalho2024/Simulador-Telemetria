@@ -1,4 +1,4 @@
-# pages/6_Faturamento.py
+# pages/Faturamento.py
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -20,17 +20,37 @@ if not st.session_state.get("authentication_status"):
 @st.cache_data
 def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
     """
-    Lê a planilha, extrai o nome do cliente, os dados da tabela,
-    e realiza a análise de status.
+    Lê a planilha, extrai o nome do cliente e o período, classifica,
+    calcula e retorna os dataframes de faturamento.
     """
-    df_cliente = pd.read_excel(uploaded_file, header=None, skiprows=8, nrows=1, engine='openpyxl')
+    # Lê as primeiras 11 linhas para extrair informações do cabeçalho
+    header_info = pd.read_excel(uploaded_file, header=None, nrows=11, engine='openpyxl')
     
+    # Extrai o nome do cliente da linha 9, coluna 5 (índice 4)
     nome_cliente = "Cliente não identificado"
-    if not df_cliente.empty and len(df_cliente.columns) > 4:
-        nome_cliente_raw = df_cliente.iloc[0, 4]
+    if len(header_info.columns) > 4:
+        nome_cliente_raw = header_info.iloc[8, 4] # Linha 9 é índice 8
         if pd.notna(nome_cliente_raw):
             nome_cliente = str(nome_cliente_raw).strip()
 
+    # ***** MELHORIA PRINCIPAL AQUI *****
+    # Extrai o período das linhas 9 e 10, coluna 9 (índice 8)
+    periodo_relatorio = "Período não identificado"
+    if len(header_info.columns) > 8:
+        data_inicio_raw = header_info.iloc[8, 8] # Linha 9, Coluna 9
+        data_fim_raw = header_info.iloc[9, 8]    # Linha 10, Coluna 9
+        
+        try:
+            # Tenta converter as datas e formatá-las
+            data_inicio = pd.to_datetime(data_inicio_raw).strftime('%d/%m/%Y')
+            data_fim = pd.to_datetime(data_fim_raw).strftime('%d/%m/%Y')
+            periodo_relatorio = f"{data_inicio} a {data_fim}"
+        except Exception:
+            # Se falhar, usa os valores brutos
+            periodo_relatorio = f"{data_inicio_raw} a {data_fim_raw}"
+
+
+    # Lê a tabela de dados principal a partir da linha 12 (índice 11)
     df = pd.read_excel(
         uploaded_file,
         header=11,
@@ -38,16 +58,13 @@ def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
         dtype={'Equipamento': str}
     )
 
-    df = df.rename(columns={
-        'Suspenso Dias Mês': 'Suspenso Dias Mes',
-        'Equipamento': 'Nº Equipamento'
-    })
+    df = df.rename(columns={'Suspenso Dias Mês': 'Suspenso Dias Mes', 'Equipamento': 'Nº Equipamento'})
 
     required_cols = ['Cliente', 'Terminal', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Nº Equipamento']
     if not all(col in df.columns for col in required_cols):
-        st.error(f"O ficheiro não contém todas as colunas necessárias. Verifique o cabeçalho na linha 12.")
+        st.error(f"O ficheiro não contém todas as colunas necessárias.")
         st.write("Colunas encontradas:", df.columns.tolist())
-        return None, None, None
+        return None, None, None, None
 
     df.dropna(subset=['Terminal'], inplace=True)
     df['Terminal'] = df['Terminal'].astype(str).str.strip()
@@ -65,11 +82,10 @@ def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
     df_faturamento_cheio = df[df['Dias a Faturar'] >= dias_no_mes]
     df_faturamento_proporcional = df[df['Dias a Faturar'] < dias_no_mes]
     
-    return nome_cliente, df_faturamento_cheio, df_faturamento_proporcional
+    return nome_cliente, periodo_relatorio, df_faturamento_cheio, df_faturamento_proporcional
 
 @st.cache_data
 def to_excel(df_cheio, df_proporcional):
-    """Cria um ficheiro Excel em memória com duas abas."""
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df_cheio.to_excel(writer, index=False, sheet_name='Faturamento Cheio')
@@ -97,7 +113,6 @@ valor_satelital = st.sidebar.number_input("Valor Unitário Mensal (Satelital)", 
 st.subheader("Carregamento do Relatório de Terminais")
 st.info("Por favor, carregue o ficheiro `relatorio_terminal_xx-xx-xxxx_xx-xx-xxxx.xlsx` exportado do sistema.")
 
-periodo_relatorio = st.text_input("Período do Relatório (ex: 01/08/2025 a 31/08/2025)", key="faturamento_periodo")
 uploaded_file = st.file_uploader("Selecione o relatório", type=['xlsx'])
 
 st.markdown("---")
@@ -106,23 +121,19 @@ st.markdown("---")
 if uploaded_file:
     if valor_gprs == 0.0 or valor_satelital == 0.0:
         st.warning("Por favor, insira os valores unitários de GPRS e Satelital na barra lateral para continuar.")
-    elif not periodo_relatorio:
-        st.warning("Por favor, insira o período do relatório.")
     else:
         try:
-            nome_cliente, df_cheio, df_proporcional, error_message = processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital)
+            nome_cliente, periodo_relatorio, df_cheio, df_proporcional = processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital)
             
-            if error_message:
-                st.error(error_message)
-            elif df_cheio is not None:
+            if df_cheio is not None:
                 total_faturamento_cheio = df_cheio['Valor a Faturar'].sum()
                 total_faturamento_proporcional = df_proporcional['Valor a Faturar'].sum()
                 faturamento_total_geral = total_faturamento_cheio + total_faturamento_proporcional
 
                 st.header("Resumo do Faturamento")
                 st.subheader(f"Cliente: {nome_cliente}")
-                st.caption(f"Período: {periodo_relatorio}")
-
+                st.caption(f"Período: {periodo_relatorio}") # Exibe o período extraído
+                
                 total_gprs = len(df_cheio[df_cheio['Tipo'] == 'GPRS']) + len(df_proporcional[df_proporcional['Tipo'] == 'GPRS'])
                 total_satelital = len(df_cheio[df_cheio['Tipo'] == 'Satelital']) + len(df_proporcional[df_proporcional['Tipo'] == 'Satelital'])
                 
