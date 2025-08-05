@@ -126,7 +126,7 @@ def update_pricing_config(new_config: dict):
             return False
     return False
 
-# --- 5. FUNÇÕES PARA DASHBOARD E LOGS ---
+# --- 5. FUNÇÕES PARA DASHBOARD, LOGS E FATURAMENTO ---
 def add_log(user: str, action: str, details: str = ""):
     logs_collection = get_collection("activity_logs")
     if logs_collection is not None:
