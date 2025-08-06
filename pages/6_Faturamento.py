@@ -89,6 +89,7 @@ def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
 
 @st.cache_data
 def to_excel(df_cheio, df_ativados, df_desativados):
+    """Cria um ficheiro Excel em memória com três abas."""
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df_cheio.to_excel(writer, index=False, sheet_name='Faturamento Cheio')
@@ -97,6 +98,7 @@ def to_excel(df_cheio, df_ativados, df_desativados):
     return output.getvalue()
 
 def create_pdf_report(nome_cliente, periodo, totais, df_cheio, df_ativados, df_desativados):
+    """Cria um relatório de faturamento em PDF em memória, com logo e todos os detalhes."""
     pdf = FPDF(orientation='L')
     pdf.add_page()
     
@@ -185,7 +187,6 @@ def create_pdf_report(nome_cliente, periodo, totais, df_cheio, df_ativados, df_d
     
     return bytes(pdf.output())
 
-
 # --- 3. INTERFACE DA PÁGINA ---
 st.sidebar.image("imgs/v-c.png", width=120)
 st.sidebar.title(f"Olá, {st.session_state.get('name', 'N/A')}! 👋")
@@ -223,9 +224,9 @@ if uploaded_file:
             if error_message:
                 st.error(error_message)
             elif df_cheio is not None:
-                total_faturamento_cheio = df_cheio['Valor a Faturar'].sum()
-                total_faturamento_ativados = df_ativados['Valor a Faturar'].sum()
-                total_faturamento_desativados = df_desativados['Valor a Faturar'].sum()
+                total_faturamento_cheio = df_cheio['Valor a Faturar'].sum() if not df_cheio.empty else 0
+                total_faturamento_ativados = df_ativados['Valor a Faturar'].sum() if not df_ativados.empty else 0
+                total_faturamento_desativados = df_desativados['Valor a Faturar'].sum() if not df_desativados.empty else 0
                 faturamento_proporcional_total = total_faturamento_ativados + total_faturamento_desativados
                 faturamento_total_geral = total_faturamento_cheio + faturamento_proporcional_total
 
@@ -263,8 +264,7 @@ if uploaded_file:
                     "valor_total": faturamento_total_geral, "terminais_cheio": len(df_cheio),
                     "terminais_proporcional": len(df_ativados) + len(df_desativados),
                     "terminais_gprs": total_gprs, "terminais_satelitais": total_satelital,
-                    "valor_unitario_gprs": valor_gprs,
-                    "valor_unitario_satelital": valor_satelital
+                    "valor_unitario_gprs": valor_gprs, "valor_unitario_satelital": valor_satelital
                 }
 
                 col_btn1, col_btn2 = st.columns(2)
