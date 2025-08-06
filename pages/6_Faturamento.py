@@ -81,7 +81,7 @@ def to_excel(df_cheio, df_ativados, df_desativados):
 
 def create_pdf_report(nome_cliente, periodo, totais, df_cheio, df_ativados, df_desativados):
     """Cria um relatório de faturamento em PDF em memória, com logo e todos os detalhes."""
-    pdf = FPDF()
+    pdf = FPDF(orientation='L')
     pdf.add_page()
     
     try:
