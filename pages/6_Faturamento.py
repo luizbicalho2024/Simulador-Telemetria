@@ -21,57 +21,67 @@ if not st.session_state.get("authentication_status"):
 @st.cache_data
 def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
     """
-    Lê a planilha, extrai informações, classifica, calcula e retorna os dataframes de faturamento.
+    Lê a planilha, extrai informações, classifica, calcula e retorna os dataframes.
     """
     header_info = pd.read_excel(uploaded_file, header=None, nrows=11, engine='openpyxl')
     
     periodo_relatorio = "Período não identificado"
+    report_month, report_year = datetime.now().month, datetime.now().year
     if len(header_info.columns) > 8:
         data_inicio_raw = header_info.iloc[8, 8]
         data_fim_raw = header_info.iloc[9, 8]
         try:
-            data_inicio = pd.to_datetime(data_inicio_raw).strftime('%d/%m/%Y')
+            dt_inicio = pd.to_datetime(data_inicio_raw)
+            report_month = dt_inicio.month
+            report_year = dt_inicio.year
             data_fim = pd.to_datetime(data_fim_raw).strftime('%d/%m/%Y')
-            periodo_relatorio = f"{data_inicio} a {data_fim}"
+            periodo_relatorio = f"{dt_inicio.strftime('%d/%m/%Y')} a {data_fim}"
         except Exception:
-            periodo_relatorio = f"{data_inicio_raw} a {data_fim_raw}"
+            periodo_relatorio = f"{header_info.iloc[8, 8]} a {header_info.iloc[9, 8]}"
 
     df = pd.read_excel(uploaded_file, header=11, engine='openpyxl', dtype={'Equipamento': str})
     df = df.rename(columns={'Suspenso Dias Mês': 'Suspenso Dias Mes', 'Equipamento': 'Nº Equipamento'})
 
-    required_cols = ['Cliente', 'Terminal', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Nº Equipamento']
+    required_cols = ['Cliente', 'Terminal', 'Data Ativação', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Nº Equipamento', 'Condição']
     if not all(col in df.columns for col in required_cols):
         return None, None, None, None, None, "Erro de Colunas: Verifique o cabeçalho na linha 12."
 
-    nome_cliente = "Cliente não identificado"
-    if not df.empty and 'Cliente' in df.columns and pd.notna(df['Cliente'].iloc[0]):
-        nome_cliente = str(df['Cliente'].iloc[0]).strip()
+    nome_cliente = str(df['Cliente'].dropna().iloc[0]).strip() if not df.empty and 'Cliente' in df.columns else "Cliente não identificado"
             
     df.dropna(subset=['Terminal'], inplace=True)
     df['Terminal'] = df['Terminal'].astype(str).str.strip()
-    df['Data Desativação'] = pd.to_datetime(df['Data Desativação'], errors='coerce')
+    df['Data Ativação'] = pd.to_datetime(df['Data Ativação'], errors='coerce', dayfirst=True)
+    df['Data Desativação'] = pd.to_datetime(df['Data Desativação'], errors='coerce', dayfirst=True)
     df['Dias Ativos Mês'] = pd.to_numeric(df['Dias Ativos Mês'], errors='coerce').fillna(0)
     df['Suspenso Dias Mes'] = pd.to_numeric(df['Suspenso Dias Mes'], errors='coerce').fillna(0)
 
     df['Tipo'] = df['Nº Equipamento'].apply(lambda x: 'Satelital' if len(str(x).strip()) == 8 else 'GPRS')
     df['Valor Unitario'] = df['Tipo'].apply(lambda x: valor_satelital if x == 'Satelital' else valor_gprs)
 
-    dias_no_mes = pd.Timestamp(datetime.now()).days_in_month
-    df['Dias a Faturar'] = (df['Dias Ativos Mês'] - df['Suspenso Dias Mes']).clip(lower=0)
-    df['Valor a Faturar'] = (df['Valor Unitario'] / dias_no_mes) * df['Dias a Faturar']
+    dias_no_mes = pd.Timestamp(year=report_year, month=report_month, day=1).days_in_month
+
+    df_desativados = df[df['Data Desativação'].notna()].copy()
+    df_desativados['Dias a Faturar'] = (df_desativados['Data Desativação'].dt.day - df_desativados['Suspenso Dias Mes']).clip(lower=0)
     
-    df_faturamento_cheio = df[df['Dias a Faturar'] >= dias_no_mes]
-    df_faturamento_proporcional = df[df['Dias a Faturar'] < dias_no_mes]
+    df_restantes = df[df['Data Desativação'].isna()].copy()
     
-    # Separa o faturamento proporcional em duas novas categorias
-    df_proporcional_ativados = df_faturamento_proporcional[df_faturamento_proporcional['Data Desativação'].isna()]
-    df_proporcional_desativados = df_faturamento_proporcional[df_faturamento_proporcional['Data Desativação'].notna()]
+    df_ativados = df_restantes[
+        (df_restantes['Condição'] == 'Ativado') &
+        (df_restantes['Data Ativação'].dt.month == report_month) &
+        (df_restantes['Data Ativação'].dt.year == report_year)
+    ].copy()
+    df_ativados['Dias a Faturar'] = ((dias_no_mes - df_ativados['Data Ativação'].dt.day + 1) - df_ativados['Suspenso Dias Mes']).clip(lower=0)
     
-    return nome_cliente, periodo_relatorio, df_faturamento_cheio, df_proporcional_ativados, df_proporcional_desativados, None
+    df_cheio = df_restantes.drop(df_ativados.index).copy()
+    df_cheio['Dias a Faturar'] = (df_cheio['Dias Ativos Mês'] - df_cheio['Suspenso Dias Mes']).clip(lower=0)
+
+    for temp_df in [df_cheio, df_ativados, df_desativados]:
+        temp_df['Valor a Faturar'] = (temp_df['Valor Unitario'] / dias_no_mes) * temp_df['Dias a Faturar']
+    
+    return nome_cliente, periodo_relatorio, df_cheio, df_ativados, df_desativados, None
 
 @st.cache_data
 def to_excel(df_cheio, df_ativados, df_desativados):
-    """Cria um ficheiro Excel em memória com três abas."""
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df_cheio.to_excel(writer, index=False, sheet_name='Faturamento Cheio')
@@ -80,8 +90,7 @@ def to_excel(df_cheio, df_ativados, df_desativados):
     return output.getvalue()
 
 def create_pdf_report(nome_cliente, periodo, totais, df_cheio, df_ativados, df_desativados):
-    """Cria um relatório de faturamento em PDF em memória, com logo e todos os detalhes."""
-    pdf = FPDF(orientation='L')
+    pdf = FPDF(orientation='L') # 'L' para Landscape (Paisagem)
     pdf.add_page()
     
     try:
@@ -100,23 +109,23 @@ def create_pdf_report(nome_cliente, periodo, totais, df_cheio, df_ativados, df_d
     pdf.ln(5)
 
     pdf.set_font("Arial", "B", 10)
-    pdf.cell(47.5, 8, "Fat. Cheio", 1, 0, "C")
-    pdf.cell(47.5, 8, "Fat. Proporcional", 1, 0, "C")
-    pdf.cell(47.5, 8, "Total GPRS", 1, 0, "C")
-    pdf.cell(47.5, 8, "Total Satelital", 1, 1, "C")
+    pdf.cell(69, 8, "Fat. Cheio", 1, 0, "C")
+    pdf.cell(69, 8, "Fat. Proporcional", 1, 0, "C")
+    pdf.cell(69, 8, "Total GPRS", 1, 0, "C")
+    pdf.cell(69, 8, "Total Satelital", 1, 1, "C")
     pdf.set_font("Arial", "", 10)
-    pdf.cell(47.5, 8, str(totais['terminais_cheio']), 1, 0, "C")
-    pdf.cell(47.5, 8, str(totais['terminais_proporcional']), 1, 0, "C")
-    pdf.cell(47.5, 8, str(totais['terminais_gprs']), 1, 0, "C")
-    pdf.cell(47.5, 8, str(totais['terminais_satelitais']), 1, 1, "C")
+    pdf.cell(69, 8, str(totais['terminais_cheio']), 1, 0, "C")
+    pdf.cell(69, 8, str(totais['terminais_proporcional']), 1, 0, "C")
+    pdf.cell(69, 8, str(totais['terminais_gprs']), 1, 0, "C")
+    pdf.cell(69, 8, str(totais['terminais_satelitais']), 1, 1, "C")
     pdf.ln(5)
 
     pdf.set_font("Arial", "B", 11)
-    pdf.cell(95, 8, "Faturamento (Cheio)", 1, 0, "C")
-    pdf.cell(95, 8, "Faturamento (Proporcional)", 1, 1, "C")
+    pdf.cell(138, 8, "Faturamento (Cheio)", 1, 0, "C")
+    pdf.cell(138, 8, "Faturamento (Proporcional)", 1, 1, "C")
     pdf.set_font("Arial", "", 11)
-    pdf.cell(95, 8, f"R$ {totais['cheio']:,.2f}", 1, 0, "C")
-    pdf.cell(95, 8, f"R$ {totais['proporcional']:,.2f}", 1, 1, "C")
+    pdf.cell(138, 8, f"R$ {totais['cheio']:,.2f}", 1, 0, "C")
+    pdf.cell(138, 8, f"R$ {totais['proporcional']:,.2f}", 1, 1, "C")
     pdf.set_font("Arial", "B", 11)
     pdf.cell(0, 10, f"FATURAMENTO TOTAL: R$ {totais['geral']:,.2f}", 1, 1, "C")
     pdf.ln(10)
@@ -125,12 +134,12 @@ def create_pdf_report(nome_cliente, periodo, totais, df_cheio, df_ativados, df_d
         if not df.empty:
             pdf.set_font("Arial", "B", 12)
             pdf.cell(0, 10, title, 0, 1, "L")
-            pdf.set_font("Arial", "B", 7)
+            pdf.set_font("Arial", "B", 8)
             
             header = [h for h in available_cols if h in df.columns]
             
             for h in header:
-                pdf.cell(col_widths[h], 7, h, 1, 0, 'C')
+                pdf.cell(col_widths.get(h, 20), 7, h, 1, 0, 'C')
             pdf.ln()
 
             pdf.set_font("Arial", "", 7)
@@ -143,26 +152,27 @@ def create_pdf_report(nome_cliente, periodo, totais, df_cheio, df_ativados, df_d
                         cell_text = f"R$ {row[h]:,.2f}" if 'Valor' in h else str(int(row[h]))
                     elif pd.isna(row[h]):
                         cell_text = ""
-                    pdf.cell(col_widths[h], 6, cell_text, 1, 0, 'C')
+                    pdf.cell(col_widths.get(h, 20), 6, cell_text, 1, 0, 'C')
                 pdf.ln()
             pdf.ln(5)
 
     cols_cheio = ['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Valor a Faturar']
-    widths_cheio = {'Terminal': 40, 'Nº Equipamento': 40, 'Placa': 40, 'Tipo': 30, 'Valor a Faturar': 40}
+    widths_cheio = {'Terminal': 60, 'Nº Equipamento': 60, 'Placa': 60, 'Tipo': 47, 'Valor a Faturar': 50}
     draw_table("Detalhamento do Faturamento Cheio", df_cheio, widths_cheio, cols_cheio)
     
-    cols_ativados = ['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Dias a Faturar', 'Valor Unitario', 'Valor a Faturar']
+    cols_ativados = ['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Data Ativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Dias a Faturar', 'Valor Unitario', 'Valor a Faturar']
     widths_ativados = {
-        'Terminal': 20, 'Nº Equipamento': 25, 'Placa': 18, 'Tipo': 15, 'Dias Ativos Mês': 15, 
-        'Suspenso Dias Mes': 15, 'Dias a Faturar': 15, 'Valor Unitario': 20, 'Valor a Faturar': 25
+        'Terminal': 25, 'Nº Equipamento': 30, 'Placa': 25, 'Tipo': 20, 'Data Ativação': 25,
+        'Dias Ativos Mês': 20, 'Suspenso Dias Mes': 25, 'Dias a Faturar': 20, 
+        'Valor Unitario': 30, 'Valor a Faturar': 30
     }
     draw_table("Detalhamento Proporcional (Ativações no Mês)", df_ativados, widths_ativados, cols_ativados)
 
     cols_desativados = ['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Dias a Faturar', 'Valor Unitario', 'Valor a Faturar']
     widths_desativados = {
-        'Terminal': 20, 'Nº Equipamento': 25, 'Placa': 18, 'Tipo': 15,
-        'Data Desativação': 22, 'Dias Ativos Mês': 15, 'Suspenso Dias Mes': 15,
-        'Dias a Faturar': 15, 'Valor Unitario': 20, 'Valor a Faturar': 25
+        'Terminal': 25, 'Nº Equipamento': 30, 'Placa': 25, 'Tipo': 20, 'Data Desativação': 25,
+        'Dias Ativos Mês': 20, 'Suspenso Dias Mes': 25, 'Dias a Faturar': 20, 
+        'Valor Unitario': 30, 'Valor a Faturar': 30
     }
     draw_table("Detalhamento Proporcional (Desativações no Mês)", df_desativados, widths_desativados, cols_desativados)
     
@@ -185,16 +195,13 @@ st.sidebar.header("Valores de Faturamento")
 pricing_config = umdb.get_pricing_config()
 default_gprs = float(pricing_config.get("PRECOS_PF", {}).get("GPRS / Gsm", 0.0))
 default_satelital = float(pricing_config.get("PLANOS_PJ", {}).get("36 Meses", {}).get("Satélite", 0.0))
-
 valor_gprs = st.sidebar.number_input("Valor Unitário Mensal (GPRS)", min_value=0.0, value=default_gprs, step=1.0, format="%.2f")
 valor_satelital = st.sidebar.number_input("Valor Unitário Mensal (Satelital)", min_value=0.0, value=default_satelital, step=1.0, format="%.2f")
 
 # --- 5. UPLOAD DO FICHEIRO ---
 st.subheader("Carregamento do Relatório de Terminais")
 st.info("Por favor, carregue o ficheiro `relatorio_terminal_xx-xx-xxxx_xx-xx-xxxx.xlsx` exportado do sistema.")
-
 uploaded_file = st.file_uploader("Selecione o relatório", type=['xlsx'])
-
 st.markdown("---")
 
 # --- 6. ANÁLISE E EXIBIÇÃO ---
@@ -209,9 +216,9 @@ if uploaded_file:
                 st.error(error_message)
             elif df_cheio is not None:
                 total_faturamento_cheio = df_cheio['Valor a Faturar'].sum()
-                total_faturamento_proporcional_ativados = df_ativados['Valor a Faturar'].sum()
-                total_faturamento_proporcional_desativados = df_desativados['Valor a Faturar'].sum()
-                faturamento_proporcional_total = total_faturamento_proporcional_ativados + total_faturamento_proporcional_desativados
+                total_faturamento_ativados = df_ativados['Valor a Faturar'].sum()
+                total_faturamento_desativados = df_desativados['Valor a Faturar'].sum()
+                faturamento_proporcional_total = total_faturamento_ativados + total_faturamento_desativados
                 faturamento_total_geral = total_faturamento_cheio + faturamento_proporcional_total
 
                 st.header("Resumo do Faturamento")
@@ -236,7 +243,6 @@ if uploaded_file:
                 st.markdown("---")
                 
                 st.subheader("Ações Finais")
-                
                 excel_data = to_excel(df_cheio, df_ativados, df_desativados)
                 totais_pdf = {
                     "cheio": total_faturamento_cheio, "proporcional": faturamento_proporcional_total, "geral": faturamento_total_geral,
@@ -249,7 +255,8 @@ if uploaded_file:
                     "valor_total": faturamento_total_geral, "terminais_cheio": len(df_cheio),
                     "terminais_proporcional": len(df_ativados) + len(df_desativados),
                     "terminais_gprs": total_gprs, "terminais_satelitais": total_satelital,
-                    "valor_unitario_gprs": valor_gprs, "valor_unitario_satelital": valor_satelital
+                    "valor_unitario_gprs": valor_gprs,
+                    "valor_unitario_satelital": valor_satelital
                 }
 
                 col_btn1, col_btn2 = st.columns(2)
@@ -274,28 +281,19 @@ if uploaded_file:
 
                 with st.expander("Detalhamento do Faturamento Proporcional (Ativações no Mês)"):
                     if not df_ativados.empty:
-                        st.dataframe(
-                            df_ativados[['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Dias a Faturar', 'Valor Unitario', 'Valor a Faturar']],
-                            use_container_width=True, hide_index=True
-                        )
+                        st.dataframe(df_ativados[['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Data Ativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Dias a Faturar', 'Valor Unitario', 'Valor a Faturar']], use_container_width=True, hide_index=True)
                     else:
                         st.info("Nenhum terminal ativado com faturamento proporcional neste período.")
                 
                 with st.expander("Detalhamento do Faturamento Proporcional (Desativações no Mês)"):
                     if not df_desativados.empty:
-                        st.dataframe(
-                            df_desativados[['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Dias a Faturar', 'Valor Unitario', 'Valor a Faturar']],
-                            use_container_width=True, hide_index=True
-                        )
+                        st.dataframe(df_desativados[['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Dias a Faturar', 'Valor Unitario', 'Valor a Faturar']], use_container_width=True, hide_index=True)
                     else:
                         st.info("Nenhum terminal desativado neste período.")
                 
                 with st.expander("Detalhamento do Faturamento Cheio"):
                     if not df_cheio.empty:
-                        st.dataframe(
-                            df_cheio[['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Valor a Faturar']],
-                            use_container_width=True, hide_index=True
-                        )
+                        st.dataframe(df_cheio[['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Valor a Faturar']], use_container_width=True, hide_index=True)
                     else:
                         st.info("Nenhum terminal com faturamento cheio neste período.")
 
