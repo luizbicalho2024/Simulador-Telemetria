@@ -22,7 +22,7 @@ try:
     st.image("imgs/logo.png", width=250)
 except: pass
 
-st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador para Licitações e Editais</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; color: #006494;'>Simulador para Licitações e Editais</h1>", unsafe_allow_html=True)
 st.markdown("---")
 st.write(f"Usuário: {st.session_state.get('name', 'N/A')} ({st.session_state.get('username', 'N/A')})")
 st.write(f"Nível de Acesso: {st.session_state.get('role', 'Indefinido').capitalize()}")
@@ -64,7 +64,6 @@ with st.form("form_licitacao"):
 
             if itens_selecionados:
                 for item in itens_selecionados:
-                    # ... (lógica de cálculo do item como antes) ...
                     custo_hw_item = PRECO_CUSTO.get(item, Decimal("0"))
                     mensalidade_custo_item = (custo_hw_item / AMORTIZACAO_HARDWARE_MESES).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
                     mensalidade_venda_item = (mensalidade_custo_item * (1 + margem)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
@@ -76,7 +75,6 @@ with st.form("form_licitacao"):
                 valor_total_locacao = mensalidade_total_veiculo * qtd * contrato
 
             valor_total_servicos = Decimal("0")
-            # ... (lógica de cálculo dos serviços como antes) ...
             if inc_instalacao:
                 total = c_instalacao * qtd
                 proposta.append({"Serviço/Produto": "Taxa de Instalação", "Qtd": int(qtd), "Valor Unit. Mensal": c_instalacao, "Total": total})
@@ -92,9 +90,9 @@ with st.form("form_licitacao"):
 
             valor_global = valor_total_locacao + valor_total_servicos
             
-            umdb.add_log(st.session_state["username"], "Simulou/Registrou Licitação", f"Orgão: {nome_orgao}, Valor: R$ {valor_global:,.2f}")
-            umdb.log_proposal({"tipo": "Licitação", "empresa": nome_orgao, "consultor": st.session_state.get('name', 'N/A'), "valor_total": float(valor_global)})
-            st.toast("Proposta registrada no dashboard!", icon="📊")
+            # CHAMA A FUNÇÃO CORRETA DE UPSERT
+            umdb.upsert_proposal({"tipo": "Licitação", "empresa": nome_orgao, "consultor": st.session_state.get('name', 'N/A'), "valor_total": float(valor_global)})
+            umdb.add_log(st.session_state["username"], "Simulou/Registrou Licitação", details={"licitacao": nome_orgao, "valor": f"R$ {valor_global:,.2f}"})
             
             st.session_state.licit_results = {
                 "proposta": proposta,
