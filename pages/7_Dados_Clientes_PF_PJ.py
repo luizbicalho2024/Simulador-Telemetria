@@ -16,7 +16,7 @@ if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. FUNÇÕES DE APOIO (COM LÓGICA DE DETECÇÃO DE CABEÇALHO) ---
+# --- 2. FUNÇÕES DE APOIO ---
 def is_valid_email(email_text):
     if not isinstance(email_text, str): return False
     email_text = email_text.strip()
@@ -27,30 +27,11 @@ def is_valid_email(email_text):
 @st.cache_data
 def processar_planilha_final(uploaded_file):
     """
-    Processa a planilha de clientes, encontrando o cabeçalho dinamicamente
-    e extraindo os dados para organização.
+    Processa a planilha de clientes lendo diretamente a partir da linha 12.
     """
     try:
-        # Lê o ficheiro sem cabeçalho para poder procurar por ele
-        df_raw = pd.read_excel(uploaded_file, header=None)
-        
-        header_row_index = -1
-        # Procura pelo cabeçalho nas primeiras 20 linhas
-        for i, row in df_raw.head(20).iterrows():
-            row_str = ' '.join(map(str, row.values)).lower()
-            # Procura por palavras-chave que identificam o cabeçalho
-            if 'razão social' in row_str and 'cpf/cnpj' in row_str and ('tipo cliente' in row_str or 'tipo' in row_str):
-                header_row_index = i
-                break
-        
-        if header_row_index == -1:
-            st.error("ERRO CRÍTICO: Não foi possível encontrar a linha de cabeçalho na sua planilha.")
-            st.info("Verifique se o ficheiro contém colunas como 'Razão Social', 'CPF/CNPJ' e 'Tipo Cliente'. Abaixo estão as primeiras 20 linhas lidas do ficheiro para sua análise:")
-            st.dataframe(df_raw.head(20))
-            return None
-
-        # Lê a planilha novamente, desta vez usando a linha de cabeçalho correta
-        df = pd.read_excel(uploaded_file, header=header_row_index)
+        # Lê a planilha assumindo que o cabeçalho está na linha 12 (índice 11)
+        df = pd.read_excel(uploaded_file, header=11)
         
         df = df.loc[:, ~df.columns.str.contains('^Unnamed', na=False)]
         df.dropna(axis='rows', how='all', inplace=True)
@@ -66,7 +47,7 @@ def processar_planilha_final(uploaded_file):
         df.rename(columns=rename_map, inplace=True)
 
         if 'tipo_cliente' not in df.columns:
-            st.error("ERRO CRÍTICO: A coluna 'Tipo Cliente' não foi encontrada após a identificação do cabeçalho.")
+            st.error("ERRO CRÍTICO: A coluna 'Tipo Cliente' (ou uma variação como 'Tipo') não foi encontrada no cabeçalho. Verifique a linha 12 do seu ficheiro.")
             st.write("Colunas encontradas:", df.columns.tolist())
             return None
         
@@ -118,6 +99,7 @@ def processar_planilha_final(uploaded_file):
         return final_df[cols_principais + email_cols]
     except Exception as e:
         st.error(f"UM ERRO INESPERADO OCORREU: {e}")
+        st.info("Verifique se o ficheiro está formatado corretamente e se o cabeçalho da tabela está na linha 12.")
         return None
 
 def to_excel(df: pd.DataFrame):
@@ -143,7 +125,7 @@ st.markdown("---")
 
 # --- 4. CONTEÚDO PRINCIPAL ---
 st.write(
-    "Faça o upload da sua planilha. A aplicação irá encontrar o cabeçalho automaticamente, agrupar por 'Jurídica' ou 'Física', validar e-mails e organizar os dados."
+    "Faça o upload da sua planilha. A aplicação irá ler os dados a partir da linha 12, agrupar por 'Jurídica' ou 'Física', validar e-mails e organizar os dados."
 )
 
 uploaded_file = st.file_uploader(
