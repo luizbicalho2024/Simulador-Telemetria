@@ -16,7 +16,7 @@ if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. FUNÇÕES DE APOIO ---
+# --- 2. FUNÇÕES DE APOIO (COM LÓGICA DE DETECÇÃO DE CABEÇALHO) ---
 def is_valid_email(email_text):
     if not isinstance(email_text, str): return False
     email_text = email_text.strip()
@@ -25,10 +25,32 @@ def is_valid_email(email_text):
     return re.fullmatch(email_regex, email_text) is not None
 
 @st.cache_data
-def processar_planilha_final(uploaded_file, header_row):
+def processar_planilha_final(uploaded_file):
+    """
+    Processa a planilha de clientes, encontrando o cabeçalho dinamicamente
+    e extraindo os dados para organização.
+    """
     try:
-        # Lê a planilha usando a linha de cabeçalho fornecida pelo utilizador
-        df = pd.read_excel(uploaded_file, header=header_row - 1)
+        # Lê o ficheiro sem cabeçalho para poder procurar por ele
+        df_raw = pd.read_excel(uploaded_file, header=None)
+        
+        header_row_index = -1
+        # Procura pelo cabeçalho nas primeiras 20 linhas
+        for i, row in df_raw.head(20).iterrows():
+            row_str = ' '.join(map(str, row.values)).lower()
+            # Procura por palavras-chave que identificam o cabeçalho
+            if 'razão social' in row_str and 'cpf/cnpj' in row_str and ('tipo cliente' in row_str or 'tipo' in row_str):
+                header_row_index = i
+                break
+        
+        if header_row_index == -1:
+            st.error("ERRO CRÍTICO: Não foi possível encontrar a linha de cabeçalho na sua planilha.")
+            st.info("Verifique se o ficheiro contém colunas como 'Razão Social', 'CPF/CNPJ' e 'Tipo Cliente'. Abaixo estão as primeiras 20 linhas lidas do ficheiro para sua análise:")
+            st.dataframe(df_raw.head(20))
+            return None
+
+        # Lê a planilha novamente, desta vez usando a linha de cabeçalho correta
+        df = pd.read_excel(uploaded_file, header=header_row_index)
         
         df = df.loc[:, ~df.columns.str.contains('^Unnamed', na=False)]
         df.dropna(axis='rows', how='all', inplace=True)
@@ -44,7 +66,7 @@ def processar_planilha_final(uploaded_file, header_row):
         df.rename(columns=rename_map, inplace=True)
 
         if 'tipo_cliente' not in df.columns:
-            st.error(f"ERRO CRÍTICO: A coluna 'Tipo Cliente' não foi encontrada na linha {header_row}.")
+            st.error("ERRO CRÍTICO: A coluna 'Tipo Cliente' não foi encontrada após a identificação do cabeçalho.")
             st.write("Colunas encontradas:", df.columns.tolist())
             return None
         
@@ -120,21 +142,17 @@ st.write(f"Nível de Acesso: {st.session_state.get('role', 'Indefinido').capital
 st.markdown("---")
 
 # --- 4. CONTEÚDO PRINCIPAL ---
-st.subheader("Configurações de Leitura")
-header_row_input = st.number_input(
-    "Indique o nº da linha do cabeçalho (Ex: 11):",
-    min_value=1, value=11,
-    help="Abra o seu ficheiro Excel e veja em que número de linha estão os títulos 'Razão Social', 'Tipo Cliente', etc."
+st.write(
+    "Faça o upload da sua planilha. A aplicação irá encontrar o cabeçalho automaticamente, agrupar por 'Jurídica' ou 'Física', validar e-mails e organizar os dados."
 )
 
-st.subheader("Carregamento do Ficheiro")
 uploaded_file = st.file_uploader(
     "Selecione o arquivo da planilha", type=['xlsx'], key="organizer_upload"
 )
 
 if uploaded_file:
     st.markdown("---")
-    final_df = processar_planilha_final(uploaded_file, header_row_input)
+    final_df = processar_planilha_final(uploaded_file)
     
     if final_df is not None and not final_df.empty:
         st.toast("Processamento concluído com sucesso!", icon="✅")
@@ -149,6 +167,6 @@ if uploaded_file:
             mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
     else:
-        st.error("O processamento falhou. Verifique as mensagens de erro acima e as configurações do ficheiro.")
+        st.error("O processamento falhou. Verifique as mensagens de erro acima e a estrutura do seu ficheiro.")
 else:
     st.info("Aguardando o upload de um arquivo para iniciar a análise.")
