@@ -17,19 +17,56 @@ if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. FUNÇÕES AUXILIARES ---
+# --- 2. CLASSE DE PDF PERSONALIZADA COM CABEÇALHO E RODAPÉ ---
+class PDF(FPDF):
+    def header(self):
+        # Tenta inserir a imagem do cabeçalho
+        try:
+            # A largura da página A4 em modo paisagem é 297mm.
+            # Centraliza a imagem se ela tiver 277mm de largura (297 - 10 - 10).
+            self.image('imgs/header.png', x=10, y=8, w=277)
+        except Exception as e:
+            print(f"Aviso: Não foi possível carregar a imagem do cabeçalho: {e}")
+            self.set_font("Arial", "B", 20)
+            self.cell(0, 10, "Verdio", 0, 1, "L")
+        # Pula uma linha para o conteúdo não sobrepor o cabeçalho
+        self.ln(30)
+
+    def footer(self):
+        # Tenta inserir a imagem do rodapé
+        try:
+            # Posiciona o rodapé a 1.5 cm do fundo
+            self.set_y(-15)
+            self.image('imgs/footer.png', x=10, w=277)
+        except Exception as e:
+            print(f"Aviso: Não foi possível carregar a imagem do rodapé: {e}")
+        # Adiciona o número da página
+        self.set_y(-15)
+        self.set_font('Arial', 'I', 8)
+        self.cell(0, 10, f'Página {self.page_no()}', 0, 0, 'C')
+
+# --- 3. FUNÇÕES AUXILIARES ---
 @st.cache_data
 def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
     """
-    Lê a planilha, extrai informações, classifica, calcula e retorna os dataframes de faturamento.
+    Lê a planilha, extrai informações, classifica, calcula e retorna os dataframes.
     """
-    # Lê as primeiras 11 linhas para extrair informações do cabeçalho
     header_info = pd.read_excel(uploaded_file, header=None, nrows=11, engine='openpyxl')
     
     periodo_relatorio = "Período não identificado"
-    # Determina o mês e ano do relatório a partir dos próprios dados mais tarde
-    
-    # Lê a tabela de dados principal
+    report_month, report_year = datetime.now().month, datetime.now().year
+    if len(header_info.columns) > 8:
+        data_inicio_raw = header_info.iloc[8, 8]
+        data_fim_raw = header_info.iloc[9, 8]
+        try:
+            dt_inicio = pd.to_datetime(data_inicio_raw)
+            report_month = dt_inicio.month
+            report_year = dt_inicio.year
+            data_fim = pd.to_datetime(data_fim_raw).strftime('%d/%m/%Y')
+            periodo_relatorio = f"{dt_inicio.strftime('%d/%m/%Y')} a {data_fim}"
+        except Exception:
+            periodo_relatorio = f"{header_info.iloc[8, 8]} a {header_info.iloc[9, 8]}"
+
     df = pd.read_excel(uploaded_file, header=11, engine='openpyxl', dtype={'Equipamento': str})
     df = df.rename(columns={'Suspenso Dias Mês': 'Suspenso Dias Mes', 'Equipamento': 'Nº Equipamento'})
 
@@ -46,33 +83,18 @@ def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
     df['Dias Ativos Mês'] = pd.to_numeric(df['Dias Ativos Mês'], errors='coerce').fillna(0)
     df['Suspenso Dias Mes'] = pd.to_numeric(df['Suspenso Dias Mes'], errors='coerce').fillna(0)
 
-    # LÓGICA DE DETECÇÃO DE PERÍODO E FATURAMENTO CORRIGIDA
-    # Determina o mês e ano do relatório a partir dos dados de data
-    if not df[df['Data Desativação'].notna()].empty:
-        report_date = df[df['Data Desativação'].notna()]['Data Desativação'].iloc[0]
-    elif not df[df['Data Ativação'].notna()].empty:
-        report_date = df[df['Data Ativação'].notna()]['Data Ativação'].iloc[0]
-    else:
-        report_date = datetime.now() # Fallback para o mês atual
-    
-    report_month = report_date.month
-    report_year = report_date.year
-    dias_no_mes = pd.Timestamp(year=report_year, month=report_month, day=1).days_in_month
-    periodo_relatorio = report_date.strftime("%B de %Y") # Ex: Agosto de 2025
-
     df['Tipo'] = df['Nº Equipamento'].apply(lambda x: 'Satelital' if len(str(x).strip()) == 8 else 'GPRS')
     df['Valor Unitario'] = df['Tipo'].apply(lambda x: valor_satelital if x == 'Satelital' else valor_gprs)
 
-    # Separa os desativados primeiro
+    dias_no_mes = pd.Timestamp(year=report_year, month=report_month, day=1).days_in_month
+
     df_desativados = df[df['Data Desativação'].notna()].copy()
     if not df_desativados.empty:
         df_desativados['Dias a Faturar'] = (df_desativados['Data Desativação'].dt.day - df_desativados['Suspenso Dias Mes']).clip(lower=0)
         df_desativados['Valor a Faturar'] = (df_desativados['Valor Unitario'] / dias_no_mes) * df_desativados['Dias a Faturar']
     
-    # Pega os restantes para analisar
     df_restantes = df[df['Data Desativação'].isna()].copy()
     
-    # Separa os ativados no mês
     df_ativados = df_restantes[
         (df_restantes['Condição'].str.strip() == 'Ativado') &
         (df_restantes['Data Ativação'].dt.month == report_month) &
@@ -82,7 +104,6 @@ def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
         df_ativados['Dias a Faturar'] = ((dias_no_mes - df_ativados['Data Ativação'].dt.day + 1) - df_ativados['Suspenso Dias Mes']).clip(lower=0)
         df_ativados['Valor a Faturar'] = (df_ativados['Valor Unitario'] / dias_no_mes) * df_ativados['Dias a Faturar']
     
-    # O que sobrou é faturamento cheio
     df_cheio = df_restantes.drop(df_ativados.index).copy()
     if not df_cheio.empty:
         df_cheio['Dias a Faturar'] = (df_cheio['Dias Ativos Mês'] - df_cheio['Suspenso Dias Mes']).clip(lower=0)
@@ -100,17 +121,12 @@ def to_excel(df_cheio, df_ativados, df_desativados):
     return output.getvalue()
 
 def create_pdf_report(nome_cliente, periodo, totais, df_cheio, df_ativados, df_desativados):
-    pdf = FPDF(orientation='L')
+    pdf = PDF(orientation='L')
     pdf.add_page()
-    try:
-        pdf.image("imgs/logo.png", x=10, y=8, w=50)
-    except Exception:
-        pdf.set_font("Arial", "B", 20)
-        pdf.cell(0, 10, "Verdio", 0, 1, "L")
     
     pdf.set_font("Arial", "B", 16)
     pdf.cell(0, 10, "Resumo do Faturamento", 0, 1, "C")
-    pdf.ln(15)
+    pdf.ln(5)
 
     pdf.set_font("Arial", "", 12)
     pdf.cell(0, 8, f"Cliente: {nome_cliente}", 0, 1, "L")
@@ -138,7 +154,8 @@ def create_pdf_report(nome_cliente, periodo, totais, df_cheio, df_ativados, df_d
     pdf.set_font("Arial", "B", 11)
     pdf.cell(0, 10, f"FATURAMENTO TOTAL: R$ {totais['geral']:,.2f}", 1, 1, "C")
     pdf.ln(10)
-
+    
+    # Esta função está agora definida dentro de create_pdf_report para ter acesso ao `pdf`
     def draw_table(title, df, col_widths, available_cols):
         if not df.empty:
             pdf.set_font("Arial", "B", 12)
@@ -187,7 +204,7 @@ def create_pdf_report(nome_cliente, periodo, totais, df_cheio, df_ativados, df_d
     
     return bytes(pdf.output())
 
-# --- 3. INTERFACE DA PÁGINA ---
+# --- 4. INTERFACE DA PÁGINA ---
 st.sidebar.image("imgs/v-c.png", width=120)
 st.sidebar.title(f"Olá, {st.session_state.get('name', 'N/A')}! 👋")
 st.sidebar.markdown("---")
@@ -199,7 +216,6 @@ except: pass
 st.markdown("<h1 style='text-align: center; color: #006494;'>💲 Assistente de Faturamento</h1>", unsafe_allow_html=True)
 st.markdown("---")
 
-# --- 4. INPUTS DE CONFIGURAÇÃO ---
 st.sidebar.header("Valores de Faturamento")
 pricing_config = umdb.get_pricing_config()
 default_gprs = float(pricing_config.get("PRECOS_PF", {}).get("GPRS / Gsm", 0.0))
@@ -207,13 +223,11 @@ default_satelital = float(pricing_config.get("PLANOS_PJ", {}).get("36 Meses", {}
 valor_gprs = st.sidebar.number_input("Valor Unitário Mensal (GPRS)", min_value=0.0, value=default_gprs, step=1.0, format="%.2f")
 valor_satelital = st.sidebar.number_input("Valor Unitário Mensal (Satelital)", min_value=0.0, value=default_satelital, step=1.0, format="%.2f")
 
-# --- 5. UPLOAD DO FICHEIRO ---
 st.subheader("Carregamento do Relatório de Terminais")
 st.info("Por favor, carregue o ficheiro `relatorio_terminal_xx-xx-xxxx_xx-xx-xxxx.xlsx` exportado do sistema.")
 uploaded_file = st.file_uploader("Selecione o relatório", type=['xlsx'])
 st.markdown("---")
 
-# --- 6. ANÁLISE E EXIBIÇÃO ---
 if uploaded_file:
     if valor_gprs == 0.0 or valor_satelital == 0.0:
         st.warning("Por favor, insira os valores unitários de GPRS e Satelital na barra lateral para continuar.")
@@ -289,19 +303,28 @@ if uploaded_file:
 
                 with st.expander("Detalhamento do Faturamento Proporcional (Ativações no Mês)"):
                     if not df_ativados.empty:
-                        st.dataframe(df_ativados[['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Data Ativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Dias a Faturar', 'Valor Unitario', 'Valor a Faturar']], use_container_width=True, hide_index=True)
+                        st.dataframe(
+                            df_ativados[['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Data Ativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Dias a Faturar', 'Valor Unitario', 'Valor a Faturar']],
+                            use_container_width=True, hide_index=True
+                        )
                     else:
                         st.info("Nenhum terminal ativado com faturamento proporcional neste período.")
                 
                 with st.expander("Detalhamento do Faturamento Proporcional (Desativações no Mês)"):
                     if not df_desativados.empty:
-                        st.dataframe(df_desativados[['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Dias a Faturar', 'Valor Unitario', 'Valor a Faturar']], use_container_width=True, hide_index=True)
+                        st.dataframe(
+                            df_desativados[['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Dias a Faturar', 'Valor Unitario', 'Valor a Faturar']],
+                            use_container_width=True, hide_index=True
+                        )
                     else:
                         st.info("Nenhum terminal desativado neste período.")
                 
                 with st.expander("Detalhamento do Faturamento Cheio"):
                     if not df_cheio.empty:
-                        st.dataframe(df_cheio[['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Valor a Faturar']], use_container_width=True, hide_index=True)
+                        st.dataframe(
+                            df_cheio[['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Valor a Faturar']],
+                            use_container_width=True, hide_index=True
+                        )
                     else:
                         st.info("Nenhum terminal com faturamento cheio neste período.")
 
