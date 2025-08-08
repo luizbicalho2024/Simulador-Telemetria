@@ -16,29 +16,25 @@ if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. FUNÇÕES DE APOIO (COM LÓGICA DE COLUNAS MELHORADA) ---
+# --- 2. FUNÇÕES DE APOIO ---
 def is_valid_email(email_text):
-    """Valida se uma string tem o formato de um e-mail."""
-    if not isinstance(email_text, str):
-        return False
+    if not isinstance(email_text, str): return False
     email_text = email_text.strip()
-    if not email_text or email_text.lower() in ['e-mail', 'email', 'cpf/cnpj']:
-        return False
+    if not email_text or email_text.lower() in ['e-mail', 'email', 'cpf/cnpj']: return False
     email_regex = re.compile(r'[^@\s]+@[^@\s]+\.[^@\s]+')
     return re.fullmatch(email_regex, email_text) is not None
 
 @st.cache_data
-def processar_planilha_final(uploaded_file):
-    """Processa a planilha de clientes para extrair e organizar os dados."""
+def processar_planilha_final(uploaded_file, header_row):
     try:
-        df = pd.read_excel(uploaded_file, header=10)
+        # Lê a planilha usando a linha de cabeçalho fornecida pelo utilizador
+        df = pd.read_excel(uploaded_file, header=header_row - 1)
+        
         df = df.loc[:, ~df.columns.str.contains('^Unnamed', na=False)]
         df.dropna(axis='rows', how='all', inplace=True)
         
         df.columns = df.columns.str.strip().str.lower()
         
-        # ***** CORREÇÃO PRINCIPAL AQUI *****
-        # Adiciona mais variações de nomes de coluna para tornar o script mais robusto
         rename_map = {
             'razão social': 'nome_cliente', 'nome do cliente': 'nome_cliente',
             'cnpj': 'cpf_cnpj', 'cpf/cnpj': 'cpf_cnpj',
@@ -48,7 +44,7 @@ def processar_planilha_final(uploaded_file):
         df.rename(columns=rename_map, inplace=True)
 
         if 'tipo_cliente' not in df.columns:
-            st.error("ERRO CRÍTICO: A coluna 'Tipo Cliente' (ou uma variação como 'Tipo') não foi encontrada na linha 11.")
+            st.error(f"ERRO CRÍTICO: A coluna 'Tipo Cliente' não foi encontrada na linha {header_row}.")
             st.write("Colunas encontradas:", df.columns.tolist())
             return None
         
@@ -65,37 +61,27 @@ def processar_planilha_final(uploaded_file):
         all_clients_data = []
 
         for group_id, group_df in client_groups:
-            if group_df.empty:
-                continue
-
+            if group_df.empty: continue
             main_row = group_df.iloc[0]
-            
-            client_type_from_row = str(main_row.get('tipo_cliente')).lower()
-            final_type = 'Pessoa Física' if 'física' in client_type_from_row else 'Pessoa Jurídica'
+            final_type = 'Pessoa Física' if 'física' in str(main_row.get('tipo_cliente')).lower() else 'Pessoa Jurídica'
             
             client_data = {
-                'nome_cliente': main_row.get('nome_cliente'),
-                'cpf_cnpj': main_row.get('cpf_cnpj'),
-                'tipo_cliente': final_type,
-                'telefone': main_row.get('telefone')
+                'nome_cliente': main_row.get('nome_cliente'), 'cpf_cnpj': main_row.get('cpf_cnpj'),
+                'tipo_cliente': final_type, 'telefone': main_row.get('telefone')
             }
             
             valid_emails = []
-            user_rows = group_df.iloc[1:]
-            for _, user_row in user_rows.iterrows():
-                user_name_check = user_row.get('nome_cliente')
-                if pd.notna(user_name_check) and str(user_name_check).strip() != '':
-                    potential_email = user_row.get('cpf_cnpj')
-                    if is_valid_email(potential_email):
-                        valid_emails.append(potential_email.strip())
+            for _, user_row in group_df.iloc[1:].iterrows():
+                if pd.notna(user_row.get('nome_cliente')) and str(user_row.get('nome_cliente')).strip() != '':
+                    if is_valid_email(user_row.get('cpf_cnpj')):
+                        valid_emails.append(str(user_row.get('cpf_cnpj')).strip())
             
             for i, email in enumerate(valid_emails):
                 client_data[f'Email Usuário {i + 1}'] = email
             
             all_clients_data.append(client_data)
 
-        if not all_clients_data:
-            return None
+        if not all_clients_data: return None
 
         final_df = pd.DataFrame(all_clients_data)
         final_rename_map = {
@@ -105,22 +91,18 @@ def processar_planilha_final(uploaded_file):
         final_df.rename(columns=final_rename_map, inplace=True)
         
         cols_principais = ['Nome do Cliente', 'CPF/CNPJ', 'Tipo Cliente', 'Telefone']
-        email_cols = [col for col in final_df.columns if col.startswith('Email Usuário')]
-        cols_usuarios_ordenados = sorted(email_cols, key=lambda col: int(col.split(' ')[-1]))
+        email_cols = sorted([col for col in final_df.columns if col.startswith('Email Usuário')], key=lambda col: int(col.split(' ')[-1]))
         
-        return final_df[cols_principais + cols_usuarios_ordenados]
-
+        return final_df[cols_principais + email_cols]
     except Exception as e:
         st.error(f"UM ERRO INESPERADO OCORREU: {e}")
         return None
 
 def to_excel(df: pd.DataFrame):
-    """Converte um DataFrame para um ficheiro Excel em memória."""
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df.to_excel(writer, index=False, sheet_name='Clientes_Organizados')
     return output.getvalue()
-
 
 # --- 3. INTERFACE DA PÁGINA ---
 st.sidebar.image("imgs/v-c.png", width=120)
@@ -137,18 +119,22 @@ st.write(f"Usuário: {st.session_state.get('name', 'N/A')} ({st.session_state.ge
 st.write(f"Nível de Acesso: {st.session_state.get('role', 'Indefinido').capitalize()}")
 st.markdown("---")
 
-
 # --- 4. CONTEÚDO PRINCIPAL ---
-st.write(
-    "Faça o upload da sua planilha. A aplicação irá ler os dados a partir da linha 11, agrupar por 'Jurídica' ou 'Física', validar cada e-mail e ordenar as colunas de usuário."
+st.subheader("Configurações de Leitura")
+header_row_input = st.number_input(
+    "Indique o nº da linha do cabeçalho (Ex: 11):",
+    min_value=1, value=11,
+    help="Abra o seu ficheiro Excel e veja em que número de linha estão os títulos 'Razão Social', 'Tipo Cliente', etc."
 )
 
+st.subheader("Carregamento do Ficheiro")
 uploaded_file = st.file_uploader(
     "Selecione o arquivo da planilha", type=['xlsx'], key="organizer_upload"
 )
 
 if uploaded_file:
-    final_df = processar_planilha_final(uploaded_file)
+    st.markdown("---")
+    final_df = processar_planilha_final(uploaded_file, header_row_input)
     
     if final_df is not None and not final_df.empty:
         st.toast("Processamento concluído com sucesso!", icon="✅")
@@ -163,7 +149,6 @@ if uploaded_file:
             mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
     else:
-        # A mensagem de erro específica já é mostrada dentro da função
-        st.error("O processamento falhou ou não encontrou dados válidos. Verifique as mensagens de erro acima e o arquivo de origem.")
+        st.error("O processamento falhou. Verifique as mensagens de erro acima e as configurações do ficheiro.")
 else:
-    st.info("Aguardando o upload de um arquivo...")
+    st.info("Aguardando o upload de um arquivo para iniciar a análise.")
