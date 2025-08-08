@@ -23,22 +23,13 @@ def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
     """
     Lê a planilha, extrai informações, classifica, calcula e retorna os dataframes de faturamento.
     """
+    # Lê as primeiras 11 linhas para extrair informações do cabeçalho
     header_info = pd.read_excel(uploaded_file, header=None, nrows=11, engine='openpyxl')
     
     periodo_relatorio = "Período não identificado"
-    report_month, report_year = datetime.now().month, datetime.now().year
-    if len(header_info.columns) > 8:
-        data_inicio_raw = header_info.iloc[8, 8]
-        data_fim_raw = header_info.iloc[9, 8]
-        try:
-            dt_inicio = pd.to_datetime(data_inicio_raw)
-            report_month = dt_inicio.month
-            report_year = dt_inicio.year
-            data_fim = pd.to_datetime(data_fim_raw).strftime('%d/%m/%Y')
-            periodo_relatorio = f"{dt_inicio.strftime('%d/%m/%Y')} a {data_fim}"
-        except Exception:
-            periodo_relatorio = f"{header_info.iloc[8, 8]} a {header_info.iloc[9, 8]}"
-
+    # Determina o mês e ano do relatório a partir dos próprios dados mais tarde
+    
+    # Lê a tabela de dados principal
     df = pd.read_excel(uploaded_file, header=11, engine='openpyxl', dtype={'Equipamento': str})
     df = df.rename(columns={'Suspenso Dias Mês': 'Suspenso Dias Mes', 'Equipamento': 'Nº Equipamento'})
 
@@ -55,10 +46,22 @@ def processar_planilha_faturamento(uploaded_file, valor_gprs, valor_satelital):
     df['Dias Ativos Mês'] = pd.to_numeric(df['Dias Ativos Mês'], errors='coerce').fillna(0)
     df['Suspenso Dias Mes'] = pd.to_numeric(df['Suspenso Dias Mes'], errors='coerce').fillna(0)
 
+    # LÓGICA DE DETECÇÃO DE PERÍODO E FATURAMENTO CORRIGIDA
+    # Determina o mês e ano do relatório a partir dos dados de data
+    if not df[df['Data Desativação'].notna()].empty:
+        report_date = df[df['Data Desativação'].notna()]['Data Desativação'].iloc[0]
+    elif not df[df['Data Ativação'].notna()].empty:
+        report_date = df[df['Data Ativação'].notna()]['Data Ativação'].iloc[0]
+    else:
+        report_date = datetime.now() # Fallback para o mês atual
+    
+    report_month = report_date.month
+    report_year = report_date.year
+    dias_no_mes = pd.Timestamp(year=report_year, month=report_month, day=1).days_in_month
+    periodo_relatorio = report_date.strftime("%B de %Y") # Ex: Agosto de 2025
+
     df['Tipo'] = df['Nº Equipamento'].apply(lambda x: 'Satelital' if len(str(x).strip()) == 8 else 'GPRS')
     df['Valor Unitario'] = df['Tipo'].apply(lambda x: valor_satelital if x == 'Satelital' else valor_gprs)
-
-    dias_no_mes = pd.Timestamp(year=report_year, month=report_month, day=1).days_in_month
 
     # Separa os desativados primeiro
     df_desativados = df[df['Data Desativação'].notna()].copy()
@@ -99,7 +102,6 @@ def to_excel(df_cheio, df_ativados, df_desativados):
 def create_pdf_report(nome_cliente, periodo, totais, df_cheio, df_ativados, df_desativados):
     pdf = FPDF(orientation='L')
     pdf.add_page()
-    
     try:
         pdf.image("imgs/logo.png", x=10, y=8, w=50)
     except Exception:
@@ -287,28 +289,19 @@ if uploaded_file:
 
                 with st.expander("Detalhamento do Faturamento Proporcional (Ativações no Mês)"):
                     if not df_ativados.empty:
-                        st.dataframe(
-                            df_ativados[['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Data Ativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Dias a Faturar', 'Valor Unitario', 'Valor a Faturar']],
-                            use_container_width=True, hide_index=True
-                        )
+                        st.dataframe(df_ativados[['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Data Ativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Dias a Faturar', 'Valor Unitario', 'Valor a Faturar']], use_container_width=True, hide_index=True)
                     else:
                         st.info("Nenhum terminal ativado com faturamento proporcional neste período.")
                 
                 with st.expander("Detalhamento do Faturamento Proporcional (Desativações no Mês)"):
                     if not df_desativados.empty:
-                        st.dataframe(
-                            df_desativados[['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Dias a Faturar', 'Valor Unitario', 'Valor a Faturar']],
-                            use_container_width=True, hide_index=True
-                        )
+                        st.dataframe(df_desativados[['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Data Desativação', 'Dias Ativos Mês', 'Suspenso Dias Mes', 'Dias a Faturar', 'Valor Unitario', 'Valor a Faturar']], use_container_width=True, hide_index=True)
                     else:
                         st.info("Nenhum terminal desativado neste período.")
                 
                 with st.expander("Detalhamento do Faturamento Cheio"):
                     if not df_cheio.empty:
-                        st.dataframe(
-                            df_cheio[['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Valor a Faturar']],
-                            use_container_width=True, hide_index=True
-                        )
+                        st.dataframe(df_cheio[['Terminal', 'Nº Equipamento', 'Placa', 'Tipo', 'Valor a Faturar']], use_container_width=True, hide_index=True)
                     else:
                         st.info("Nenhum terminal com faturamento cheio neste período.")
 
