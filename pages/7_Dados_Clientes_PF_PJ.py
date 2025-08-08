@@ -16,7 +16,7 @@ if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. FUNÇÕES DE APOIO (REINTEGRADAS) ---
+# --- 2. FUNÇÕES DE APOIO (COM LÓGICA DE COLUNAS MELHORADA) ---
 def is_valid_email(email_text):
     """Valida se uma string tem o formato de um e-mail."""
     if not isinstance(email_text, str):
@@ -36,16 +36,20 @@ def processar_planilha_final(uploaded_file):
         df.dropna(axis='rows', how='all', inplace=True)
         
         df.columns = df.columns.str.strip().str.lower()
+        
+        # ***** CORREÇÃO PRINCIPAL AQUI *****
+        # Adiciona mais variações de nomes de coluna para tornar o script mais robusto
         rename_map = {
             'razão social': 'nome_cliente', 'nome do cliente': 'nome_cliente',
             'cnpj': 'cpf_cnpj', 'cpf/cnpj': 'cpf_cnpj',
-            'tipo cliente': 'tipo_cliente', 'tipo de cliente': 'tipo_cliente',
+            'tipo cliente': 'tipo_cliente', 'tipo de cliente': 'tipo_cliente', 'tipo': 'tipo_cliente',
             'telefone': 'telefone', 'fone': 'telefone'
         }
         df.rename(columns=rename_map, inplace=True)
 
         if 'tipo_cliente' not in df.columns:
-            st.error("ERRO CRÍTICO: A coluna 'Tipo Cliente' não foi encontrada na linha 11.")
+            st.error("ERRO CRÍTICO: A coluna 'Tipo Cliente' (ou uma variação como 'Tipo') não foi encontrada na linha 11.")
+            st.write("Colunas encontradas:", df.columns.tolist())
             return None
         
         df['tipo_cliente'] = df['tipo_cliente'].astype(str).str.strip()
@@ -150,7 +154,6 @@ if uploaded_file:
         st.toast("Processamento concluído com sucesso!", icon="✅")
         st.dataframe(final_df.fillna(''))
         
-        # Regista a ação de sucesso no log
         umdb.add_log(st.session_state["username"], "Processou Planilha de Clientes", details={"ficheiro": uploaded_file.name, "linhas_processadas": len(final_df)})
         
         st.download_button(
@@ -160,6 +163,7 @@ if uploaded_file:
             mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
     else:
-        st.error("O processamento falhou ou não encontrou dados válidos. Verifique as mensagens de erro e o arquivo de origem.")
+        # A mensagem de erro específica já é mostrada dentro da função
+        st.error("O processamento falhou ou não encontrou dados válidos. Verifique as mensagens de erro acima e o arquivo de origem.")
 else:
     st.info("Aguardando o upload de um arquivo...")
