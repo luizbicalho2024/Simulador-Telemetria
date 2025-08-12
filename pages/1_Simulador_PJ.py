@@ -1,7 +1,7 @@
 # pages/1_Simulador_PJ.py
 from io import BytesIO
 from datetime import datetime
-from decimal import Decimal # <-- LINHA ADICIONADA PARA CORRIGIR O ERRO
+from decimal import Decimal
 import streamlit as st
 from docxtpl import DocxTemplate
 import user_management_db as umdb
@@ -10,36 +10,43 @@ import user_management_db as umdb
 st.set_page_config(layout="wide", page_title="Simulador Pessoa Jurídica", page_icon="imgs/v-c.png")
 
 if not st.session_state.get("authentication_status"):
-    st.error("🔒 Acesso Negado!"); st.stop()
+    st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
+    st.stop()
 
 # --- 2. CARREGAMENTO DE PREÇOS E ESTADO ---
 pricing_config = umdb.get_pricing_config()
 PLANOS_PJ = {k: {p: Decimal(str(v)) for p, v in val.items()} for k, v in pricing_config.get("PLANOS_PJ", {}).items()}
 PRODUTOS_PJ_DESCRICAO = pricing_config.get("PRODUTOS_PJ_DESCRICAO", {})
 
+# Inicializa o estado da página para guardar os resultados da simulação
 if 'pj_results' not in st.session_state:
     st.session_state.pj_results = {}
 
 # --- 3. FUNÇÃO AUXILIAR PARA GERAR O DOCX ---
+@st.cache_data
 def gerar_proposta_docx(context):
+    """Gera uma proposta DOCX preenchida usando docxtpl e retorna um buffer de memória."""
     try:
         doc = DocxTemplate("Proposta Comercial e Intenção - Verdio.docx")
         doc.render(context)
-        buffer = BytesIO()
+        buffer = io.BytesIO()
         doc.save(buffer)
         buffer.seek(0)
         return buffer
     except Exception as e:
         st.error(f"Erro ao gerar o template DOCX: {e}")
+        st.info("Verifique se o ficheiro 'Proposta Comercial e Intenção - Verdio.docx' está na pasta raiz e se os placeholders estão corretos.")
         return None
 
 # --- 4. INTERFACE ---
 st.sidebar.image("imgs/v-c.png", width=120)
 if st.sidebar.button("🧹 Limpar Campos e Simulação", use_container_width=True, key="pj_clear"):
     keys_to_clear = [k for k in st.session_state if k.startswith("pj_")]
-    for k in keys_to_clear: del st.session_state[k]
+    for k in keys_to_clear:
+        del st.session_state[k]
     st.session_state.pj_results = {}
-    st.toast("Campos limpos!", icon="✨"); st.rerun()
+    st.toast("Campos limpos!", icon="✨")
+    st.rerun()
 
 try:
     st.image("imgs/logo.png", width=250)
@@ -71,14 +78,17 @@ with st.form("form_simulacao_pj"):
     submitted = st.form_submit_button("Simular e Registrar Proposta")
 
     if submitted:
-        if not all([empresa, responsavel, produtos_selecionados]):
-            st.warning("Preencha todos os campos e selecione pelo menos um produto.")
+        if not all([empresa, responsavel]):
+            st.warning("Preencha o Nome da Empresa e do Responsável.")
+        elif not produtos_selecionados:
+            st.warning("Selecione pelo menos um produto para simular.")
         else:
             soma_mensal_veiculo = sum(produtos_selecionados.values())
             valor_mensal_frota = soma_mensal_veiculo * Decimal(qtd_veiculos)
             meses_contrato = int(tempo_contrato.split()[0])
             valor_total_contrato = valor_mensal_frota * Decimal(meses_contrato)
             
+            # Guarda os resultados e o contexto na sessão para serem usados depois
             st.session_state.pj_results = {
                 'soma_mensal_veiculo': soma_mensal_veiculo,
                 'valor_mensal_frota': valor_mensal_frota,
@@ -92,8 +102,13 @@ with st.form("form_simulacao_pj"):
                     'SOMA_TOTAL_MENSAL_VEICULO': f"R$ {soma_mensal_veiculo:,.2f}"
                 }
             }
-            
-            proposal_log_data = {"tipo": "PJ", "empresa": empresa, "consultor": st.session_state.get('name', 'N/A'), "valor_total": float(valor_total_contrato)}
+
+            # Prepara os dados para a base de dados e chama a função de upsert
+            proposal_log_data = {
+                "tipo": "PJ", "empresa": empresa,
+                "consultor": st.session_state.get('name', 'N/A'),
+                "valor_total": float(valor_total_contrato)
+            }
             umdb.upsert_proposal(proposal_log_data)
             umdb.add_log(st.session_state["username"], "Simulou/Registrou Proposta PJ", details={"empresa": empresa, "valor": f"R$ {valor_total_contrato:,.2f}"})
 
@@ -109,7 +124,8 @@ if st.session_state.pj_results:
     docx_buffer = gerar_proposta_docx(res['context'])
     if docx_buffer:
         st.download_button(
-            label="📥 Baixar Proposta (.docx)", data=docx_buffer,
+            label="📥 Baixar Proposta (.docx)",
+            data=docx_buffer,
             file_name=f"Proposta_{res['context']['NOME_EMPRESA'].replace(' ', '_')}.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
