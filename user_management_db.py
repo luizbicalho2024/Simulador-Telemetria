@@ -149,26 +149,41 @@ def get_all_logs():
     return []
 
 def upsert_proposal(proposal_data: dict):
+    """
+    Atualiza uma proposta existente ou insere uma nova (upsert).
+    """
     proposals_collection = get_collection("proposals")
     if proposals_collection is not None:
         try:
             today_start = datetime.combine(datetime.now().date(), time.min)
             today_end = datetime.combine(datetime.now().date(), time.max)
+
             query_filter = {
-                "empresa": proposal_data.get("empresa"), "consultor": proposal_data.get("consultor"),
-                "tipo": proposal_data.get("tipo"), "data_geracao": {"$gte": today_start, "$lt": today_end}
+                "empresa": proposal_data.get("empresa"),
+                "consultor": proposal_data.get("consultor"),
+                "tipo": proposal_data.get("tipo"),
+                "data_geracao": {"$gte": today_start, "$lt": today_end}
             }
+
             update_data = {
-                "$set": {"valor_total": proposal_data.get("valor_total"), "data_geracao": datetime.now()},
+                "$set": {
+                    "valor_total": proposal_data.get("valor_total"),
+                    "data_geracao": datetime.now()
+                },
                 "$setOnInsert": {
-                    "empresa": proposal_data.get("empresa"), "consultor": proposal_data.get("consultor"), "tipo": proposal_data.get("tipo"),
+                    "empresa": proposal_data.get("empresa"),
+                    "consultor": proposal_data.get("consultor"),
+                    "tipo": proposal_data.get("tipo"),
                 }
             }
+            
             result = proposals_collection.update_one(query_filter, update_data, upsert=True)
+            
             if result.upserted_id is not None:
                 st.toast("Nova proposta registrada no dashboard!", icon="📊")
             else:
                 st.toast("Proposta de hoje foi atualizada no dashboard!", icon="🔄")
+                
             return True
         except Exception as e:
             print(f"ERROR: Falha ao fazer upsert da proposta: {e}")
