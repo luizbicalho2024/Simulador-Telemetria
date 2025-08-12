@@ -1,11 +1,10 @@
 # pages/1_Simulador_PJ.py
-from io import BytesIO
+import io
 from datetime import datetime
 from decimal import Decimal
 import streamlit as st
-from docxtpl import DocxTemplate
+import docx # Usando a biblioteca python-docx
 import user_management_db as umdb
-import io
 
 # --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
 st.set_page_config(layout="wide", page_title="Simulador Pessoa Jurídica", page_icon="imgs/v-c.png")
@@ -22,31 +21,55 @@ PRODUTOS_PJ_DESCRICAO = pricing_config.get("PRODUTOS_PJ_DESCRICAO", {})
 if 'pj_results' not in st.session_state:
     st.session_state.pj_results = {}
 
-# --- 3. FUNÇÃO AUXILIAR PARA GERAR O DOCX ---
+# --- 3. NOVA FUNÇÃO PARA GERAR O DOCX ---
 @st.cache_data
-def gerar_proposta_docx(context):
-    """Gera uma proposta DOCX preenchida usando docxtpl e retorna um buffer de memória."""
+def gerar_proposta_docx_programaticamente(context):
+    """
+    Gera uma proposta DOCX preenchendo placeholders e construindo a tabela dinamicamente.
+    """
     try:
-        doc = DocxTemplate("Proposta Comercial e Intenção - Verdio.docx")
-        doc.render(context)
+        doc = docx.Document("Proposta Comercial e Intenção - Verdio.docx")
+
+        # Substitui placeholders de texto simples (parágrafos e tabelas)
+        for key, value in context.items():
+            placeholder = "{{" + key + "}}"
+            for paragraph in doc.paragraphs:
+                if placeholder in paragraph.text:
+                    paragraph.text = paragraph.text.replace(placeholder, str(value))
+            for table in doc.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        if placeholder in cell.text:
+                            cell.text = cell.text.replace(placeholder, str(value))
+
+        # Assumimos que a tabela de produtos é a primeira tabela do documento.
+        # Se houver outra tabela antes, este índice pode precisar de ser ajustado (ex: doc.tables[1])
+        tabela_produtos = doc.tables[0]
+
+        # Adiciona os produtos selecionados à tabela
+        for item in context.get('itens_proposta', []):
+            row_cells = tabela_produtos.add_row().cells
+            row_cells[0].text = item.get('nome', '')
+            row_cells[1].text = item.get('desc', '')
+            row_cells[2].text = item.get('preco', '')
+
+        # Salva o documento em memória
         buffer = io.BytesIO()
         doc.save(buffer)
         buffer.seek(0)
         return buffer
     except Exception as e:
-        st.error(f"Erro ao gerar o template DOCX: {e}")
-        st.info("Verifique se o ficheiro 'Proposta Comercial e Intenção - Verdio.docx' está na pasta raiz e se os placeholders (ex: {%tr for...%}) estão corretos.")
+        st.error(f"Erro ao gerar o documento DOCX: {e}")
+        st.info("Verifique se o ficheiro 'Proposta Comercial e Intenção - Verdio.docx' está na pasta raiz e se a tabela de produtos tem apenas o cabeçalho.")
         return None
 
 # --- 4. INTERFACE ---
 st.sidebar.image("imgs/v-c.png", width=120)
 if st.sidebar.button("🧹 Limpar Campos e Simulação", use_container_width=True, key="pj_clear"):
     keys_to_clear = [k for k in st.session_state if k.startswith("pj_")]
-    for k in keys_to_clear:
-        del st.session_state[k]
+    for k in keys_to_clear: del st.session_state[k]
     st.session_state.pj_results = {}
-    st.toast("Campos limpos!", icon="✨")
-    st.rerun()
+    st.toast("Campos limpos!", icon="✨"); st.rerun()
 
 try:
     st.image("imgs/logo.png", width=250)
@@ -78,10 +101,8 @@ with st.form("form_simulacao_pj"):
     submitted = st.form_submit_button("Simular e Registrar Proposta")
 
     if submitted:
-        if not all([empresa, responsavel]):
-            st.warning("Preencha o Nome da Empresa e do Responsável.")
-        elif not produtos_selecionados:
-            st.warning("Selecione pelo menos um produto para simular.")
+        if not all([empresa, responsavel, produtos_selecionados]):
+            st.warning("Preencha todos os campos e selecione pelo menos um produto.")
         else:
             soma_mensal_veiculo = sum(produtos_selecionados.values())
             valor_mensal_frota = soma_mensal_veiculo * Decimal(qtd_veiculos)
@@ -115,7 +136,7 @@ if st.session_state.pj_results:
     st.info(f"**Valor Mensal Total (Frota):** R$ {res['valor_mensal_frota']:,.2f}")
     st.info(f"**Valor Total do Contrato:** R$ {res['valor_total_contrato']:,.2f}")
 
-    docx_buffer = gerar_proposta_docx(res['context'])
+    docx_buffer = gerar_proposta_docx_programaticamente(res['context'])
     if docx_buffer:
         st.download_button(
             label="📥 Baixar Proposta (.docx)", data=docx_buffer,
