@@ -1,7 +1,7 @@
 # pages/1_Simulador_PJ.py
 from io import BytesIO
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal # <-- LINHA ADICIONADA PARA CORRIGIR O ERRO
 import streamlit as st
 from docxtpl import DocxTemplate
 import user_management_db as umdb
