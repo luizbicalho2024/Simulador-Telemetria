@@ -10,8 +10,7 @@ import user_management_db as umdb
 st.set_page_config(layout="wide", page_title="Simulador Pessoa Jurídica", page_icon="imgs/v-c.png")
 
 if not st.session_state.get("authentication_status"):
-    st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
-    st.stop()
+    st.error("🔒 Acesso Negado!"); st.stop()
 
 # --- 2. CARREGAMENTO DE PREÇOS E ESTADO ---
 pricing_config = umdb.get_pricing_config()
