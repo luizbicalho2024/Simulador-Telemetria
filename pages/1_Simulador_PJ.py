@@ -1,7 +1,7 @@
 # pages/1_Simulador_PJ.py
 from io import BytesIO
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal # <-- LINHA ADICIONADA PARA CORRIGIR O ERRO
 import streamlit as st
 from docxtpl import DocxTemplate
 import user_management_db as umdb
@@ -18,7 +18,6 @@ pricing_config = umdb.get_pricing_config()
 PLANOS_PJ = {k: {p: Decimal(str(v)) for p, v in val.items()} for k, v in pricing_config.get("PLANOS_PJ", {}).items()}
 PRODUTOS_PJ_DESCRICAO = pricing_config.get("PRODUTOS_PJ_DESCRICAO", {})
 
-# Inicializa o estado da página para guardar os resultados da simulação
 if 'pj_results' not in st.session_state:
     st.session_state.pj_results = {}
 
@@ -88,7 +87,6 @@ with st.form("form_simulacao_pj"):
             meses_contrato = int(tempo_contrato.split()[0])
             valor_total_contrato = valor_mensal_frota * Decimal(meses_contrato)
             
-            # Guarda os resultados e o contexto na sessão para serem usados depois
             st.session_state.pj_results = {
                 'soma_mensal_veiculo': soma_mensal_veiculo,
                 'valor_mensal_frota': valor_mensal_frota,
@@ -102,13 +100,8 @@ with st.form("form_simulacao_pj"):
                     'SOMA_TOTAL_MENSAL_VEICULO': f"R$ {soma_mensal_veiculo:,.2f}"
                 }
             }
-
-            # Prepara os dados para a base de dados e chama a função de upsert
-            proposal_log_data = {
-                "tipo": "PJ", "empresa": empresa,
-                "consultor": st.session_state.get('name', 'N/A'),
-                "valor_total": float(valor_total_contrato)
-            }
+            
+            proposal_log_data = {"tipo": "PJ", "empresa": empresa, "consultor": st.session_state.get('name', 'N/A'), "valor_total": float(valor_total_contrato)}
             umdb.upsert_proposal(proposal_log_data)
             umdb.add_log(st.session_state["username"], "Simulou/Registrou Proposta PJ", details={"empresa": empresa, "valor": f"R$ {valor_total_contrato:,.2f}"})
 
@@ -124,8 +117,7 @@ if st.session_state.pj_results:
     docx_buffer = gerar_proposta_docx(res['context'])
     if docx_buffer:
         st.download_button(
-            label="📥 Baixar Proposta (.docx)",
-            data=docx_buffer,
+            label="📥 Baixar Proposta (.docx)", data=docx_buffer,
             file_name=f"Proposta_{res['context']['NOME_EMPRESA'].replace(' ', '_')}.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
