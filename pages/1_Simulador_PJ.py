@@ -5,7 +5,7 @@ from decimal import Decimal
 import streamlit as st
 from docxtpl import DocxTemplate
 import user_management_db as umdb
-import io # <-- LINHA ADICIONADA PARA CORRIGIR O ERRO
+import io
 
 # --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
 st.set_page_config(layout="wide", page_title="Simulador Pessoa Jurídica", page_icon="imgs/v-c.png")
@@ -35,7 +35,7 @@ def gerar_proposta_docx(context):
         return buffer
     except Exception as e:
         st.error(f"Erro ao gerar o template DOCX: {e}")
-        st.info("Verifique se o ficheiro 'Proposta Comercial e Intenção - Verdio.docx' está na pasta raiz e se os placeholders estão corretos.")
+        st.info("Verifique se o ficheiro 'Proposta Comercial e Intenção - Verdio.docx' está na pasta raiz e se os placeholders (ex: {%tr for...%}) estão corretos.")
         return None
 
 # --- 4. INTERFACE ---
