@@ -1,7 +1,7 @@
 # pages/1_Simulador_PJ.py
 from io import BytesIO
 from datetime import datetime
-from decimal import Decimal # <-- LINHA ADICIONADA PARA CORRIGIR O ERRO
+from decimal import Decimal
 import streamlit as st
 from docxtpl import DocxTemplate
 import user_management_db as umdb
@@ -14,7 +14,8 @@ if not st.session_state.get("authentication_status"):
 
 # --- 2. CARREGAMENTO DE PREÇOS E ESTADO ---
 pricing_config = umdb.get_pricing_config()
-PLANOS_PJ = {k: {p: Decimal(str(v)) for p, v in val.items()} for k, v in pricing_config.get("PLANOS_PJ", {}).items()}
+# A correção do NameError está aqui: 'val.items()' foi trocado por 'v.items()'
+PLANOS_PJ = {k: {p: Decimal(str(v_inner)) for p, v_inner in v.items()} for k, v in pricing_config.get("PLANOS_PJ", {}).items()}
 PRODUTOS_PJ_DESCRICAO = pricing_config.get("PRODUTOS_PJ_DESCRICAO", {})
 
 if 'pj_results' not in st.session_state:
@@ -23,7 +24,6 @@ if 'pj_results' not in st.session_state:
 # --- 3. FUNÇÃO AUXILIAR PARA GERAR O DOCX ---
 @st.cache_data
 def gerar_proposta_docx(context):
-    """Gera uma proposta DOCX preenchida usando docxtpl e retorna um buffer de memória."""
     try:
         doc = DocxTemplate("Proposta Comercial e Intenção - Verdio.docx")
         doc.render(context)
@@ -33,18 +33,15 @@ def gerar_proposta_docx(context):
         return buffer
     except Exception as e:
         st.error(f"Erro ao gerar o template DOCX: {e}")
-        st.info("Verifique se o ficheiro 'Proposta Comercial e Intenção - Verdio.docx' está na pasta raiz e se os placeholders estão corretos.")
         return None
 
 # --- 4. INTERFACE ---
 st.sidebar.image("imgs/v-c.png", width=120)
 if st.sidebar.button("🧹 Limpar Campos e Simulação", use_container_width=True, key="pj_clear"):
     keys_to_clear = [k for k in st.session_state if k.startswith("pj_")]
-    for k in keys_to_clear:
-        del st.session_state[k]
+    for k in keys_to_clear: del st.session_state[k]
     st.session_state.pj_results = {}
-    st.toast("Campos limpos!", icon="✨")
-    st.rerun()
+    st.toast("Campos limpos!", icon="✨"); st.rerun()
 
 try:
     st.image("imgs/logo.png", width=250)
@@ -76,10 +73,8 @@ with st.form("form_simulacao_pj"):
     submitted = st.form_submit_button("Simular e Registrar Proposta")
 
     if submitted:
-        if not all([empresa, responsavel]):
-            st.warning("Preencha o Nome da Empresa e do Responsável.")
-        elif not produtos_selecionados:
-            st.warning("Selecione pelo menos um produto para simular.")
+        if not all([empresa, responsavel, produtos_selecionados]):
+            st.warning("Preencha todos os campos e selecione pelo menos um produto.")
         else:
             soma_mensal_veiculo = sum(produtos_selecionados.values())
             valor_mensal_frota = soma_mensal_veiculo * Decimal(qtd_veiculos)
