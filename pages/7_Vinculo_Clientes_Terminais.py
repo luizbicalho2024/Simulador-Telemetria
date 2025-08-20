@@ -1,4 +1,4 @@
-# pages/Vinculo_Clientes_Terminais.py
+# pages/🔗_Vinculo_Clientes_Terminais.py
 import streamlit as st
 import pandas as pd
 import user_management_db as umdb
@@ -24,10 +24,14 @@ def processar_vinculos(file_clientes, file_rastreadores):
     # Lê a planilha de rastreadores para criar um mapa de Serial -> Modelo
     df_rastreadores = pd.read_excel(file_rastreadores, header=11, engine='openpyxl')
     df_rastreadores = df_rastreadores.rename(columns={'Nº Série': 'Rastreador', 'Modelo': 'Modelo_Rastreador'})
+    df_rastreadores.dropna(subset=['Rastreador'], inplace=True)
+    df_rastreadores['Rastreador'] = df_rastreadores['Rastreador'].astype(str)
     mapa_modelos = df_rastreadores.set_index('Rastreador')['Modelo_Rastreador'].to_dict()
 
     # Lê a planilha de clientes
     df_clientes_raw = pd.read_excel(file_clientes, header=11, engine='openpyxl')
+    
+    # Remove colunas completamente vazias que o Excel por vezes cria
     df_clientes_raw = df_clientes_raw.loc[:, ~df_clientes_raw.columns.str.contains('^Unnamed', na=False)]
     df_clientes_raw.dropna(how='all', inplace=True)
 
@@ -37,11 +41,12 @@ def processar_vinculos(file_clientes, file_rastreadores):
 
     for index, row in df_clientes_raw.iterrows():
         tipo_cliente = str(row.get('Tipo Cliente', '')).strip()
+        nome_cliente = str(row.get('Nome do Cliente', '')).strip()
         
         # Verifica se é uma nova linha de cliente (marcador 'Jurídica' ou 'Física')
         if 'Jurídica' in tipo_cliente or 'Física' in tipo_cliente:
             cliente_atual = {
-                'Nome do Cliente': row.get('Nome do Cliente'),
+                'Nome do Cliente': nome_cliente,
                 'CPF/CNPJ': row.get('CPF/CNPJ'),
                 'Tipo de Cliente': tipo_cliente
             }
