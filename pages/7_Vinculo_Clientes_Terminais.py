@@ -60,6 +60,7 @@ def processar_vinculos(file_clientes, file_rastreadores):
         for index, row in df_clientes_proc.iterrows():
             tipo_cliente = str(row.get('Tipo de Cliente', '')).strip()
             
+            # Se a linha define um novo cliente
             if 'Jurídica' in tipo_cliente or 'Física' in tipo_cliente:
                 cliente_atual = {
                     'Nome do Cliente': row.get('Nome do Cliente'),
@@ -67,6 +68,7 @@ def processar_vinculos(file_clientes, file_rastreadores):
                     'Tipo de Cliente': tipo_cliente
                 }
             
+            # Se a linha contém um terminal, associa ao último cliente encontrado
             if pd.notna(row.get('Terminal')) and cliente_atual:
                 registos_consolidados.append({
                     **cliente_atual,
