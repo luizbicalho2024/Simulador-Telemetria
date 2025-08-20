@@ -24,10 +24,10 @@ def processar_vinculos(file_clientes, file_rastreadores):
     try:
         # Lê a planilha de rastreadores para criar um mapa de Serial -> Modelo
         df_rastreadores = pd.read_excel(file_rastreadores, header=11, engine='openpyxl')
-        df_rastreadores = df_rastreadores.rename(columns={'Nº Série': 'Rastreador_Serial', 'Modelo': 'Modelo_Rastreador'})
-        df_rastreadores.dropna(subset=['Rastreador_Serial'], inplace=True)
-        df_rastreadores['Rastreador_Serial'] = df_rastreadores['Rastreador_Serial'].astype(str)
-        mapa_modelos = df_rastreadores.set_index('Rastreador_Serial')['Modelo_Rastreador'].to_dict()
+        df_rastreadores = df_rastreadores.rename(columns={'Nº Série': 'Rastreador', 'Modelo': 'Modelo_Rastreador'})
+        df_rastreadores.dropna(subset=['Rastreador'], inplace=True)
+        df_rastreadores['Rastreador'] = df_rastreadores['Rastreador'].astype(str)
+        mapa_modelos = df_rastreadores.set_index('Rastreador')['Modelo_Rastreador'].to_dict()
 
         # Lê a planilha de clientes sem cabeçalho para processar a estrutura aninhada
         df_clientes_raw = pd.read_excel(file_clientes, header=None, engine='openpyxl')
@@ -38,9 +38,8 @@ def processar_vinculos(file_clientes, file_rastreadores):
         # Encontra o índice da linha do cabeçalho principal
         header_row_index = -1
         for i, row in df_clientes_raw.head(20).iterrows():
-            # Procura por uma linha que contenha os cabeçalhos esperados
-            row_values = [str(v).lower() for v in row.values]
-            if 'nome do cliente' in row_values and 'cpf/cnpj' in row_values:
+            row_str = ' '.join(map(str, row.values)).lower()
+            if 'nome do cliente' in row_str and 'cpf/cnpj' in row_str:
                 header_row_index = i
                 break
         
