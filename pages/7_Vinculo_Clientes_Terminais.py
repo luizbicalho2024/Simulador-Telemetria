@@ -29,12 +29,12 @@ def processar_vinculos(file_clientes, file_rastreadores):
         df_rastreadores['Rastreador_Serial'] = df_rastreadores['Rastreador_Serial'].astype(str)
         mapa_modelos = df_rastreadores.set_index('Rastreador_Serial')['Modelo_Rastreador'].to_dict()
 
-        # Lê a planilha de clientes
+        # Lê a planilha de clientes sem cabeçalho para processar a estrutura aninhada
         df_clientes_raw = pd.read_excel(file_clientes, header=None, engine='openpyxl')
         
         registos_consolidados = []
         cliente_atual = {}
-
+        
         # Encontra o índice da linha do cabeçalho principal
         header_row_index = -1
         for i, row in df_clientes_raw.head(20).iterrows():
@@ -44,9 +44,10 @@ def processar_vinculos(file_clientes, file_rastreadores):
                 break
         
         if header_row_index == -1:
-            return None # Não encontrou o cabeçalho
+            st.error("Não foi possível encontrar a linha de cabeçalho (com 'Nome do Cliente', 'CPF/CNPJ') no `relatorio_clientes.xlsx`.")
+            return None
         
-        # Define as colunas a partir da linha encontrada
+        # Define as colunas a partir da linha encontrada e remove o lixo do topo
         df_clientes_proc = df_clientes_raw.copy()
         df_clientes_proc.columns = df_clientes_raw.iloc[header_row_index]
         df_clientes_proc = df_clientes_proc.iloc[header_row_index + 1:].reset_index(drop=True)
@@ -80,6 +81,9 @@ def processar_vinculos(file_clientes, file_rastreadores):
         df_final['Modelo'] = df_final['Rastreador'].map(mapa_modelos).fillna('Modelo não encontrado')
         
         return df_final[['Nome do Cliente', 'CPF/CNPJ', 'Tipo de Cliente', 'Terminal', 'Rastreador', 'Modelo']]
+    except KeyError as e:
+        st.error(f"Erro de Coluna: Não foi possível encontrar a coluna '{e}'. Verifique se os nomes das colunas nos seus ficheiros correspondem ao esperado.")
+        return None
     except Exception as e:
         st.error(f"Ocorreu um erro inesperado ao processar os ficheiros: {e}")
         return None
@@ -119,6 +123,7 @@ if uploaded_clientes and uploaded_rastreadores:
         
         if df_resultado is not None and not df_resultado.empty:
             st.success(f"Análise concluída! Foram encontrados **{len(df_resultado)}** terminais vinculados a clientes.")
+            
             st.subheader("Tabela de Terminais Vinculados por Cliente")
             st.dataframe(df_resultado, use_container_width=True, hide_index=True)
         else:
