@@ -50,6 +50,13 @@ def processar_vinculos(file_clientes, file_rastreadores):
                 'CPF/CNPJ': row.get('CPF/CNPJ'),
                 'Tipo de Cliente': tipo_cliente
             }
+            # Adiciona o terminal se ele estiver na mesma linha do cliente
+            if pd.notna(row.get('Terminal')):
+                registos_consolidados.append({
+                    **cliente_atual,
+                    'Terminal': row.get('Terminal'),
+                    'Rastreador': str(row.get('Rastreador'))
+                })
         # Se for uma linha de terminal, associa ao cliente atual
         elif pd.notna(row.get('Terminal')) and cliente_atual:
             registos_consolidados.append({
