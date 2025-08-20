@@ -1,6 +1,7 @@
 # pages/Comandos_Rastreadores.py
 import streamlit as st
 import user_management_db as umdb
+from twilio_utils import send_sms # Importa a nossa nova função
 
 # --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
 st.set_page_config(
@@ -24,143 +25,80 @@ try:
     st.image("imgs/logo.png", width=250)
 except: pass
 
-st.markdown("<h1 style='text-align: center; color: #006494;'>Gerador de Comandos Suntech</h1>", unsafe_allow_html=True)
-st.markdown("---")
-st.write(f"Usuário: {st.session_state.get('name', 'N/A')} ({st.session_state.get('username', 'N/A')})")
-st.write(f"Nível de Acesso: {st.session_state.get('role', 'Indefinido').capitalize()}")
+st.markdown("<h1 style='text-align: center; color: #006494;'>Gerador e Enviador de Comandos Suntech</h1>", unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("🔧 Configuração Principal")
 serial = st.sidebar.text_input("📟 Insira o Serial do Equipamento:", key="cmd_serial")
+numero_chip = st.sidebar.text_input("📱 Insira o Nº do Chip (SIM Card):", key="cmd_chip", help="Insira o número com o DDD, ex: 69912345678")
 
 if not serial or len(serial) < 5:
     st.info("Por favor, insira um número de série válido na barra lateral para gerar os comandos.")
     st.stop()
 
-st.success(f"A gerar comandos para o serial: **{serial}**")
+# --- FUNÇÃO PARA EXIBIR COMANDO E BOTÃO ---
+def exibir_comando_com_botao(titulo, comando, key_sufixo):
+    st.markdown(f"##### {titulo}")
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.code(comando, language='text')
+    with col2:
+        if st.button("📲 Enviar SMS", key=f"btn_{key_sufixo}", use_container_width=True):
+            if not numero_chip:
+                st.error("Por favor, insira o número do chip na barra lateral.")
+            else:
+                with st.spinner("A enviar SMS pela Twilio..."):
+                    sucesso, status_msg = send_sms(numero_chip, comando)
+                if sucesso:
+                    st.toast(status_msg, icon="✅")
+                else:
+                    st.error(status_msg)
 
 # --- 3. ABAS POR MODELO ---
-tab_st310u, tab_st300hd, tab_st4305, tab_st390 = st.tabs(["ST310U / ST340", "ST300HD (iButton)", "ST4305", "ST390"])
+st.success(f"A gerar comandos para o serial: **{serial}**")
+tab_st310u, tab_st4305, tab_st390 = st.tabs(["ST310U / ST340", "ST4305", "ST390"])
 
 with tab_st310u:
     st.header("Modelo ST310U / ST340")
-    
     with st.expander("⚙️ Configuração de Rede (IP, Porta e APN)", expanded=True):
         apn = st.text_input("APN:", value="allcom.claro.com.br", key="cmd_310_apn")
         user = st.text_input("Utilizador APN:", value="allcom", key="cmd_310_user")
         pwd = st.text_input("Senha APN:", value="allcom", key="cmd_310_pwd", type="password")
         ip1 = st.text_input("IP Primário:", value="54.94.190.167", key="cmd_310_ip1")
         porta1 = st.text_input("Porta Primária:", value="9601", key="cmd_310_porta1")
-        st.code(f"ST300NTW;{serial};02;1;{apn};{user};{pwd};{ip1};{porta1};;;")
-
-    with st.expander("🕒 Intervalos de Comunicação (Report)", expanded=True):
-        st.markdown("##### Intervalo Padrão (Carro)")
-        st.caption("Reporta a cada 120s com ignição ligada e a cada 3600s com ignição desligada.")
-        st.code(f'ST300RPT;{serial};02;3600;120;3600;1;0;600;0;0;0')
-        st.markdown("##### Intervalo para Motos (Otimizado)")
-        st.caption("Reporta a cada 60s com ignição ligada e desliga o report com ignição desligada.")
-        st.code(f'ST300RPT;{serial};02;0;60;0;1;0;0;0;0;0')
-
-    with st.expander("🛡️ Segurança e Anti-Furto"):
-        st.markdown("##### Ativar Anti-Furto por Afastamento do V-ALRT")
-        st.code(f"ST300ATM;{serial};02;1;1")
-        st.markdown("##### Desativar Anti-Furto por Afastamento do V-ALRT")
-        st.code(f"ST300ATM;{serial};02;0;1")
-        st.markdown("##### Ativar Bloqueio Progressivo")
-        st.caption("A saída 1 será ativada 3 minutos após o comando de bloqueio.")
-        st.code(f"ST300LCK;{serial};02;1;180;1")
-        st.markdown("##### Desativar Bloqueio Progressivo")
-        st.code(f"ST300LCK;{serial};02;0;180;1")
-
-    with st.expander("⚡ Entradas e Saídas (IO)"):
-        st.markdown("##### Ativar Saída 1 (Bloqueio)")
-        st.code(f"ST300CMD;{serial};02;Enable1")
-        st.markdown("##### Desativar Saída 1 (Desbloqueio)")
-        st.code(f"ST300CMD;{serial};02;Disable1")
+        comando_ntw = f"ST300NTW;{serial};02;1;{apn};{user};{pwd};{ip1};{porta1};;;"
+        exibir_comando_com_botao("Comando de Rede", comando_ntw, "ntw_310")
 
     with st.expander("▶️ Ações Remotas"):
-        st.markdown("##### Solicitar Posição Atual")
-        st.code(f"ST300CMD;{serial};02;StatusReq")
-        st.markdown("##### Reiniciar o Equipamento (Reboot)")
-        st.code(f"ST300CMD;{serial};02;Reboot")
-        st.markdown("##### Apagar Memória de Eventos")
-        st.code(f"ST300CMD;{serial};02;EraseAll")
-
-    with st.expander("🔧 Outras Configurações Essenciais"):
-        st.markdown("##### Habilitar/Desabilitar Transmissão de Dados")
-        st.code(f"ST300SVC;{serial};02;1;180;0;0;0;1;1;0;1;0;0;1;0")
-        st.markdown("##### Desativar protocolo ZIP")
-        st.code(f"ST300SVC;{serial};318;1;300;0;0;0;0;1;0;1;0;0;1;0")
-        st.markdown("##### Protocolo TCP/IP")
-        st.code(f"ST300ADP;{serial};02;T;T;1;;0;0;0;0;0;0")
-        st.markdown("##### Configuração de Eventos Padrão")
-        st.code(f"ST300EVT;{serial};02;0;10;0;12;3;9;30;20;0;1;7;1;1;0;0;0;0;0;0;9;9;0;0;0")
-        st.markdown("##### Configuração LIFO")
-        st.code(f"ST300NPT;{serial};02;0.0;1;30;0;0;300;300;5;10;100;10;180;100;1")
-        st.markdown("##### Configuração FIFO")
-        st.code(f"ST300NPT;{serial};02;0.0;0;30;0;0;300;300;5;10;100;10;180;100;1")
-
-with tab_st300hd:
-    st.header("Modelo ST300HD (Identificador de Motorista)")
-    with st.expander("Gestão de Motoristas (iButton)", expanded=True):
-        id_motorista = st.text_input("ID do Motorista (ex: 101):", key="cmd_300_id")
-        serial_ibutton = st.text_input("Serial do iButton (16 dígitos hex):", key="cmd_300_ibutton")
-        if id_motorista and serial_ibutton:
-            st.markdown("##### Adicionar Motorista")
-            st.code(f'ST300HAD;{serial};02;{id_motorista};{serial_ibutton}')
-            st.markdown("##### Remover Motorista")
-            st.code(f'ST300HRD;{serial};02;{id_motorista}')
+        exibir_comando_com_botao("Solicitar Posição Atual", f"ST300POS;{serial};02", "pos_310")
+        exibir_comando_com_botao("Reiniciar o Equipamento (Reboot)", f"ST300RST;{serial};02", "rst_310")
+        exibir_comando_com_botao("Ativar Saída 1 (Bloqueio)", f"ST300OUT;{serial};02;1;1", "out1_on_310")
+        exibir_comando_com_botao("Desativar Saída 1 (Desbloqueio)", f"ST300OUT;{serial};02;1;0", "out1_off_310")
 
 with tab_st4305:
     st.header("Modelo ST4305")
-    with st.expander("Configuração de Rede (APN, IP e Porta)", expanded=True):
+    with st.expander("⚙️ Configuração de Rede (APN, IP e Porta)", expanded=True):
         apn_4305 = st.text_input("APN:", value="allcomiot.vivo.com.br", key="cmd_4305_apn")
         user_4305 = st.text_input("Utilizador APN:", value="allcom", key="cmd_4305_user")
         pwd_4305 = st.text_input("Senha APN:", value="allcom", key="cmd_4305_pwd", type="password")
-        st.markdown("##### APN")
-        st.code(f'PRG;{serial};10;00#01;01#{apn_4305};02#{user_4305};03#{pwd_4305}')
-        st.markdown("##### IP e Porta")
-        st.code(f'PRG;{serial};10;05#54.94.190.167;06#9601;08#54.94.190.167;09#9601')
-
-    with st.expander("Intervalos e Ângulo"):
-        igon_4305 = st.number_input("Intervalo Ligado (Segundos):", value=120, key="cmd_4305_igon")
-        igoff_4305 = st.number_input("Intervalo Desligado (Segundos):", value=3600, key="cmd_4305_igoff")
-        ang_4305 = st.number_input("Ângulo (Graus):", value=45, key="cmd_4305_ang")
-        st.code(f'PRG;{serial};16;70#{igoff_4305};71#0;72#0;73#{igon_4305};74#0;75#0;76#0;77#0;78#0;79#120;80#0;81#{ang_4305};82#120;83#0;84#{ang_4305};85#120;86#0;87#{ang_4305}')
-
-    with st.expander("Comandos Diversos"):
-        st.markdown("##### Protocolo TCP e ZIP Desabilitado")
-        st.code(f'PRG;{serial};10;07#00;10#00;55#00')
-        st.markdown("##### Ignição Física")
-        st.code(f'PRG;{serial};17;00#01')
-        st.markdown("##### Ignição Virtual (Acelerômetro)")
-        st.code(f'PRG;{serial};17;00#03')
-        st.markdown("##### Reboot (Reiniciar)")
-        st.code(f'CMD;{serial};03;03')
-        st.markdown("##### Solicitar Posição")
-        st.code(f'CMD;{serial};03;01')
+        comando_apn = f'PRG;{serial};10;00#01;01#{apn_4305};02#{user_4305};03#{pwd_4305}'
+        comando_ip = f'PRG;{serial};10;05#54.94.190.167;06#9601;08#54.94.190.167;09#9601'
+        exibir_comando_com_botao("APN", comando_apn, "apn_4305")
+        exibir_comando_com_botao("IP e Porta", comando_ip, "ip_4305")
+    
+    with st.expander("▶️ Ações Remotas"):
+        exibir_comando_com_botao("Reboot (Reiniciar)", f'CMD;{serial};03;03', "reboot_4305")
+        exibir_comando_com_botao("Solicitar Posição", f'CMD;{serial};03;01', "pos_4305")
 
 with tab_st390:
     st.header("Modelo ST390")
-    with st.expander("Configuração de Rede (APN, IP e Porta)", expanded=True):
+    with st.expander("⚙️ Configuração de Rede (APN, IP e Porta)", expanded=True):
         apn_390 = st.text_input("APN:", value="allcom.claro.com.br", key="cmd_390_apn")
-        st.markdown("##### APN")
-        st.code(f'ST400CMD;{serial};;{apn_390};1')
-        st.markdown("##### IP e Porta")
-        st.code(f'ST400CMD;{serial};;54.94.190.167;9601;54.94.190.167;9601')
-    
-    with st.expander("Intervalos de Comunicação"):
-        st.markdown("##### Ignição Ligada")
-        st.code(f"ST400SET;{serial};;10;60")
-        st.markdown("##### Ignição Desligada")
-        st.code(f"ST400SET;{serial};;11;600")
-        st.markdown("##### Em Roaming")
-        st.code(f"ST400SET;{serial};;12;600")
-    
-    with st.expander("Comandos Diversos"):
-        st.markdown("##### Habilitar Roaming")
-        st.code(f"ST400SET;{serial};;30;1")
-        st.markdown("##### Ignição Física")
-        st.code(f"ST400SET;{serial};;3;1")
-        st.markdown("##### Habilitar Hodômetro")
-        st.code(f"ST400SET;{serial};;2;1")
+        comando_apn_390 = f'ST400CMD;{serial};;{apn_390};1'
+        comando_ip_390 = f'ST400CMD;{serial};;54.94.190.167;9601;54.94.190.167;9601'
+        exibir_comando_com_botao("APN", comando_apn_390, "apn_390")
+        exibir_comando_com_botao("IP e Porta", comando_ip_390, "ip_390")
+
+    with st.expander("▶️ Ações Remotas"):
+        # (Adicione aqui outros comandos de ação para o ST390, se necessário)
+        pass
