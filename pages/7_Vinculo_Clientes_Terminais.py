@@ -6,7 +6,7 @@ import user_management_db as umdb
 # --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
 st.set_page_config(
     layout="wide",
-    page_title="Vínculo de Clientes e Terminais",
+    page_title="Diagnóstico de Vínculos",
     page_icon="🔗"
 )
 
@@ -14,68 +14,7 @@ if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. FUNÇÃO AUXILIAR ---
-@st.cache_data
-def processar_vinculos(file_clientes, file_rastreadores):
-    """
-    Lê as duas planilhas, processa a estrutura aninhada dos clientes e
-    junta com as informações de modelo dos rastreadores.
-    """
-    # Lê a planilha de rastreadores para criar um mapa de Serial -> Modelo
-    df_rastreadores = pd.read_excel(file_rastreadores, header=11, engine='openpyxl')
-    df_rastreadores = df_rastreadores.rename(columns={'Nº Série': 'Rastreador', 'Modelo': 'Modelo_Rastreador'})
-    df_rastreadores.dropna(subset=['Rastreador'], inplace=True)
-    df_rastreadores['Rastreador'] = df_rastreadores['Rastreador'].astype(str)
-    mapa_modelos = df_rastreadores.set_index('Rastreador')['Modelo_Rastreador'].to_dict()
-
-    # Lê a planilha de clientes
-    df_clientes_raw = pd.read_excel(file_clientes, header=11, engine='openpyxl')
-    
-    # Remove colunas completamente vazias que o Excel por vezes cria
-    df_clientes_raw = df_clientes_raw.loc[:, ~df_clientes_raw.columns.str.contains('^Unnamed', na=False)]
-    df_clientes_raw.dropna(how='all', inplace=True)
-
-    # Processa a estrutura aninhada para criar uma lista limpa
-    registos_consolidados = []
-    cliente_atual = {}
-
-    for index, row in df_clientes_raw.iterrows():
-        tipo_cliente = str(row.get('Tipo Cliente', '')).strip()
-        nome_cliente = str(row.get('Nome do Cliente', '')).strip()
-        
-        # Verifica se é uma nova linha de cliente (marcador 'Jurídica' ou 'Física')
-        if 'Jurídica' in tipo_cliente or 'Física' in tipo_cliente:
-            cliente_atual = {
-                'Nome do Cliente': nome_cliente,
-                'CPF/CNPJ': row.get('CPF/CNPJ'),
-                'Tipo de Cliente': tipo_cliente
-            }
-            # Adiciona o terminal se ele estiver na mesma linha do cliente
-            if pd.notna(row.get('Terminal')):
-                registos_consolidados.append({
-                    **cliente_atual,
-                    'Terminal': row.get('Terminal'),
-                    'Rastreador': str(row.get('Rastreador'))
-                })
-        # Se for uma linha de terminal, associa ao cliente atual
-        elif pd.notna(row.get('Terminal')) and cliente_atual:
-            registos_consolidados.append({
-                **cliente_atual,
-                'Terminal': row.get('Terminal'),
-                'Rastreador': str(row.get('Rastreador'))
-            })
-
-    if not registos_consolidados:
-        return None
-
-    # Cria o DataFrame final e adiciona o modelo
-    df_final = pd.DataFrame(registos_consolidados)
-    df_final['Modelo'] = df_final['Rastreador'].map(mapa_modelos).fillna('Modelo não encontrado')
-    
-    # Retorna o DataFrame com as colunas na ordem desejada
-    return df_final[['Nome do Cliente', 'CPF/CNPJ', 'Tipo de Cliente', 'Terminal', 'Rastreador', 'Modelo']]
-
-# --- 3. INTERFACE DA PÁGINA ---
+# --- 2. INTERFACE DA PÁGINA ---
 st.sidebar.image("imgs/v-c.png", width=120)
 st.sidebar.title(f"Olá, {st.session_state.get('name', 'N/A')}! 👋")
 st.sidebar.markdown("---")
@@ -84,11 +23,11 @@ try:
     st.image("imgs/logo.png", width=250)
 except: pass
 
-st.markdown("<h1 style='text-align: center; color: #006494;'>🔗 Vínculo de Clientes e Terminais</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; color: #006494;'>🔗 Diagnóstico de Vínculos de Clientes e Terminais</h1>", unsafe_allow_html=True)
 st.markdown("---")
 
-# --- 4. UPLOAD DOS FICHEIROS ---
-st.subheader("Carregamento dos Relatórios da Etrac")
+# --- 3. UPLOAD DOS FICHEIROS ---
+st.subheader("Carregamento dos Relatórios para Diagnóstico")
 col1, col2 = st.columns(2)
 
 with col1:
@@ -107,22 +46,25 @@ with col2:
 
 st.markdown("---")
 
-# --- 5. ANÁLISE E EXIBIÇÃO ---
+# --- 4. ANÁLISE E EXIBIÇÃO DAS COLUNAS ---
 if uploaded_clientes and uploaded_rastreadores:
     try:
-        with st.spinner("A processar e a comparar as planilhas..."):
-            df_resultado = processar_vinculos(uploaded_clientes, uploaded_rastreadores)
+        st.subheader("Colunas Encontradas nos Ficheiros")
         
-        if df_resultado is not None and not df_resultado.empty:
-            st.success(f"Análise concluída! Foram encontrados **{len(df_resultado)}** terminais vinculados a clientes.")
-            
-            st.subheader("Tabela de Terminais Vinculados por Cliente")
-            st.dataframe(df_resultado, use_container_width=True, hide_index=True)
-        else:
-            st.warning("Não foram encontrados vínculos válidos entre os ficheiros. Verifique se as planilhas contêm os dados esperados.")
+        # Lê e exibe as colunas do relatório de clientes
+        with st.spinner("A ler o relatório de clientes..."):
+            df_clientes = pd.read_excel(uploaded_clientes, header=11, engine='openpyxl')
+            st.markdown("#### Colunas do `relatorio_clientes.xlsx`:")
+            st.write(df_clientes.columns.tolist())
+
+        # Lê e exibe as colunas do relatório de rastreadores
+        with st.spinner("A ler o relatório de rastreadores..."):
+            df_rastreadores = pd.read_excel(uploaded_rastreadores, header=11, engine='openpyxl')
+            st.markdown("#### Colunas do `relatorio_rastreador.xlsx`:")
+            st.write(df_rastreadores.columns.tolist())
 
     except Exception as e:
-        st.error(f"Ocorreu um erro ao processar os ficheiros: {e}")
-        st.info("Por favor, verifique se os ficheiros têm o formato e as colunas esperadas.")
+        st.error(f"Ocorreu um erro ao ler os ficheiros: {e}")
+        st.info("Por favor, verifique se os ficheiros não estão corrompidos e se o cabeçalho de ambos está na linha 12.")
 else:
-    st.info("Por favor, carregue ambos os ficheiros para iniciar a análise.")
+    st.info("Por favor, carregue ambos os ficheiros para iniciar o diagnóstico.")
