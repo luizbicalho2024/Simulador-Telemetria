@@ -2,12 +2,11 @@
 import streamlit as st
 import pandas as pd
 import user_management_db as umdb
-import json
 
 # --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
 st.set_page_config(
     layout="wide",
-    page_title="Diagnóstico de Vínculos",
+    page_title="Vínculo de Clientes e Terminais",
     page_icon="🔗"
 )
 
@@ -15,70 +14,83 @@ if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. FUNÇÃO DE PROCESSAMENTO PARA JSON ---
+# --- 2. FUNÇÃO AUXILIAR ---
 @st.cache_data
-def organizar_clientes_em_json(file_clientes):
+def processar_vinculos(file_clientes, file_rastreadores):
     """
-    Lê a planilha de clientes com estrutura aninhada e a transforma em um JSON organizado.
+    Lê as duas planilhas, processa a estrutura aninhada dos clientes e
+    junta com as informações de modelo dos rastreadores.
     """
     try:
+        # Lê a planilha de rastreadores para criar um mapa de Serial -> Modelo
+        df_rastreadores = pd.read_excel(file_rastreadores, header=11, engine='openpyxl')
+        df_rastreadores = df_rastreadores.rename(columns={'Nº Série': 'Rastreador_Serial', 'Modelo': 'Modelo_Rastreador'})
+        df_rastreadores.dropna(subset=['Rastreador_Serial'], inplace=True)
+        df_rastreadores['Rastreador_Serial'] = df_rastreadores['Rastreador_Serial'].astype(str)
+        mapa_modelos = df_rastreadores.set_index('Rastreador_Serial')['Modelo_Rastreador'].to_dict()
+
+        # Lê a planilha de clientes sem cabeçalho para processar a estrutura aninhada
         df_clientes_raw = pd.read_excel(file_clientes, header=None, engine='openpyxl')
         
-        clientes_organizados = []
-        cliente_atual_dict = None
+        registos_consolidados = []
+        cliente_atual = {}
         
-        # Encontra o índice da linha do cabeçalho principal para saber onde os dados começam
+        # Encontra o índice da linha do cabeçalho principal
         header_row_index = -1
         for i, row in df_clientes_raw.head(20).iterrows():
-            row_str = ' '.join(map(str, row.values)).lower()
-            if 'nome do cliente' in row_str and 'cpf/cnpj' in row_str:
+            # Procura por uma linha que contenha os cabeçalhos esperados
+            row_values = [str(v).lower() for v in row.values]
+            if 'nome do cliente' in row_values and 'cpf/cnpj' in row_values:
                 header_row_index = i
                 break
         
         if header_row_index == -1:
-            st.error("Diagnóstico falhou: Não foi possível encontrar a linha de cabeçalho (com 'Nome do Cliente', 'CPF/CNPJ') no `relatorio_clientes.xlsx`.")
+            st.error("Não foi possível encontrar a linha de cabeçalho (com 'Nome do Cliente', 'CPF/CNPJ') no `relatorio_clientes.xlsx`.")
             return None
+        
+        # Define as colunas a partir da linha encontrada e remove o lixo do topo
+        df_clientes_proc = df_clientes_raw.copy()
+        df_clientes_proc.columns = df_clientes_raw.iloc[header_row_index]
+        df_clientes_proc = df_clientes_proc.iloc[header_row_index + 1:].reset_index(drop=True)
+        
+        # Padroniza nomes de colunas
+        df_clientes_proc.columns = df_clientes_proc.columns.str.strip()
+        df_clientes_proc = df_clientes_proc.rename(columns={'Tipo Cliente': 'Tipo de Cliente'})
 
-        # Itera sobre as linhas de dados reais
-        for index, row in df_clientes_raw.iloc[header_row_index + 1:].iterrows():
-            # Converte a linha para uma lista de strings para facilitar a verificação
-            row_values = [str(cell).strip() for cell in row.values]
+        # Processa a estrutura aninhada
+        for index, row in df_clientes_proc.iterrows():
+            tipo_cliente = str(row.get('Tipo de Cliente', '')).strip()
             
-            # Heurística para identificar uma linha de cliente:
-            # A coluna 'Tipo Cliente' (índice 3 do cabeçalho) tem 'Jurídica' ou 'Física'
-            tipo_cliente_str = row_values[3]
-            if 'Jurídica' in tipo_cliente_str or 'Física' in tipo_cliente_str:
-                # Se já tínhamos um cliente a ser processado, guarda-o na lista final
-                if cliente_atual_dict:
-                    clientes_organizados.append(cliente_atual_dict)
-                
-                # Inicia um novo cliente
-                cliente_atual_dict = {
-                    "Nome do Cliente": row_values[1],
-                    "CPF/CNPJ": row_values[2],
-                    "Tipo de Cliente": tipo_cliente_str,
-                    "Terminais": []
+            # Se a linha define um novo cliente
+            if 'Jurídica' in tipo_cliente or 'Física' in tipo_cliente:
+                cliente_atual = {
+                    'Nome do Cliente': row.get('Nome do Cliente'),
+                    'CPF/CNPJ': row.get('CPF/CNPJ'),
+                    'Tipo de Cliente': tipo_cliente
                 }
             
-            # Heurística para identificar uma linha de terminal:
-            # A coluna 'Terminal' (índice 0 do cabeçalho de terminais) não está vazia ou com 'nan'
-            # E já temos um cliente atual identificado
-            terminal_str = row_values[0]
-            if cliente_atual_dict and terminal_str != 'nan' and 'Terminal' not in terminal_str:
-                 cliente_atual_dict["Terminais"].append({
-                     "Terminal": terminal_str,
-                     "Rastreador": row_values[4] # A coluna "Rastreador" é a 5ª na sub-linha
-                 })
+            # Se a linha contém um terminal, associa ao último cliente encontrado
+            if pd.notna(row.get('Terminal')) and cliente_atual:
+                registos_consolidados.append({
+                    **cliente_atual,
+                    'Terminal': row.get('Terminal'),
+                    'Rastreador': str(row.get('Rastreador'))
+                })
 
-        # Adiciona o último cliente processado à lista
-        if cliente_atual_dict:
-            clientes_organizados.append(cliente_atual_dict)
+        if not registos_consolidados:
+            return None
 
-        return clientes_organizados
-
-    except Exception as e:
-        st.error(f"Ocorreu um erro inesperado ao processar a planilha de clientes: {e}")
+        df_final = pd.DataFrame(registos_consolidados)
+        df_final['Modelo'] = df_final['Rastreador'].map(mapa_modelos).fillna('Modelo não encontrado')
+        
+        return df_final[['Nome do Cliente', 'CPF/CNPJ', 'Tipo de Cliente', 'Terminal', 'Rastreador', 'Modelo']]
+    except KeyError as e:
+        st.error(f"Erro de Coluna: Não foi possível encontrar a coluna '{e}'. Verifique se os nomes das colunas nos seus ficheiros correspondem ao esperado.")
         return None
+    except Exception as e:
+        st.error(f"Ocorreu um erro inesperado ao processar os ficheiros: {e}")
+        return None
+
 
 # --- 3. INTERFACE DA PÁGINA ---
 st.sidebar.image("imgs/v-c.png", width=120)
@@ -89,32 +101,39 @@ try:
     st.image("imgs/logo.png", width=250)
 except: pass
 
-st.markdown("<h1 style='text-align: center; color: #006494;'>🔗 Diagnóstico de Vínculos (JSON)</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; color: #006494;'>🔗 Vínculo de Clientes e Terminais</h1>", unsafe_allow_html=True)
 st.markdown("---")
 
-# --- 4. UPLOAD DO FICHEIRO ---
-st.subheader("Carregamento do Relatório de Clientes para Diagnóstico")
-uploaded_clientes = st.file_uploader(
-    "Carregue o `relatorio_clientes.xlsx`",
-    type=['xlsx']
-)
+# --- 4. UPLOAD DOS FICHEIROS ---
+st.subheader("Carregamento dos Relatórios da Etrac")
+col1, col2 = st.columns(2)
+
+with col1:
+    st.info("**1. Relatório de Clientes**")
+    uploaded_clientes = st.file_uploader("Carregue o `relatorio_clientes.xlsx`", type=['xlsx'], key="clientes_upload")
+
+with col2:
+    st.info("**2. Relatório de Rastreadores (Estoque)**")
+    uploaded_rastreadores = st.file_uploader("Carregue o `relatorio_rastreador.xlsx`", type=['xlsx'], key="rastreadores_upload")
+
 st.markdown("---")
 
-# --- 5. ANÁLISE E EXIBIÇÃO EM JSON ---
-if uploaded_clientes:
+# --- 5. ANÁLISE E EXIBIÇÃO ---
+if uploaded_clientes and uploaded_rastreadores:
     try:
-        with st.spinner("A processar a estrutura da planilha..."):
-            dados_json = organizar_clientes_em_json(uploaded_clientes)
+        with st.spinner("A processar e a comparar as planilhas..."):
+            df_resultado = processar_vinculos(uploaded_clientes, uploaded_rastreadores)
         
-        st.subheader("Estrutura de Dados Extraída (Formato JSON)")
-        
-        if dados_json:
-            st.success("A estrutura aninhada foi processada! Abaixo estão os clientes e os seus terminais associados.")
-            st.json(dados_json)
+        if df_resultado is not None and not df_resultado.empty:
+            st.success(f"Análise concluída! Foram encontrados **{len(df_resultado)}** terminais vinculados a clientes.")
+            
+            st.subheader("Tabela de Terminais Vinculados por Cliente")
+            st.dataframe(df_resultado, use_container_width=True, hide_index=True)
         else:
-            st.error("Não foi possível extrair uma estrutura válida da planilha. Verifique se o ficheiro está correto.")
+            st.warning("Não foram encontrados vínculos válidos entre os ficheiros. Verifique se as planilhas contêm os dados e a estrutura esperados.")
 
     except Exception as e:
-        st.error(f"Ocorreu um erro ao processar o ficheiro: {e}")
+        st.error(f"Ocorreu um erro ao processar os ficheiros: {e}")
+        st.info("Por favor, verifique se os ficheiros têm o formato e as colunas esperadas.")
 else:
-    st.info("Por favor, carregue o `relatorio_clientes.xlsx` para iniciar o diagnóstico.")
+    st.info("Por favor, carregue ambos os ficheiros para iniciar a análise.")
