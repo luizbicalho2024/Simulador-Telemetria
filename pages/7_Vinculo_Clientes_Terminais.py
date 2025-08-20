@@ -29,7 +29,7 @@ def processar_vinculos(file_clientes, file_rastreadores):
         df_rastreadores['Rastreador_Serial'] = df_rastreadores['Rastreador_Serial'].astype(str)
         mapa_modelos = df_rastreadores.set_index('Rastreador_Serial')['Modelo_Rastreador'].to_dict()
 
-        # Lê a planilha de clientes
+        # Lê a planilha de clientes, sem assumir um cabeçalho fixo para as sub-linhas
         df_clientes_raw = pd.read_excel(file_clientes, header=11, engine='openpyxl')
         
         # Remove colunas completamente vazias que o Excel por vezes cria
@@ -51,19 +51,13 @@ def processar_vinculos(file_clientes, file_rastreadores):
                     'CPF/CNPJ': row.get('CPF/CNPJ'),
                     'Tipo de Cliente': tipo_cliente
                 }
-                # Adiciona o terminal se ele estiver na mesma linha do cliente
-                if pd.notna(row.get('Terminal')):
-                    registos_consolidados.append({
-                        **cliente_atual,
-                        'Terminal': row.get('Terminal'),
-                        'Rastreador': str(row.get('Rastreador'))
-                    })
-            # Se for uma linha de terminal (sem nome de cliente), associa ao cliente atual
-            elif pd.notna(row.get('Terminal')) and cliente_atual:
+            # Se for uma linha de terminal, associa ao cliente atual
+            # A coluna "Terminal" pode ter sido lida com um nome genérico, por isso usamos o índice
+            elif pd.notna(row.iloc[0]) and cliente_atual:
                 registos_consolidados.append({
                     **cliente_atual,
-                    'Terminal': row.get('Terminal'),
-                    'Rastreador': str(row.get('Rastreador'))
+                    'Terminal': row.iloc[0], # A informação do terminal está na primeira coluna
+                    'Rastreador': str(row.get('Rastreador')) # A de rastreador mantém o nome
                 })
 
         if not registos_consolidados:
