@@ -29,49 +29,57 @@ def processar_vinculos(file_clientes, file_rastreadores):
         df_rastreadores['Rastreador_Serial'] = df_rastreadores['Rastreador_Serial'].astype(str)
         mapa_modelos = df_rastreadores.set_index('Rastreador_Serial')['Modelo_Rastreador'].to_dict()
 
-        # Lê a planilha de clientes, sem assumir um cabeçalho fixo para as sub-linhas
-        df_clientes_raw = pd.read_excel(file_clientes, header=11, engine='openpyxl')
+        # Lê a planilha de clientes
+        df_clientes_raw = pd.read_excel(file_clientes, header=None, engine='openpyxl')
         
-        # Remove colunas completamente vazias que o Excel por vezes cria
-        df_clientes_raw = df_clientes_raw.loc[:, ~df_clientes_raw.columns.str.contains('^Unnamed', na=False)]
-        df_clientes_raw.dropna(how='all', inplace=True)
-
-        # Processa a estrutura aninhada para criar uma lista limpa
         registos_consolidados = []
         cliente_atual = {}
 
-        for index, row in df_clientes_raw.iterrows():
-            tipo_cliente = str(row.get('Tipo Cliente', '')).strip()
-            nome_cliente = str(row.get('Nome do Cliente', '')).strip()
+        # Encontra o índice da linha do cabeçalho principal
+        header_row_index = -1
+        for i, row in df_clientes_raw.head(20).iterrows():
+            row_str = ' '.join(map(str, row.values)).lower()
+            if 'nome do cliente' in row_str and 'cpf/cnpj' in row_str:
+                header_row_index = i
+                break
+        
+        if header_row_index == -1:
+            return None # Não encontrou o cabeçalho
+        
+        # Define as colunas a partir da linha encontrada
+        df_clientes_proc = df_clientes_raw.copy()
+        df_clientes_proc.columns = df_clientes_raw.iloc[header_row_index]
+        df_clientes_proc = df_clientes_proc.iloc[header_row_index + 1:].reset_index(drop=True)
+        
+        # Padroniza nomes de colunas
+        df_clientes_proc.columns = df_clientes_proc.columns.str.strip()
+        df_clientes_proc = df_clientes_proc.rename(columns={'Tipo Cliente': 'Tipo de Cliente'})
+
+        # Processa a estrutura aninhada
+        for index, row in df_clientes_proc.iterrows():
+            tipo_cliente = str(row.get('Tipo de Cliente', '')).strip()
             
-            # Verifica se é uma nova linha de cliente (marcador 'Jurídica' ou 'Física')
             if 'Jurídica' in tipo_cliente or 'Física' in tipo_cliente:
                 cliente_atual = {
-                    'Nome do Cliente': nome_cliente,
+                    'Nome do Cliente': row.get('Nome do Cliente'),
                     'CPF/CNPJ': row.get('CPF/CNPJ'),
                     'Tipo de Cliente': tipo_cliente
                 }
-            # Se for uma linha de terminal, associa ao cliente atual
-            # A coluna "Terminal" pode ter sido lida com um nome genérico, por isso usamos o índice
-            elif pd.notna(row.iloc[0]) and cliente_atual:
+            
+            if pd.notna(row.get('Terminal')) and cliente_atual:
                 registos_consolidados.append({
                     **cliente_atual,
-                    'Terminal': row.iloc[0], # A informação do terminal está na primeira coluna
-                    'Rastreador': str(row.get('Rastreador')) # A de rastreador mantém o nome
+                    'Terminal': row.get('Terminal'),
+                    'Rastreador': str(row.get('Rastreador'))
                 })
 
         if not registos_consolidados:
             return None
 
-        # Cria o DataFrame final e adiciona o modelo
         df_final = pd.DataFrame(registos_consolidados)
         df_final['Modelo'] = df_final['Rastreador'].map(mapa_modelos).fillna('Modelo não encontrado')
         
-        # Retorna o DataFrame com as colunas na ordem desejada
         return df_final[['Nome do Cliente', 'CPF/CNPJ', 'Tipo de Cliente', 'Terminal', 'Rastreador', 'Modelo']]
-    except KeyError as e:
-        st.error(f"Erro de Coluna: Não foi possível encontrar a coluna '{e}'. Verifique se os nomes das colunas nos seus ficheiros correspondem ao esperado.")
-        return None
     except Exception as e:
         st.error(f"Ocorreu um erro inesperado ao processar os ficheiros: {e}")
         return None
@@ -95,17 +103,11 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.info("**1. Relatório de Clientes**")
-    uploaded_clientes = st.file_uploader(
-        "Carregue o `relatorio_clientes.xlsx`",
-        type=['xlsx']
-    )
+    uploaded_clientes = st.file_uploader("Carregue o `relatorio_clientes.xlsx`", type=['xlsx'], key="clientes_upload")
 
 with col2:
     st.info("**2. Relatório de Rastreadores (Estoque)**")
-    uploaded_rastreadores = st.file_uploader(
-        "Carregue o `relatorio_rastreador.xlsx`",
-        type=['xlsx']
-    )
+    uploaded_rastreadores = st.file_uploader("Carregue o `relatorio_rastreador.xlsx`", type=['xlsx'], key="rastreadores_upload")
 
 st.markdown("---")
 
@@ -117,7 +119,6 @@ if uploaded_clientes and uploaded_rastreadores:
         
         if df_resultado is not None and not df_resultado.empty:
             st.success(f"Análise concluída! Foram encontrados **{len(df_resultado)}** terminais vinculados a clientes.")
-            
             st.subheader("Tabela de Terminais Vinculados por Cliente")
             st.dataframe(df_resultado, use_container_width=True, hide_index=True)
         else:
