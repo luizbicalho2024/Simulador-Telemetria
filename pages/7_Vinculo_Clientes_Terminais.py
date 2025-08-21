@@ -14,7 +14,7 @@ if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. FUNÇÃO AUXILIAR ---
+# --- 2. FUNÇÃO AUXILIAR ROBUSTA ---
 @st.cache_data
 def processar_vinculos(file_clientes, file_rastreadores):
     """
@@ -22,61 +22,58 @@ def processar_vinculos(file_clientes, file_rastreadores):
     junta com as informações de modelo dos rastreadores.
     """
     try:
-        # Lê a planilha de rastreadores para criar um mapa de Serial -> Modelo
+        # Etapa 1: Preparar o mapa de Rastreador -> Modelo
         df_rastreadores = pd.read_excel(file_rastreadores, header=11, engine='openpyxl')
         df_rastreadores = df_rastreadores.rename(columns={'Nº Série': 'Rastreador', 'Modelo': 'Modelo_Rastreador'})
         df_rastreadores.dropna(subset=['Rastreador'], inplace=True)
-        df_rastreadores['Rastreador'] = df_rastreadores['Rastreador'].astype(str)
+        # Garante que a chave de junção seja do mesmo tipo (string) e sem casas decimais
+        df_rastreadores['Rastreador'] = df_rastreadores['Rastreador'].astype(float).astype(int).astype(str)
         mapa_modelos = df_rastreadores.set_index('Rastreador')['Modelo_Rastreador'].to_dict()
 
-        # Lê a planilha de clientes
+        # Etapa 2: Ler e processar a planilha de clientes
         df_clientes_raw = pd.read_excel(file_clientes, header=11, engine='openpyxl')
         
         # Remove colunas completamente vazias que o Excel por vezes cria
         df_clientes_raw = df_clientes_raw.loc[:, ~df_clientes_raw.columns.str.contains('^Unnamed', na=False)]
         df_clientes_raw.dropna(how='all', inplace=True)
-
-        # Padroniza nomes de colunas
-        df_clientes_raw.columns = df_clientes_raw.columns.str.strip()
-        df_clientes_raw = df_clientes_raw.rename(columns={'Tipo Cliente': 'Tipo de Cliente'})
-
+        
         registos_consolidados = []
         cliente_atual = {}
 
-        # Processa a estrutura aninhada para criar uma lista limpa
         for index, row in df_clientes_raw.iterrows():
-            tipo_cliente = str(row.get('Tipo de Cliente', '')).strip()
-            
-            # Se a linha define um novo cliente
+            # Tenta identificar uma linha de cliente
+            tipo_cliente = str(row.get('Tipo Cliente', '')).strip()
             if 'Jurídica' in tipo_cliente or 'Física' in tipo_cliente:
                 cliente_atual = {
                     'Nome do Cliente': row.get('Nome do Cliente'),
                     'CPF/CNPJ': row.get('CPF/CNPJ'),
                     'Tipo de Cliente': tipo_cliente
                 }
-            
-            # Se a linha contém um terminal, associa ao último cliente encontrado
-            if pd.notna(row.get('Terminal')) and cliente_atual:
+                # Pula para a próxima linha, pois a linha do cliente não tem terminal
+                continue
+
+            # Se não for uma linha de cliente, tenta identificar como uma linha de terminal
+            # Ignora as linhas de sub-cabeçalho que contêm a palavra "Terminal"
+            if pd.notna(row.get('Terminal')) and cliente_atual and row.get('Terminal') != 'Terminal':
                 registos_consolidados.append({
                     **cliente_atual,
                     'Terminal': row.get('Terminal'),
-                    'Rastreador': str(row.get('Rastreador'))
+                    # Garante que o rastreador seja uma string sem casas decimais
+                    'Rastreador': str(int(float(row.get('Rastreador'))))
                 })
 
         if not registos_consolidados:
             return None
 
+        # Etapa 3: Criar o DataFrame final e cruzar os dados
         df_final = pd.DataFrame(registos_consolidados)
         df_final['Modelo'] = df_final['Rastreador'].map(mapa_modelos).fillna('Modelo não encontrado')
         
         return df_final[['Nome do Cliente', 'CPF/CNPJ', 'Tipo de Cliente', 'Terminal', 'Rastreador', 'Modelo']]
-    except KeyError as e:
-        st.error(f"Erro de Coluna: Não foi possível encontrar a coluna '{e}'. Verifique se os nomes das colunas nos seus ficheiros correspondem ao esperado.")
-        return None
+
     except Exception as e:
         st.error(f"Ocorreu um erro inesperado ao processar os ficheiros: {e}")
         return None
-
 
 # --- 3. INTERFACE DA PÁGINA ---
 st.sidebar.image("imgs/v-c.png", width=120)
