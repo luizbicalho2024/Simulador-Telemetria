@@ -24,27 +24,40 @@ def processar_vinculos(file_clientes, file_rastreadores):
     try:
         # Lê a planilha de rastreadores para criar um mapa de Serial -> Modelo
         df_rastreadores = pd.read_excel(file_rastreadores, header=11, engine='openpyxl')
-        df_rastreadores = df_rastreadores.rename(columns={'Nº Série': 'Rastreador_Serial', 'Modelo': 'Modelo_Rastreador'})
-        df_rastreadores.dropna(subset=['Rastreador_Serial'], inplace=True)
-        df_rastreadores['Rastreador_Serial'] = df_rastreadores['Rastreador_Serial'].astype(str)
-        mapa_modelos = df_rastreadores.set_index('Rastreador_Serial')['Modelo_Rastreador'].to_dict()
+        df_rastreadores = df_rastreadores.rename(columns={'Nº Série': 'Rastreador', 'Modelo': 'Modelo_Rastreador'})
+        df_rastreadores.dropna(subset=['Rastreador'], inplace=True)
+        df_rastreadores['Rastreador'] = df_rastreadores['Rastreador'].astype(str)
+        mapa_modelos = df_rastreadores.set_index('Rastreador')['Modelo_Rastreador'].to_dict()
 
-        # Lê a planilha de clientes
-        df_clientes_raw = pd.read_excel(file_clientes, header=11, engine='openpyxl')
+        # Lê a planilha de clientes sem cabeçalho para processar a estrutura aninhada
+        df_clientes_raw = pd.read_excel(file_clientes, header=None, engine='openpyxl')
         
-        # Remove colunas completamente vazias que o Excel por vezes cria
-        df_clientes_raw = df_clientes_raw.loc[:, ~df_clientes_raw.columns.str.contains('^Unnamed', na=False)]
-        df_clientes_raw.dropna(how='all', inplace=True)
-
-        # Padroniza nomes de colunas
-        df_clientes_raw.columns = df_clientes_raw.columns.str.strip()
-        df_clientes_raw = df_clientes_raw.rename(columns={'Tipo Cliente': 'Tipo de Cliente'})
-
         registos_consolidados = []
         cliente_atual = {}
+        
+        # Encontra o índice da linha do cabeçalho principal
+        header_row_index = -1
+        for i, row in df_clientes_raw.head(20).iterrows():
+            row_str = ' '.join(map(str, row.values)).lower()
+            if 'nome do cliente' in row_str and 'cpf/cnpj' in row_str:
+                header_row_index = i
+                break
+        
+        if header_row_index == -1:
+            st.error("Não foi possível encontrar a linha de cabeçalho (com 'Nome do Cliente', 'CPF/CNPJ') no `relatorio_clientes.xlsx`.")
+            return None
+        
+        # Define as colunas a partir da linha encontrada e remove o lixo do topo
+        df_clientes_proc = df_clientes_raw.copy()
+        df_clientes_proc.columns = df_clientes_raw.iloc[header_row_index]
+        df_clientes_proc = df_clientes_proc.iloc[header_row_index + 1:].reset_index(drop=True)
+        
+        # Padroniza nomes de colunas
+        df_clientes_proc.columns = df_clientes_proc.columns.str.strip()
+        df_clientes_proc = df_clientes_proc.rename(columns={'Tipo Cliente': 'Tipo de Cliente'})
 
-        # Processa a estrutura aninhada para criar uma lista limpa
-        for index, row in df_clientes_raw.iterrows():
+        # Processa a estrutura aninhada
+        for index, row in df_clientes_proc.iterrows():
             tipo_cliente = str(row.get('Tipo de Cliente', '')).strip()
             
             # Se a linha define um novo cliente
