@@ -188,13 +188,13 @@ def processar_vinculos(file_clientes, file_rastreadores):
             st.warning(f"⚠️ **Debug:** {len(rastreadores_nao_encontrados)} rastreadores sem modelo: {list(rastreadores_nao_encontrados)[:10]}")
         
         # === ETAPA 5: AGRUPAR PARA JSON ===
-        df_grouped = df_final_clean.groupby(['Nome do Cliente', 'CPF/CNPJ', 'Tipo Cliente']).apply(
+        df_grouped = df_final.groupby(['Nome do Cliente', 'CPF/CNPJ', 'Tipo Cliente']).apply(
             lambda x: x[['Terminal/Frota', 'Rastreador', 'Modelo']].to_dict('records')
         ).reset_index(name='Terminais')
 
         json_resultado = json.loads(df_grouped.to_json(orient="records", force_ascii=False))
 
-        return df_final_clean, json_resultado
+        return df_final[['Nome do Cliente', 'CPF/CNPJ', 'Tipo Cliente', 'Terminal/Frota', 'Rastreador', 'Modelo']], json_resultado
 
     except Exception as e:
         st.error(f"💥 Erro inesperado: {str(e)}")
