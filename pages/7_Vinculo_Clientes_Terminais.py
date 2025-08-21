@@ -2,6 +2,7 @@
 import streamlit as st
 import pandas as pd
 import user_management_db as umdb
+import json
 
 # --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
 st.set_page_config(
@@ -27,7 +28,7 @@ def processar_vinculos(file_clientes, file_rastreadores):
         df_rastreadores = df_rastreadores.rename(columns={'Nº Série': 'Rastreador', 'Modelo': 'Modelo_Rastreador'})
         df_rastreadores.dropna(subset=['Rastreador'], inplace=True)
         # Garante que a chave de junção seja do mesmo tipo (string) e sem casas decimais
-        df_rastreadores['Rastreador'] = df_rastreadores['Rastreador'].astype(float).astype(int).astype(str)
+        df_rastreadores['Rastreador'] = df_rastreadores['Rastreador'].astype(str).str.replace(r'\.0$', '', regex=True)
         mapa_modelos = df_rastreadores.set_index('Rastreador')['Modelo_Rastreador'].to_dict()
 
         # Etapa 2: Ler e processar a planilha de clientes
@@ -47,7 +48,7 @@ def processar_vinculos(file_clientes, file_rastreadores):
                 cliente_atual = {
                     'Nome do Cliente': row.get('Nome do Cliente'),
                     'CPF/CNPJ': row.get('CPF/CNPJ'),
-                    'Tipo de Cliente': tipo_cliente
+                    'Tipo Cliente': tipo_cliente
                 }
                 # Pula para a próxima linha, pois a linha do cliente não tem terminal
                 if pd.isna(row.get('Terminal')):
@@ -58,23 +59,30 @@ def processar_vinculos(file_clientes, file_rastreadores):
             if pd.notna(row.get('Terminal')) and cliente_atual and str(row.get('Terminal')).strip().lower() != 'terminal':
                 registos_consolidados.append({
                     **cliente_atual,
-                    'Terminal': row.get('Terminal'),
+                    'Terminal/Frota': row.get('Terminal'),
                     # Garante que o rastreador seja uma string limpa e sem casas decimais
-                    'Rastreador': str(int(float(row.get('Rastreador'))))
+                    'Rastreador': str(row.get('Rastreador')).replace('.0', '')
                 })
 
         if not registos_consolidados:
-            return None
+            return None, None
 
         # Etapa 3: Criar o DataFrame final e cruzar os dados
         df_final = pd.DataFrame(registos_consolidados)
         df_final['Modelo'] = df_final['Rastreador'].map(mapa_modelos).fillna('Modelo não encontrado')
         
-        return df_final[['Nome do Cliente', 'CPF/CNPJ', 'Tipo de Cliente', 'Terminal', 'Rastreador', 'Modelo']]
+        # Etapa 4: Agrupar os resultados para o formato JSON
+        df_grouped = df_final.groupby(['Nome do Cliente', 'CPF/CNPJ', 'Tipo Cliente']).apply(
+            lambda x: x[['Terminal/Frota', 'Rastreador', 'Modelo']].to_dict('records')
+        ).reset_index(name='Terminais')
+
+        json_resultado = json.loads(df_grouped.to_json(orient="records", force_ascii=False))
+
+        return df_final[['Nome do Cliente', 'CPF/CNPJ', 'Tipo Cliente', 'Terminal/Frota', 'Rastreador', 'Modelo']], json_resultado
 
     except Exception as e:
         st.error(f"Ocorreu um erro inesperado ao processar os ficheiros: {e}")
-        return None
+        return None, None
 
 # --- 3. INTERFACE DA PÁGINA ---
 st.sidebar.image("imgs/v-c.png", width=120)
@@ -106,13 +114,16 @@ st.markdown("---")
 if uploaded_clientes and uploaded_rastreadores:
     try:
         with st.spinner("A processar e a comparar as planilhas..."):
-            df_resultado = processar_vinculos(uploaded_clientes, uploaded_rastreadores)
+            df_tabela, dados_json = processar_vinculos(uploaded_clientes, uploaded_rastreadores)
         
-        if df_resultado is not None and not df_resultado.empty:
-            st.success(f"Análise concluída! Foram encontrados **{len(df_resultado)}** terminais vinculados a clientes.")
+        if df_tabela is not None and not df_tabela.empty:
+            st.success(f"Análise concluída! Foram encontrados **{len(df_tabela)}** terminais vinculados a clientes.")
             
             st.subheader("Tabela de Terminais Vinculados por Cliente")
-            st.dataframe(df_resultado, use_container_width=True, hide_index=True)
+            st.dataframe(df_tabela, use_container_width=True, hide_index=True)
+
+            st.subheader("Estrutura de Vínculos (Formato JSON)")
+            st.json(dados_json)
         else:
             st.warning("Não foram encontrados vínculos válidos entre os ficheiros. Verifique se as planilhas contêm os dados e a estrutura esperados.")
 
