@@ -47,7 +47,6 @@ def processar_vinculos(file_clientes, file_rastreadores):
         for index, row in df_clientes_raw.iterrows():
             tipo_cliente = str(row.get('Tipo de Cliente', '')).strip()
             
-            # Se a linha define um novo cliente
             if 'Jurídica' in tipo_cliente or 'Física' in tipo_cliente:
                 cliente_atual = {
                     'Nome do Cliente': row.get('Nome do Cliente'),
@@ -58,8 +57,6 @@ def processar_vinculos(file_clientes, file_rastreadores):
                 if pd.isna(row.get('Terminal')):
                     continue
             
-            # Se não for uma linha de cliente, tenta identificar como uma linha de terminal
-            # Ignora as linhas de sub-cabeçalho que contêm a palavra "Terminal"
             if pd.notna(row.get('Terminal')) and cliente_atual and str(row.get('Terminal')).strip().lower() != 'terminal':
                 rastreador_val = str(row.get('Rastreador', '')).replace('.0', '').strip()
                 registos_consolidados.append({
