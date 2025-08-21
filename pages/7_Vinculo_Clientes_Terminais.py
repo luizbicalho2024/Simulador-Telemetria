@@ -28,6 +28,7 @@ def processar_vinculos(file_clientes, file_rastreadores):
         df_rastreadores = pd.read_excel(file_rastreadores, header=11, engine='openpyxl')
         df_rastreadores = df_rastreadores.rename(columns={'Nº Série': 'Rastreador', 'Modelo': 'Modelo_Rastreador'})
         df_rastreadores.dropna(subset=['Rastreador'], inplace=True)
+        # Garante que a chave de junção seja do mesmo tipo (string) e sem casas decimais
         df_rastreadores['Rastreador'] = df_rastreadores['Rastreador'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
         mapa_modelos = df_rastreadores.set_index('Rastreador')['Modelo_Rastreador'].to_dict()
 
