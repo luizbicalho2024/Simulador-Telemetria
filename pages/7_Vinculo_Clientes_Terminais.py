@@ -7,7 +7,7 @@ import json
 # --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
 st.set_page_config(
     layout="wide",
-    page_title="Diagnóstico de Vínculos",
+    page_title="Vínculo de Clientes e Terminais",
     page_icon="🔗"
 )
 
@@ -15,7 +15,79 @@ if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. INTERFACE DA PÁGINA ---
+# --- 2. FUNÇÃO AUXILIAR ROBUSTA ---
+@st.cache_data
+def processar_vinculos(file_clientes, file_rastreadores):
+    """
+    Lê as duas planilhas, processa a estrutura aninhada dos clientes de forma robusta e
+    junta com as informações de modelo dos rastreadores.
+    """
+    try:
+        # Etapa 1: Preparar o mapa de Rastreador -> Modelo
+        df_rastreadores = pd.read_excel(file_rastreadores, header=11, engine='openpyxl')
+        df_rastreadores = df_rastreadores.rename(columns={'Nº Série': 'Rastreador', 'Modelo': 'Modelo_Rastreador'})
+        df_rastreadores.dropna(subset=['Rastreador'], inplace=True)
+        # Garante que a chave de junção seja do mesmo tipo (string) e sem casas decimais
+        df_rastreadores['Rastreador'] = df_rastreadores['Rastreador'].astype(str).str.replace(r'\.0$', '', regex=True)
+        mapa_modelos = df_rastreadores.set_index('Rastreador')['Modelo_Rastreador'].to_dict()
+
+        # Etapa 2: Ler e processar a planilha de clientes
+        df_clientes_raw = pd.read_excel(file_clientes, header=11, engine='openpyxl')
+        
+        # Remove colunas completamente vazias
+        df_clientes_raw = df_clientes_raw.loc[:, ~df_clientes_raw.columns.str.contains('^Unnamed', na=False)]
+        df_clientes_raw.dropna(how='all', inplace=True)
+        df_clientes_raw.columns = df_clientes_raw.columns.str.strip()
+        df_clientes_raw = df_clientes_raw.rename(columns={'Tipo Cliente': 'Tipo de Cliente'})
+
+        registos_consolidados = []
+        cliente_atual = {}
+
+        for index, row in df_clientes_raw.iterrows():
+            tipo_cliente = str(row.get('Tipo de Cliente', '')).strip()
+            
+            # Se a linha define um novo cliente
+            if 'Jurídica' in tipo_cliente or 'Física' in tipo_cliente:
+                cliente_atual = {
+                    'Nome do Cliente': row.get('Nome do Cliente'),
+                    'CPF/CNPJ': row.get('CPF/CNPJ'),
+                    'Tipo de Cliente': tipo_cliente
+                }
+            
+            # Se a linha contém um terminal, associa ao último cliente encontrado
+            if pd.notna(row.get('Terminal')) and cliente_atual:
+                # Ignora as linhas que são sub-cabeçalhos
+                if str(row.get('Terminal')).strip().lower() == 'terminal':
+                    continue
+
+                registos_consolidados.append({
+                    **cliente_atual,
+                    'Terminal/Frota': row.get('Terminal'),
+                    # Garante que o rastreador seja uma string limpa e sem casas decimais
+                    'Rastreador': str(row.get('Rastreador')).replace('.0', '')
+                })
+
+        if not registos_consolidados:
+            return None, None
+
+        # Etapa 3: Criar o DataFrame final e cruzar os dados
+        df_final = pd.DataFrame(registos_consolidados)
+        df_final['Modelo'] = df_final['Rastreador'].map(mapa_modelos).fillna('Modelo não encontrado')
+        
+        # Etapa 4: Agrupar os resultados para o formato JSON
+        df_grouped = df_final.groupby(['Nome do Cliente', 'CPF/CNPJ', 'Tipo de Cliente']).apply(
+            lambda x: x[['Terminal/Frota', 'Rastreador', 'Modelo']].to_dict('records')
+        ).reset_index(name='Terminais')
+
+        json_resultado = json.loads(df_grouped.to_json(orient="records", force_ascii=False))
+
+        return df_final[['Nome do Cliente', 'CPF/CNPJ', 'Tipo de Cliente', 'Terminal/Frota', 'Rastreador', 'Modelo']], json_resultado
+
+    except Exception as e:
+        st.error(f"Ocorreu um erro inesperado ao processar os ficheiros: {e}")
+        return None, None
+
+# --- 3. INTERFACE DA PÁGINA ---
 st.sidebar.image("imgs/v-c.png", width=120)
 st.sidebar.title(f"Olá, {st.session_state.get('name', 'N/A')}! 👋")
 st.sidebar.markdown("---")
@@ -24,53 +96,42 @@ try:
     st.image("imgs/logo.png", width=250)
 except: pass
 
-st.markdown("<h1 style='text-align: center; color: #006494;'>🔗 Diagnóstico de Vínculos de Clientes e Terminais</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; color: #006494;'>🔗 Vínculo de Clientes e Terminais</h1>", unsafe_allow_html=True)
 st.markdown("---")
 
-# --- 3. UPLOAD DOS FICHEIROS ---
-st.subheader("Carregamento dos Relatórios para Diagnóstico")
+# --- 4. UPLOAD DOS FICHEIROS ---
+st.subheader("Carregamento dos Relatórios da Etrac")
 col1, col2 = st.columns(2)
 
 with col1:
     st.info("**1. Relatório de Clientes**")
-    uploaded_clientes = st.file_uploader(
-        "Carregue o `relatorio_clientes.xlsx`",
-        type=['xlsx']
-    )
+    uploaded_clientes = st.file_uploader("Carregue o `relatorio_clientes.xlsx`", type=['xlsx'], key="clientes_upload")
 
 with col2:
     st.info("**2. Relatório de Rastreadores (Estoque)**")
-    uploaded_rastreadores = st.file_uploader(
-        "Carregue o `relatorio_rastreador.xlsx`",
-        type=['xlsx']
-    )
+    uploaded_rastreadores = st.file_uploader("Carregue o `relatorio_rastreador.xlsx`", type=['xlsx'], key="rastreadores_upload")
 
 st.markdown("---")
 
-# --- 4. ANÁLISE E EXIBIÇÃO EM JSON ---
+# --- 5. ANÁLISE E EXIBIÇÃO ---
 if uploaded_clientes and uploaded_rastreadores:
     try:
-        st.subheader("Dados Extraídos das Planilhas (Formato JSON)")
+        with st.spinner("A processar e a comparar as planilhas..."):
+            df_tabela, dados_json = processar_vinculos(uploaded_clientes, uploaded_rastreadores)
         
-        # Lê e exibe o JSON do relatório de clientes
-        with st.expander("Dados do `relatorio_clientes.xlsx`", expanded=True):
-            st.markdown("Abaixo estão os dados lidos da sua planilha de clientes. Isto ajuda-nos a ver a estrutura aninhada.")
-            # Lê a partir da linha 12 (header=11)
-            df_clientes = pd.read_excel(uploaded_clientes, header=11, engine='openpyxl')
-            # Converte para JSON, tratando valores NaN (Not a Number) para null
-            json_clientes = json.loads(df_clientes.to_json(orient='records', indent=4, default_handler=str))
-            st.json(json_clientes)
+        if df_tabela is not None and not df_tabela.empty:
+            st.success(f"Análise concluída! Foram encontrados **{len(df_tabela)}** terminais vinculados a clientes.")
+            
+            st.subheader("Tabela de Terminais Vinculados por Cliente")
+            st.dataframe(df_tabela, use_container_width=True, hide_index=True)
 
-        # Lê e exibe o JSON do relatório de rastreadores
-        with st.expander("Dados do `relatorio_rastreador.xlsx`", expanded=True):
-            st.markdown("Abaixo estão os dados lidos da sua planilha de rastreadores.")
-            df_rastreadores = pd.read_excel(uploaded_rastreadores, header=11, engine='openpyxl')
-            # Converte para JSON, tratando valores NaN (Not a Number) para null
-            json_rastreadores = json.loads(df_rastreadores.to_json(orient='records', indent=4, default_handler=str))
-            st.json(json_rastreadores)
+            st.subheader("Estrutura de Vínculos (Formato JSON)")
+            st.json(dados_json)
+        else:
+            st.warning("Não foram encontrados vínculos válidos entre os ficheiros. Verifique se as planilhas contêm os dados e a estrutura esperados.")
 
     except Exception as e:
-        st.error(f"Ocorreu um erro ao ler os ficheiros: {e}")
-        st.info("Por favor, verifique se os ficheiros não estão corrompidos e se o cabeçalho de ambos está na linha 12.")
+        st.error(f"Ocorreu um erro ao processar os ficheiros: {e}")
+        st.info("Por favor, verifique se os ficheiros têm o formato e as colunas esperadas.")
 else:
-    st.info("Por favor, carregue ambos os ficheiros para iniciar o diagnóstico.")
+    st.info("Por favor, carregue ambos os ficheiros para iniciar a análise.")
