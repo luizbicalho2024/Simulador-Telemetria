@@ -1,134 +1,74 @@
-# pages/🔗_Vinculo_Clientes_Terminais.py
 import streamlit as st
 import pandas as pd
-import user_management_db as umdb
 import json
 
-# --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
-st.set_page_config(
-    layout="wide",
-    page_title="Vínculo de Clientes e Terminais",
-    page_icon="🔗"
-)
+st.set_page_config(page_title="Relacionamento de Planilhas", layout="wide")
 
-if not st.session_state.get("authentication_status"):
-    st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
-    st.stop()
+st.title("🔗 Relacionamento de Clientes x Rastreadores")
 
-# --- 2. FUNÇÃO AUXILIAR ROBUSTA ---
-@st.cache_data
-def processar_vinculos(file_clientes, file_rastreadores):
-    """
-    Lê as duas planilhas, processa a estrutura aninhada dos clientes de forma robusta e
-    junta com as informações de modelo dos rastreadores.
-    """
+# Upload das planilhas
+clientes_file = st.file_uploader("📂 Envie a planilha de Clientes (relatorio_clientes.xlsx)", type=["xlsx"])
+rastreador_file = st.file_uploader("📂 Envie a planilha de Rastreadores (relatorio_rastreador.xlsx)", type=["xlsx"])
+
+if clientes_file and rastreador_file:
+    # Carregar planilhas
+    clientes_df = pd.read_excel(clientes_file)
+    rastreador_df = pd.read_excel(rastreador_file)
+
+    # Normalizar nomes das colunas (remove espaços extras e uniformiza)
+    clientes_df.columns = clientes_df.columns.str.strip()
+    rastreador_df.columns = rastreador_df.columns.str.strip()
+
+    st.subheader("📑 Colunas detectadas")
+    st.write("**Clientes:**", clientes_df.columns.tolist())
+    st.write("**Rastreadores:**", rastreador_df.columns.tolist())
+
+    # 🚨 Ajuste manual: edite aqui se os nomes forem diferentes nas suas planilhas
+    col_nome = "Nome do Cliente"
+    col_cpf = "CPF/CNPJ"
+    col_tipo = "Tipo Cliente"
+    col_terminal_frota = "Terminal/Frota"
+
+    col_terminal = "Terminal"
+    col_rastreador = "Rastreador"
+    col_modelo = "Modelo do Rastreador"
+
     try:
-        # Etapa 1: Preparar o mapa de Rastreador -> Modelo
-        df_rastreadores = pd.read_excel(file_rastreadores, header=11, engine='openpyxl')
-        df_rastreadores = df_rastreadores.rename(columns={'Nº Série': 'Rastreador', 'Modelo': 'Modelo_Rastreador'})
-        df_rastreadores.dropna(subset=['Rastreador'], inplace=True)
-        # Garante que a chave de junção seja do mesmo tipo (string) e sem casas decimais
-        df_rastreadores['Rastreador'] = df_rastreadores['Rastreador'].astype(str).str.replace(r'\.0$', '', regex=True)
-        mapa_modelos = df_rastreadores.set_index('Rastreador')['Modelo_Rastreador'].to_dict()
+        # Fazer merge
+        merged = pd.merge(
+            clientes_df,
+            rastreador_df,
+            left_on=col_terminal_frota,
+            right_on=col_terminal,
+            how="inner"
+        )
 
-        # Etapa 2: Ler e processar a planilha de clientes
-        df_clientes_raw = pd.read_excel(file_clientes, header=11, engine='openpyxl')
-        
-        # Remove colunas completamente vazias
-        df_clientes_raw = df_clientes_raw.loc[:, ~df_clientes_raw.columns.str.contains('^Unnamed', na=False)]
-        df_clientes_raw.dropna(how='all', inplace=True)
-        
-        registos_consolidados = []
-        cliente_atual = {}
+        # Selecionar apenas colunas necessárias
+        resultado = merged[[
+            col_nome,
+            col_cpf,
+            col_tipo,
+            col_terminal_frota,
+            col_rastreador,
+            col_modelo
+        ]]
 
-        for index, row in df_clientes_raw.iterrows():
-            # Tenta identificar uma linha de cliente
-            tipo_cliente = str(row.get('Tipo Cliente', '')).strip()
-            if 'Jurídica' in tipo_cliente or 'Física' in tipo_cliente:
-                cliente_atual = {
-                    'Nome do Cliente': row.get('Nome do Cliente'),
-                    'CPF/CNPJ': row.get('CPF/CNPJ'),
-                    'Tipo Cliente': tipo_cliente
-                }
-                # Pula para a próxima linha, pois a linha do cliente não tem terminal
-                if pd.isna(row.get('Terminal')):
-                    continue
+        st.subheader("📊 Resultado da Junção")
+        st.dataframe(resultado, use_container_width=True)
 
-            # Se não for uma linha de cliente, tenta identificar como uma linha de terminal
-            # Ignora as linhas de sub-cabeçalho que contêm a palavra "Terminal"
-            if pd.notna(row.get('Terminal')) and cliente_atual and str(row.get('Terminal')).strip().lower() != 'terminal':
-                registos_consolidados.append({
-                    **cliente_atual,
-                    'Terminal/Frota': row.get('Terminal'),
-                    # Garante que o rastreador seja uma string limpa e sem casas decimais
-                    'Rastreador': str(row.get('Rastreador')).replace('.0', '')
-                })
+        # Converter para JSON
+        resultado_json = resultado.to_dict(orient="records")
+        st.subheader("📝 JSON Gerado")
+        st.json(resultado_json)
 
-        if not registos_consolidados:
-            return None, None
+        # Download JSON
+        json_str = json.dumps(resultado_json, ensure_ascii=False, indent=4)
+        st.download_button(
+            label="⬇️ Baixar JSON",
+            data=json_str,
+            file_name="relacionamento.json",
+            mime="application/json"
+        )
 
-        # Etapa 3: Criar o DataFrame final e cruzar os dados
-        df_final = pd.DataFrame(registos_consolidados)
-        df_final['Modelo'] = df_final['Rastreador'].map(mapa_modelos).fillna('Modelo não encontrado')
-        
-        # Etapa 4: Agrupar os resultados para o formato JSON
-        df_grouped = df_final.groupby(['Nome do Cliente', 'CPF/CNPJ', 'Tipo Cliente']).apply(
-            lambda x: x[['Terminal/Frota', 'Rastreador', 'Modelo']].to_dict('records')
-        ).reset_index(name='Terminais')
-
-        json_resultado = json.loads(df_grouped.to_json(orient="records", force_ascii=False))
-
-        return df_final[['Nome do Cliente', 'CPF/CNPJ', 'Tipo Cliente', 'Terminal/Frota', 'Rastreador', 'Modelo']], json_resultado
-
-    except Exception as e:
-        st.error(f"Ocorreu um erro inesperado ao processar os ficheiros: {e}")
-        return None, None
-
-# --- 3. INTERFACE DA PÁGINA ---
-st.sidebar.image("imgs/v-c.png", width=120)
-st.sidebar.title(f"Olá, {st.session_state.get('name', 'N/A')}! 👋")
-st.sidebar.markdown("---")
-
-try:
-    st.image("imgs/logo.png", width=250)
-except: pass
-
-st.markdown("<h1 style='text-align: center; color: #006494;'>🔗 Vínculo de Clientes e Terminais</h1>", unsafe_allow_html=True)
-st.markdown("---")
-
-# --- 4. UPLOAD DOS FICHEIROS ---
-st.subheader("Carregamento dos Relatórios da Etrac")
-col1, col2 = st.columns(2)
-
-with col1:
-    st.info("**1. Relatório de Clientes**")
-    uploaded_clientes = st.file_uploader("Carregue o `relatorio_clientes.xlsx`", type=['xlsx'], key="clientes_upload")
-
-with col2:
-    st.info("**2. Relatório de Rastreadores (Estoque)**")
-    uploaded_rastreadores = st.file_uploader("Carregue o `relatorio_rastreador.xlsx`", type=['xlsx'], key="rastreadores_upload")
-
-st.markdown("---")
-
-# --- 5. ANÁLISE E EXIBIÇÃO ---
-if uploaded_clientes and uploaded_rastreadores:
-    try:
-        with st.spinner("A processar e a comparar as planilhas..."):
-            df_tabela, dados_json = processar_vinculos(uploaded_clientes, uploaded_rastreadores)
-        
-        if df_tabela is not None and not df_tabela.empty:
-            st.success(f"Análise concluída! Foram encontrados **{len(df_tabela)}** terminais vinculados a clientes.")
-            
-            st.subheader("Tabela de Terminais Vinculados por Cliente")
-            st.dataframe(df_tabela, use_container_width=True, hide_index=True)
-
-            st.subheader("Estrutura de Vínculos (Formato JSON)")
-            st.json(dados_json)
-        else:
-            st.warning("Não foram encontrados vínculos válidos entre os ficheiros. Verifique se as planilhas contêm os dados e a estrutura esperados.")
-
-    except Exception as e:
-        st.error(f"Ocorreu um erro ao processar os ficheiros: {e}")
-        st.info("Por favor, verifique se os ficheiros têm o formato e as colunas esperadas.")
-else:
-    st.info("Por favor, carregue ambos os ficheiros para iniciar a análise.")
+    except KeyError as e:
+        st.error(f"⚠️ Erro: {e}. Verifique os nomes das colunas e ajuste no script.")
