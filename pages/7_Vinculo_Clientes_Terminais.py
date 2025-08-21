@@ -53,6 +53,7 @@ def processar_vinculos(file_clientes, file_rastreadores):
                     'CPF/CNPJ': row.get('CPF/CNPJ'),
                     'Tipo de Cliente': tipo_cliente
                 }
+                # Pula para a próxima linha se a informação do terminal não estiver na mesma linha do cliente
                 if pd.isna(row.get('Terminal')):
                     continue
             
