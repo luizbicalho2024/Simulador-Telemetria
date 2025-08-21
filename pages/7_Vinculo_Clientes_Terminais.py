@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 import user_management_db as umdb
 import json
+import io
 
 # --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
 st.set_page_config(
@@ -27,41 +28,37 @@ def processar_vinculos(file_clientes, file_rastreadores):
         df_rastreadores = pd.read_excel(file_rastreadores, header=11, engine='openpyxl')
         df_rastreadores = df_rastreadores.rename(columns={'Nº Série': 'Rastreador', 'Modelo': 'Modelo_Rastreador'})
         df_rastreadores.dropna(subset=['Rastreador'], inplace=True)
-        # Garante que a chave de junção seja do mesmo tipo (string) e sem casas decimais
-        df_rastreadores['Rastreador'] = df_rastreadores['Rastreador'].astype(str).str.replace(r'\.0$', '', regex=True)
+        df_rastreadores['Rastreador'] = df_rastreadores['Rastreador'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
         mapa_modelos = df_rastreadores.set_index('Rastreador')['Modelo_Rastreador'].to_dict()
 
         # Etapa 2: Ler e processar a planilha de clientes
         df_clientes_raw = pd.read_excel(file_clientes, header=11, engine='openpyxl')
-        
-        # Remove colunas completamente vazias
         df_clientes_raw = df_clientes_raw.loc[:, ~df_clientes_raw.columns.str.contains('^Unnamed', na=False)]
         df_clientes_raw.dropna(how='all', inplace=True)
-        
+        df_clientes_raw.columns = df_clientes_raw.columns.str.strip()
+        df_clientes_raw = df_clientes_raw.rename(columns={'Tipo Cliente': 'Tipo de Cliente'})
+
         registos_consolidados = []
         cliente_atual = {}
 
         for index, row in df_clientes_raw.iterrows():
-            # Tenta identificar uma linha de cliente
-            tipo_cliente = str(row.get('Tipo Cliente', '')).strip()
+            tipo_cliente = str(row.get('Tipo de Cliente', '')).strip()
+            
             if 'Jurídica' in tipo_cliente or 'Física' in tipo_cliente:
                 cliente_atual = {
                     'Nome do Cliente': row.get('Nome do Cliente'),
                     'CPF/CNPJ': row.get('CPF/CNPJ'),
-                    'Tipo Cliente': tipo_cliente
+                    'Tipo de Cliente': tipo_cliente
                 }
-                # Pula para a próxima linha, pois a linha do cliente não tem terminal
                 if pd.isna(row.get('Terminal')):
                     continue
-
-            # Se não for uma linha de cliente, tenta identificar como uma linha de terminal
-            # Ignora as linhas de sub-cabeçalho que contêm a palavra "Terminal"
+            
             if pd.notna(row.get('Terminal')) and cliente_atual and str(row.get('Terminal')).strip().lower() != 'terminal':
+                rastreador_val = str(row.get('Rastreador', '')).replace('.0', '').strip()
                 registos_consolidados.append({
                     **cliente_atual,
                     'Terminal/Frota': row.get('Terminal'),
-                    # Garante que o rastreador seja uma string limpa e sem casas decimais
-                    'Rastreador': str(row.get('Rastreador')).replace('.0', '')
+                    'Rastreador': rastreador_val
                 })
 
         if not registos_consolidados:
@@ -72,17 +69,23 @@ def processar_vinculos(file_clientes, file_rastreadores):
         df_final['Modelo'] = df_final['Rastreador'].map(mapa_modelos).fillna('Modelo não encontrado')
         
         # Etapa 4: Agrupar os resultados para o formato JSON
-        df_grouped = df_final.groupby(['Nome do Cliente', 'CPF/CNPJ', 'Tipo Cliente']).apply(
+        df_grouped = df_final.groupby(['Nome do Cliente', 'CPF/CNPJ', 'Tipo de Cliente']).apply(
             lambda x: x[['Terminal/Frota', 'Rastreador', 'Modelo']].to_dict('records')
         ).reset_index(name='Terminais')
 
         json_resultado = json.loads(df_grouped.to_json(orient="records", force_ascii=False))
 
-        return df_final[['Nome do Cliente', 'CPF/CNPJ', 'Tipo Cliente', 'Terminal/Frota', 'Rastreador', 'Modelo']], json_resultado
+        return df_final[['Nome do Cliente', 'CPF/CNPJ', 'Tipo de Cliente', 'Terminal/Frota', 'Rastreador', 'Modelo']], json_resultado
 
     except Exception as e:
         st.error(f"Ocorreu um erro inesperado ao processar os ficheiros: {e}")
         return None, None
+
+def to_excel(df):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Vinculos')
+    return output.getvalue()
 
 # --- 3. INTERFACE DA PÁGINA ---
 st.sidebar.image("imgs/v-c.png", width=120)
@@ -117,13 +120,30 @@ if uploaded_clientes and uploaded_rastreadores:
             df_tabela, dados_json = processar_vinculos(uploaded_clientes, uploaded_rastreadores)
         
         if df_tabela is not None and not df_tabela.empty:
-            st.success(f"Análise concluída! Foram encontrados **{len(df_tabela)}** terminais vinculados a clientes.")
+            st.success(f"Análise concluída! Foram encontrados **{len(df_tabela)}** terminais vinculados a **{df_tabela['CPF/CNPJ'].nunique()}** clientes distintos.")
             
-            st.subheader("Tabela de Terminais Vinculados por Cliente")
-            st.dataframe(df_tabela, use_container_width=True, hide_index=True)
+            tab1, tab2 = st.tabs(["📊 Tabela Consolidada", "📝 JSON Agrupado"])
 
-            st.subheader("Estrutura de Vínculos (Formato JSON)")
-            st.json(dados_json)
+            with tab1:
+                st.subheader("Tabela de Terminais Vinculados por Cliente")
+                st.dataframe(df_tabela, use_container_width=True, hide_index=True)
+                st.download_button(
+                    label="📥 Baixar Tabela em Excel",
+                    data=to_excel(df_tabela),
+                    file_name="vinculos_clientes_tabela.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+
+            with tab2:
+                st.subheader("Estrutura de Vínculos (Formato JSON)")
+                st.json(dados_json)
+                json_str = json.dumps(dados_json, ensure_ascii=False, indent=4)
+                st.download_button(
+                    label="📥 Baixar JSON",
+                    data=json_str,
+                    file_name="vinculos_clientes_agrupado.json",
+                    mime="application/json"
+                )
         else:
             st.warning("Não foram encontrados vínculos válidos entre os ficheiros. Verifique se as planilhas contêm os dados e a estrutura esperados.")
 
