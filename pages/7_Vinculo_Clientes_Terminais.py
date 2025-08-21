@@ -2,6 +2,7 @@
 import streamlit as st
 import pandas as pd
 import user_management_db as umdb
+import json
 
 # --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
 st.set_page_config(
@@ -16,62 +17,59 @@ if not st.session_state.get("authentication_status"):
 
 # --- 2. FUNÇÃO AUXILIAR ROBUSTA ---
 @st.cache_data
-def processar_vinculos(file_clientes, file_rastreadores):
+def processar_vinculos_para_json(file_clientes, file_rastreadores):
     """
-    Lê as duas planilhas, processa a estrutura aninhada dos clientes de forma robusta e
-    junta com as informações de modelo dos rastreadores.
+    Lê as duas planilhas, processa a estrutura aninhada dos clientes e
+    retorna uma estrutura JSON com os vínculos.
     """
     try:
         # Etapa 1: Preparar o mapa de Rastreador -> Modelo
         df_rastreadores = pd.read_excel(file_rastreadores, header=11, engine='openpyxl')
         df_rastreadores = df_rastreadores.rename(columns={'Nº Série': 'Rastreador', 'Modelo': 'Modelo_Rastreador'})
         df_rastreadores.dropna(subset=['Rastreador'], inplace=True)
-        # Garante que a chave de junção seja do mesmo tipo (string) e sem casas decimais
-        df_rastreadores['Rastreador'] = df_rastreadores['Rastreador'].astype(float).astype(int).astype(str)
+        df_rastreadores['Rastreador'] = df_rastreadores['Rastreador'].astype(str).str.replace(r'\.0$', '', regex=True)
         mapa_modelos = df_rastreadores.set_index('Rastreador')['Modelo_Rastreador'].to_dict()
 
         # Etapa 2: Ler e processar a planilha de clientes
         df_clientes_raw = pd.read_excel(file_clientes, header=11, engine='openpyxl')
+        df_clientes_raw.columns = df_clientes_raw.columns.str.strip()
+        df_clientes_raw = df_clientes_raw.rename(columns={'Tipo Cliente': 'Tipo de Cliente'})
         
-        # Remove colunas completamente vazias
-        df_clientes_raw = df_clientes_raw.loc[:, ~df_clientes_raw.columns.str.contains('^Unnamed', na=False)]
-        df_clientes_raw.dropna(how='all', inplace=True)
-        
-        registos_consolidados = []
-        cliente_atual = {}
+        clientes_organizados = []
+        cliente_atual_dict = None
 
         for index, row in df_clientes_raw.iterrows():
-            # Tenta identificar uma linha de cliente
-            tipo_cliente = str(row.get('Tipo Cliente', '')).strip()
+            tipo_cliente = str(row.get('Tipo de Cliente', '')).strip()
+            
+            # Se a linha define um novo cliente
             if 'Jurídica' in tipo_cliente or 'Física' in tipo_cliente:
-                cliente_atual = {
-                    'Nome do Cliente': row.get('Nome do Cliente'),
-                    'CPF/CNPJ': row.get('CPF/CNPJ'),
-                    'Tipo de Cliente': tipo_cliente
+                if cliente_atual_dict is not None:
+                    clientes_organizados.append(cliente_atual_dict)
+                
+                cliente_atual_dict = {
+                    "Nome do Cliente": row.get('Nome do Cliente'),
+                    "CPF/CNPJ": row.get('CPF/CNPJ'),
+                    "Tipo de Cliente": tipo_cliente,
+                    "Terminais": []
                 }
-                # Pula para a próxima linha, pois a linha do cliente não tem terminal
-                if pd.isna(row.get('Terminal')):
-                    continue
-
-            # Se não for uma linha de cliente, tenta identificar como uma linha de terminal
-            # Ignora as linhas de sub-cabeçalho que contêm a palavra "Terminal"
-            if pd.notna(row.get('Terminal')) and cliente_atual and str(row.get('Terminal')).strip().lower() != 'terminal':
-                registos_consolidados.append({
-                    **cliente_atual,
-                    'Terminal': row.get('Terminal'),
-                    # Garante que o rastreador seja uma string limpa e sem casas decimais
-                    'Rastreador': str(int(float(row.get('Rastreador'))))
-                })
-
-        if not registos_consolidados:
-            return None
-
-        # Etapa 3: Criar o DataFrame final e cruzar os dados
-        df_final = pd.DataFrame(registos_consolidados)
-        df_final['Modelo'] = df_final['Rastreador'].map(mapa_modelos).fillna('Modelo não encontrado')
+            
+            # Se a linha contém um terminal, associa ao último cliente encontrado
+            if pd.notna(row.get('Terminal')) and cliente_atual_dict is not None:
+                rastreador_num = str(row.get('Rastreador')).replace('.0', '')
+                
+                # Ignora as linhas de sub-cabeçalho
+                if str(row.get('Terminal')).lower() != 'terminal':
+                    cliente_atual_dict["Terminais"].append({
+                        "Terminal": row.get('Terminal'),
+                        "Rastreador": rastreador_num,
+                        "Modelo": mapa_modelos.get(rastreador_num, 'Modelo não encontrado')
+                    })
         
-        return df_final[['Nome do Cliente', 'CPF/CNPJ', 'Tipo de Cliente', 'Terminal', 'Rastreador', 'Modelo']]
+        # Adiciona o último cliente processado à lista
+        if cliente_atual_dict is not None:
+            clientes_organizados.append(cliente_atual_dict)
 
+        return clientes_organizados if registos_consolidados else None
     except Exception as e:
         st.error(f"Ocorreu um erro inesperado ao processar os ficheiros: {e}")
         return None
@@ -106,13 +104,14 @@ st.markdown("---")
 if uploaded_clientes and uploaded_rastreadores:
     try:
         with st.spinner("A processar e a comparar as planilhas..."):
-            df_resultado = processar_vinculos(uploaded_clientes, uploaded_rastreadores)
+            resultado_json = processar_vinculos_para_json(uploaded_clientes, uploaded_rastreadores)
         
-        if df_resultado is not None and not df_resultado.empty:
-            st.success(f"Análise concluída! Foram encontrados **{len(df_resultado)}** terminais vinculados a clientes.")
+        if resultado_json:
+            total_terminais = sum(len(cliente['Terminais']) for cliente in resultado_json)
+            st.success(f"Análise concluída! Foram encontrados **{total_terminais}** terminais vinculados a **{len(resultado_json)}** clientes.")
             
-            st.subheader("Tabela de Terminais Vinculados por Cliente")
-            st.dataframe(df_resultado, use_container_width=True, hide_index=True)
+            st.subheader("Estrutura de Vínculos (JSON)")
+            st.json(resultado_json)
         else:
             st.warning("Não foram encontrados vínculos válidos entre os ficheiros. Verifique se as planilhas contêm os dados e a estrutura esperados.")
 
