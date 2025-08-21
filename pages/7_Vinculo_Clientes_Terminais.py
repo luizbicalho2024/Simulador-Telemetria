@@ -205,105 +205,155 @@ def processar_vinculos(file_clientes, file_rastreadores):
         # Continuar mesmo sem terminal/rastreador para investigar a estrutura
         st.write("📋 **Continuando processamento para investigar estrutura dos dados...**")
 
-        # === ETAPA 3: PROCESSAR REGISTROS DE FORMA ADAPTATIVA ===
+        # === ETAPA 2: PROCESSAR ESTRUTURA HIERÁRQUICA ESPECÍFICA ===
+        st.write("🔍 **Debug:** Detectada estrutura hierárquica - processando de forma especial...")
+        
+        # Como detectamos que a linha 13 tem os cabeçalhos dos terminais,
+        # isso significa que a linha 12 provavelmente tem dados do cliente
+        # Vamos processar tudo de forma diferente
+        
+        # Ler o arquivo inteiro sem cabeçalho fixo para análise completa
+        df_completo = pd.read_excel(file_clientes, header=None, engine='openpyxl')
+        st.write(f"📊 **Arquivo completo shape:** {df_completo.shape}")
+        
+        # Mostrar mais contexto para entender a estrutura
+        st.write("🔍 **Analisando estrutura completa (linhas 10-20):**")
+        st.dataframe(df_completo.iloc[10:21])
+        
+        # === NOVA ESTRATÉGIA: PROCESSAR BLOCOS CLIENTE → TERMINAIS ===
         registos_consolidados = []
         cliente_atual = None
         linhas_processadas = 0
         clientes_encontrados = 0
         terminais_encontrados = 0
-
-        for index, row in df_clientes_raw.iterrows():
-            linhas_processadas += 1
-            
-            # Obter valores das colunas mapeadas (com fallback)
-            nome_cliente = row.get(colunas_mapeadas.get('nome', ''), '') if 'nome' in colunas_mapeadas else ''
-            documento = row.get(colunas_mapeadas.get('documento', ''), '') if 'documento' in colunas_mapeadas else ''
-            tipo_cliente = str(row.get(colunas_mapeadas.get('tipo', ''), '')).strip() if 'tipo' in colunas_mapeadas else ''
-            terminal = row.get(colunas_mapeadas.get('terminal', ''), '') if 'terminal' in colunas_mapeadas else ''
-            rastreador = row.get(colunas_mapeadas.get('rastreador', ''), '') if 'rastreador' in colunas_mapeadas else ''
-            
-            # Se não temos colunas de terminal/rastreador, procurar em todas as colunas
-            if not terminal or not rastreador:
-                for col in df_clientes_raw.columns:
-                    if col not in [colunas_mapeadas.get('nome'), colunas_mapeadas.get('documento'), colunas_mapeadas.get('tipo')]:
-                        valor = str(row.get(col, '')).strip()
-                        
-                        # Se parece um rastreador (número de 6-12 dígitos)
-                        if valor.replace('.', '').isdigit() and 6 <= len(valor.replace('.', '')) <= 12:
-                            rastreador = valor
-                        # Se parece um terminal (texto alfanumérico curto)
-                        elif valor and len(valor) <= 20 and valor.replace(' ', '').replace('-', '').isalnum():
-                            terminal = valor
+        
+        i = 0
+        while i < len(df_completo):
+            linha = df_completo.iloc[i]
             
             # === IDENTIFICAR LINHA DE CLIENTE ===
-            nome_valido = pd.notna(nome_cliente) and str(nome_cliente).strip() != '' and str(nome_cliente).strip().lower() not in ['terminal', 'nome do cliente']
-            documento_valido = pd.notna(documento) and str(documento).strip() != '' and str(documento).strip().lower() not in ['cpf/cnpj']
+            # Procurar por linha que parece ter dados de cliente
+            # (nome, documento, tipo cliente)
             
-            # Verificar se é uma linha de dados válida (não cabeçalho)
-            if nome_valido and documento_valido:
-                # Verificar se não é uma linha de cabeçalho repetida
-                nome_str = str(nome_cliente).strip()
-                if nome_str.lower() not in ['nome do cliente', 'cliente', 'razão social']:
-                    # Esta é uma linha de cliente
+            linha_valores = [str(val).strip() for val in linha if pd.notna(val) and str(val).strip() != '']
+            
+            # Se tem pelo menos 3 valores e um deles parece CPF/CNPJ
+            if len(linha_valores) >= 3:
+                possivel_documento = None
+                possivel_nome = None
+                possivel_tipo = None
+                
+                for val in linha_valores:
+                    val_str = str(val).strip()
+                    # Detectar CPF/CNPJ pelo padrão
+                    if (any(char in val_str for char in ['-', '/']) and 
+                        len(val_str.replace('-', '').replace('/', '').replace('.', '')) >= 11):
+                        possivel_documento = val_str
+                    elif 'Jurídica' in val_str or 'Física' in val_str:
+                        possivel_tipo = val_str
+                    elif len(val_str) > 10 and any(char.isalpha() for char in val_str):
+                        possivel_nome = val_str
+                
+                # Se encontrou nome e documento, é uma linha de cliente
+                if possivel_nome and possivel_documento:
                     cliente_atual = {
-                        'Nome do Cliente': nome_str,
-                        'CPF/CNPJ': str(documento).strip(),
-                        'Tipo Cliente': tipo_cliente if tipo_cliente else 'Não especificado'
+                        'Nome do Cliente': possivel_nome,
+                        'CPF/CNPJ': possivel_documento,
+                        'Tipo Cliente': possivel_tipo if possivel_tipo else 'Não especificado'
                     }
                     clientes_encontrados += 1
-                    st.write(f"👤 **Cliente encontrado #{clientes_encontrados}:** {cliente_atual['Nome do Cliente']}")
+                    st.write(f"👤 **Cliente #{clientes_encontrados}:** {possivel_nome}")
                     
-                    # Verificar se a mesma linha já tem terminal/rastreador
-                    if terminal and rastreador and str(terminal).strip() != '' and str(rastreador).strip() != '':
-                        registos_consolidados.append({
-                            **cliente_atual,
-                            'Terminal/Frota': str(terminal).strip(),
-                            'Rastreador': str(rastreador).replace('.0', '').strip()
-                        })
-                        terminais_encontrados += 1
-                        st.write(f"  📱 Terminal na mesma linha: {str(terminal).strip()} → {str(rastreador).strip()}")
-                    
+                    # Pular para procurar cabeçalho de terminais na próxima linha
+                    i += 1
                     continue
             
-            # === PROCESSAR LINHA DE TERMINAL/DADOS ADICIONAIS ===
-            if cliente_atual is not None:
-                # Mesmo sem colunas específicas, procurar dados úteis na linha
-                terminal_encontrado = None
-                rastreador_encontrado = None
+            # === IDENTIFICAR CABEÇALHO DE TERMINAIS ===
+            if cliente_atual and any('Terminal' in str(val) for val in linha if pd.notna(val)):
+                st.write(f"  📋 Cabeçalho de terminais encontrado na linha {i}")
                 
-                for col in df_clientes_raw.columns:
-                    valor = str(row.get(col, '')).strip()
-                    if valor and valor != 'nan':
-                        # Identificar rastreador por padrão numérico
-                        if valor.replace('.', '').replace(',', '').isdigit() and 6 <= len(valor.replace('.', '').replace(',', '')) <= 12:
-                            rastreador_encontrado = valor.replace('.0', '').replace(',', '')
-                        # Identificar terminal por padrão alfanumérico curto
-                        elif len(valor) <= 30 and any(c.isalnum() for c in valor):
-                            # Ignorar valores que são claramente outros tipos de dados
-                            if not any(palavra in valor.lower() for palavra in ['telefone', 'email', 'endereço', 'rua', 'cidade']):
-                                terminal_encontrado = valor
+                # Identificar índices das colunas importantes
+                colunas_terminal = list(linha)
+                idx_terminal = None
+                idx_frota = None  
+                idx_rastreador = None
                 
-                # Se encontrou dados válidos, adicionar
-                if terminal_encontrado and rastreador_encontrado:
-                    registos_consolidados.append({
-                        **cliente_atual,
-                        'Terminal/Frota': terminal_encontrado,
-                        'Rastreador': rastreador_encontrado
-                    })
-                    terminais_encontrados += 1
-                    st.write(f"  📱 Dados encontrados: {terminal_encontrado} → {rastreador_encontrado}")
+                for j, col in enumerate(colunas_terminal):
+                    col_str = str(col).lower().strip()
+                    if 'terminal' in col_str:
+                        idx_terminal = j
+                    elif 'frota' in col_str:
+                        idx_frota = j
+                    elif 'rastreador' in col_str:
+                        idx_rastreador = j
                 
-                # Debug: mostrar linha processada
-                elif any(str(row.get(col, '')).strip() for col in df_clientes_raw.columns):
-                    valores_linha = [f"{col}: '{row.get(col, '')}'" for col in df_clientes_raw.columns if str(row.get(col, '')).strip()]
-                    if valores_linha:
-                        st.write(f"  🔍 Linha analisada: {valores_linha[:3]}...")  # Primeiros 3 valores
+                st.write(f"  📊 Índices: Terminal={idx_terminal}, Frota={idx_frota}, Rastreador={idx_rastreador}")
+                
+                # === PROCESSAR TERMINAIS DO CLIENTE ATUAL ===
+                i += 1  # Ir para primeira linha de dados
+                while i < len(df_completo):
+                    linha_terminal = df_completo.iloc[i]
+                    
+                    # Verificar se chegou ao próximo cliente (linha com estrutura de cliente)
+                    valores_linha = [str(val).strip() for val in linha_terminal if pd.notna(val) and str(val).strip() != '']
+                    
+                    # Se tem padrão de cliente (nome longo + documento), parar
+                    tem_documento = any((any(char in val for char in ['-', '/']) and 
+                                       len(val.replace('-', '').replace('/', '').replace('.', '')) >= 11)
+                                      for val in valores_linha)
+                    tem_nome_longo = any(len(val) > 15 and any(char.isalpha() for char in val) 
+                                        for val in valores_linha)
+                    
+                    if tem_documento and tem_nome_longo:
+                        # Próximo cliente encontrado, voltar uma linha
+                        i -= 1
+                        break
+                    
+                    # Extrair dados do terminal
+                    terminal = str(linha_terminal.iloc[idx_terminal]) if idx_terminal is not None else ''
+                    frota = str(linha_terminal.iloc[idx_frota]) if idx_frota is not None else ''
+                    rastreador = str(linha_terminal.iloc[idx_rastreador]) if idx_rastreador is not None else ''
+                    
+                    # Limpar dados
+                    terminal = terminal.strip() if terminal != 'nan' else ''
+                    frota = frota.strip() if frota != 'nan' else ''
+                    rastreador = rastreador.replace('.0', '').strip() if rastreador != 'nan' else ''
+                    
+                    # Se tem dados válidos, adicionar
+                    if terminal and rastreador:
+                        registos_consolidados.append({
+                            **cliente_atual,
+                            'Terminal/Frota': f"{terminal} ({frota})" if frota else terminal,
+                            'Rastreador': rastreador
+                        })
+                        terminais_encontrados += 1
+                        st.write(f"    📱 Terminal: {terminal} → Rastreador: {rastreador}")
+                    
+                    i += 1
+                
+                # Reset cliente após processar todos os terminais
+                cliente_atual = None
+            
+            i += 1
+            linhas_processadas += 1
+            
+            # Evitar loops infinitos
+            if linhas_processadas > 5000:
+                st.warning("⚠️ Limite de processamento atingido")
+                break
 
         # Debug final
         st.write(f"📈 **Debug:** Processadas {linhas_processadas} linhas")
         st.write(f"👥 **Debug:** {clientes_encontrados} clientes identificados")
         st.write(f"📱 **Debug:** {terminais_encontrados} terminais encontrados")
         st.write(f"🔗 **Debug:** {len(registos_consolidados)} vínculos consolidados")
+
+        if not registos_consolidados:
+            st.error("❌ Nenhum vínculo foi consolidado após processamento hierárquico.")
+            # Mostrar algumas linhas para debug adicional
+            st.write("🔍 **Debug adicional - Primeiras linhas do arquivo:**")
+            st.dataframe(df_completo.head(20))
+            return None, None
 
         # === ETAPA 4: CRIAR DATAFRAME FINAL E FAZER LIGAÇÃO ===
         if not registos_consolidados:
