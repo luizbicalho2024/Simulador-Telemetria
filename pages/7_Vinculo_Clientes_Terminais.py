@@ -37,29 +37,26 @@ def processar_vinculos(file_clientes, file_rastreadores):
         # Remove colunas completamente vazias
         df_clientes_raw = df_clientes_raw.loc[:, ~df_clientes_raw.columns.str.contains('^Unnamed', na=False)]
         df_clientes_raw.dropna(how='all', inplace=True)
-        df_clientes_raw.columns = df_clientes_raw.columns.str.strip()
-        df_clientes_raw = df_clientes_raw.rename(columns={'Tipo Cliente': 'Tipo de Cliente'})
-
+        
         registos_consolidados = []
         cliente_atual = {}
 
         for index, row in df_clientes_raw.iterrows():
-            tipo_cliente = str(row.get('Tipo de Cliente', '')).strip()
-            
-            # Se a linha define um novo cliente
+            # Tenta identificar uma linha de cliente
+            tipo_cliente = str(row.get('Tipo Cliente', '')).strip()
             if 'Jurídica' in tipo_cliente or 'Física' in tipo_cliente:
                 cliente_atual = {
                     'Nome do Cliente': row.get('Nome do Cliente'),
                     'CPF/CNPJ': row.get('CPF/CNPJ'),
-                    'Tipo de Cliente': tipo_cliente
+                    'Tipo Cliente': tipo_cliente
                 }
-            
-            # Se a linha contém um terminal, associa ao último cliente encontrado
-            if pd.notna(row.get('Terminal')) and cliente_atual:
-                # Ignora as linhas que são sub-cabeçalhos
-                if str(row.get('Terminal')).strip().lower() == 'terminal':
+                # Pula para a próxima linha, pois a linha do cliente não tem terminal
+                if pd.isna(row.get('Terminal')):
                     continue
 
+            # Se não for uma linha de cliente, tenta identificar como uma linha de terminal
+            # Ignora as linhas de sub-cabeçalho que contêm a palavra "Terminal"
+            if pd.notna(row.get('Terminal')) and cliente_atual and str(row.get('Terminal')).strip().lower() != 'terminal':
                 registos_consolidados.append({
                     **cliente_atual,
                     'Terminal/Frota': row.get('Terminal'),
@@ -75,13 +72,13 @@ def processar_vinculos(file_clientes, file_rastreadores):
         df_final['Modelo'] = df_final['Rastreador'].map(mapa_modelos).fillna('Modelo não encontrado')
         
         # Etapa 4: Agrupar os resultados para o formato JSON
-        df_grouped = df_final.groupby(['Nome do Cliente', 'CPF/CNPJ', 'Tipo de Cliente']).apply(
+        df_grouped = df_final.groupby(['Nome do Cliente', 'CPF/CNPJ', 'Tipo Cliente']).apply(
             lambda x: x[['Terminal/Frota', 'Rastreador', 'Modelo']].to_dict('records')
         ).reset_index(name='Terminais')
 
         json_resultado = json.loads(df_grouped.to_json(orient="records", force_ascii=False))
 
-        return df_final[['Nome do Cliente', 'CPF/CNPJ', 'Tipo de Cliente', 'Terminal/Frota', 'Rastreador', 'Modelo']], json_resultado
+        return df_final[['Nome do Cliente', 'CPF/CNPJ', 'Tipo Cliente', 'Terminal/Frota', 'Rastreador', 'Modelo']], json_resultado
 
     except Exception as e:
         st.error(f"Ocorreu um erro inesperado ao processar os ficheiros: {e}")
