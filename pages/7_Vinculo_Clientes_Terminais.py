@@ -24,39 +24,30 @@ def processar_vinculos(file_clientes, file_rastreadores):
     try:
         # Lê a planilha de rastreadores para criar um mapa de Serial -> Modelo
         df_rastreadores = pd.read_excel(file_rastreadores, header=11, engine='openpyxl')
-        df_rastreadores = df_rastreadores.rename(columns={'Nº Série': 'Rastreador_Serial', 'Modelo': 'Modelo_Rastreador'})
-        df_rastreadores.dropna(subset=['Rastreador_Serial'], inplace=True)
-        # Garante que a chave de junção seja uma string sem casas decimais
-        df_rastreadores['Rastreador_Serial'] = df_rastreadores['Rastreador_Serial'].astype(float).astype(int).astype(str)
-        mapa_modelos = df_rastreadores.set_index('Rastreador_Serial')['Modelo_Rastreador'].to_dict()
+        df_rastreadores = df_rastreadores.rename(columns={'Nº Série': 'Rastreador', 'Modelo': 'Modelo_Rastreador'})
+        df_rastreadores.dropna(subset=['Rastreador'], inplace=True)
+        df_rastreadores['Rastreador'] = df_rastreadores['Rastreador'].astype(str)
+        mapa_modelos = df_rastreadores.set_index('Rastreador')['Modelo_Rastreador'].to_dict()
 
-        # Lê a planilha de clientes sem cabeçalho para processar a estrutura aninhada
-        df_clientes_raw = pd.read_excel(file_clientes, header=None, engine='openpyxl')
+        # Lê a planilha de clientes
+        df_clientes_raw = pd.read_excel(file_clientes, header=11, engine='openpyxl')
         
+        # Remove colunas completamente vazias que o Excel por vezes cria
+        df_clientes_raw = df_clientes_raw.loc[:, ~df_clientes_raw.columns.str.contains('^Unnamed', na=False)]
+        df_clientes_raw.dropna(how='all', inplace=True)
+
+        # Padroniza nomes de colunas
+        df_clientes_raw.columns = df_clientes_raw.columns.str.strip()
+        df_clientes_raw = df_clientes_raw.rename(columns={'Tipo Cliente': 'Tipo de Cliente'})
+
         registos_consolidados = []
         cliente_atual = {}
-        
-        header_row_index = -1
-        for i, row in df_clientes_raw.head(20).iterrows():
-            row_str = ' '.join(map(str, row.values)).lower()
-            if 'nome do cliente' in row_str and 'cpf/cnpj' in row_str:
-                header_row_index = i
-                break
-        
-        if header_row_index == -1:
-            st.error("Não foi possível encontrar a linha de cabeçalho (com 'Nome do Cliente', 'CPF/CNPJ') no `relatorio_clientes.xlsx`.")
-            return None
-        
-        df_clientes_proc = df_clientes_raw.copy()
-        df_clientes_proc.columns = df_clientes_raw.iloc[header_row_index]
-        df_clientes_proc = df_clientes_proc.iloc[header_row_index + 1:].reset_index(drop=True)
-        
-        df_clientes_proc.columns = df_clientes_proc.columns.str.strip()
-        df_clientes_proc = df_clientes_proc.rename(columns={'Tipo Cliente': 'Tipo de Cliente'})
 
-        for index, row in df_clientes_proc.iterrows():
+        # Processa a estrutura aninhada para criar uma lista limpa
+        for index, row in df_clientes_raw.iterrows():
             tipo_cliente = str(row.get('Tipo de Cliente', '')).strip()
             
+            # Se a linha define um novo cliente
             if 'Jurídica' in tipo_cliente or 'Física' in tipo_cliente:
                 cliente_atual = {
                     'Nome do Cliente': row.get('Nome do Cliente'),
@@ -64,16 +55,12 @@ def processar_vinculos(file_clientes, file_rastreadores):
                     'Tipo de Cliente': tipo_cliente
                 }
             
-            # Ignora as linhas de sub-cabeçalho
-            if str(row.get('Terminal')).strip() == 'Terminal' or str(row.get('Rastreador')).strip() == 'Rastreador':
-                continue
-
+            # Se a linha contém um terminal, associa ao último cliente encontrado
             if pd.notna(row.get('Terminal')) and cliente_atual:
                 registos_consolidados.append({
                     **cliente_atual,
                     'Terminal': row.get('Terminal'),
-                    # Garante que o rastreador seja uma string sem casas decimais
-                    'Rastreador': str(int(float(row.get('Rastreador'))))
+                    'Rastreador': str(row.get('Rastreador'))
                 })
 
         if not registos_consolidados:
@@ -83,6 +70,9 @@ def processar_vinculos(file_clientes, file_rastreadores):
         df_final['Modelo'] = df_final['Rastreador'].map(mapa_modelos).fillna('Modelo não encontrado')
         
         return df_final[['Nome do Cliente', 'CPF/CNPJ', 'Tipo de Cliente', 'Terminal', 'Rastreador', 'Modelo']]
+    except KeyError as e:
+        st.error(f"Erro de Coluna: Não foi possível encontrar a coluna '{e}'. Verifique se os nomes das colunas nos seus ficheiros correspondem ao esperado.")
+        return None
     except Exception as e:
         st.error(f"Ocorreu um erro inesperado ao processar os ficheiros: {e}")
         return None
