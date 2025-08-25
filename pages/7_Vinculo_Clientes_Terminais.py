@@ -1,29 +1,15 @@
 import streamlit as st
 import pandas as pd
-# Removido 'user_management_db' e 'json' pois não são usados na lógica principal,
-# mas você pode adicioná-los de volta se precisar deles para outra coisa.
 import io
 
-# --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
+# --- Configuração da Página ---
 st.set_page_config(
-    layout="wide",
-    page_title="Vínculo de Clientes e Terminais",
-    page_icon="🔗"
+    page_title="Estruturador de Relatórios de Clientes",
+    page_icon="📊",
+    layout="wide"
 )
 
-# Simula um estado de login para teste. 
-# Em seu ambiente real, este estado será controlado pelo seu sistema de login.
-# Para testar o acesso negado, mude para False.
-if 'authentication_status' not in st.session_state:
-    st.session_state['authentication_status'] = True 
-
-if not st.session_state.get("authentication_status"):
-    st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
-    st.stop()
-
-# --- O RESTANTE DA APLICAÇÃO SÓ É EXECUTADO SE O LOGIN FOR VÁLIDO ---
-
-# --- Funções de Processamento de Dados ---
+# --- Funções de Processamento ---
 
 def processar_relatorio_clientes(df):
     """
@@ -62,6 +48,7 @@ def processar_relatorio_clientes(df):
             }
             processed_data.append(vehicle_data)
 
+    # Retorna o DataFrame com a ordem de colunas definida
     cols = ['Cliente', 'CPF_CNPJ', 'Tipo_Cliente', 'Telefone', 'Frota', 'Descricao', 'SimCard', 'Rastreador']
     df_processed = pd.DataFrame(processed_data)
     return df_processed[cols]
@@ -74,9 +61,9 @@ def to_csv(df):
     processed_data = output.getvalue()
     return processed_data
 
-# --- Interface Principal da Aplicação ---
+# --- Interface da Aplicação ---
 
-st.title("🔗 Ferramenta para Vínculo de Clientes e Terminais")
+st.title("📊 Ferramenta para Estruturar Relatórios de Clientes")
 st.markdown("""
 Esta aplicação automatiza a organização e combinação de relatórios. 
 Faça o upload dos **dois arquivos** CSV solicitados para gerar o relatório final consolidado.
@@ -102,20 +89,23 @@ with col2:
     )
 
 
-# --- Lógica de Processamento e Exibição ---
+# --- Lógica Principal e Exibição ---
 
 if uploaded_clientes and uploaded_rastreadores:
     st.header("2. Processamento e Resultado")
     try:
+        # --- Passo 1: Processar o relatório principal de clientes ---
         with st.spinner('Processando Relatório de Clientes...'):
             df_clientes_raw = pd.read_csv(uploaded_clientes, skiprows=11, header=None, usecols=range(6))
             df_base = processar_relatorio_clientes(df_clientes_raw)
             st.success("Relatório de Clientes processado com sucesso!")
 
+        # --- Passo 2: Adicionar o modelo do rastreador ---
         with st.spinner('Cruzando informações com o estoque de rastreadores...'):
             df_rastreador = pd.read_csv(uploaded_rastreadores, skiprows=11)
             df_lookup = df_rastreador[['Modelo', 'Nº Série']].drop_duplicates(subset=['Nº Série'])
             
+            # Garante que as chaves de junção sejam do mesmo tipo (string) e limpa sufixos '.0'
             df_base['Rastreador'] = df_base['Rastreador'].astype(str).str.replace(r'\.0$', '', regex=True)
             df_lookup['Nº Série'] = df_lookup['Nº Série'].astype(str).str.replace(r'\.0$', '', regex=True)
 
@@ -124,6 +114,7 @@ if uploaded_clientes and uploaded_rastreadores:
             df_final['Modelo'].fillna('Modelo não encontrado', inplace=True)
             st.success("Modelo do rastreador adicionado!")
 
+        # --- Exibição do resultado final ---
         st.subheader("Relatório Final Consolidado")
         st.dataframe(df_final)
 
