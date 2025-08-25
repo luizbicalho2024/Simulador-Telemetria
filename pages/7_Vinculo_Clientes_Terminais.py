@@ -48,11 +48,7 @@ def processar_relatorio_clientes(df):
             }
             processed_data.append(vehicle_data)
 
-    # Retorna o DataFrame com a ordem de colunas definida
-    cols = ['Cliente', 'CPF_CNPJ', 'Tipo_Cliente', 'Telefone', 'Frota', 'Descricao', 'SimCard', 'Rastreador']
-    df_processed = pd.DataFrame(processed_data)
-    return df_processed[cols]
-
+    return pd.DataFrame(processed_data)
 
 def to_csv(df):
     """Converte um DataFrame para CSV em memória para o botão de download."""
@@ -66,13 +62,13 @@ def to_csv(df):
 st.title("📊 Ferramenta para Estruturar Relatórios de Clientes")
 st.markdown("""
 Esta aplicação automatiza a organização e combinação de relatórios. 
-Faça o upload dos **dois arquivos** CSV solicitados para gerar o relatório final consolidado.
+Faça o upload dos três arquivos CSV solicitados para gerar o relatório final consolidado.
 """)
 
 # --- Seção de Upload de Arquivos ---
 st.header("1. Faça o upload dos arquivos")
 
-col1, col2 = st.columns(2)
+col1, col2, col3 = st.columns(3)
 
 with col1:
     uploaded_clientes = st.file_uploader(
@@ -82,6 +78,13 @@ with col1:
     )
 
 with col2:
+    uploaded_adicionais = st.file_uploader(
+        "Dados Adicionais de Frota",
+        type="csv",
+        help="Planilha com novos registros de frotas para adicionar (ex: Planilha sem título - Página1.csv)"
+    )
+
+with col3:
     uploaded_rastreadores = st.file_uploader(
         "Estoque de Rastreadores",
         type="csv",
@@ -91,7 +94,7 @@ with col2:
 
 # --- Lógica Principal e Exibição ---
 
-if uploaded_clientes and uploaded_rastreadores:
+if uploaded_clientes and uploaded_adicionais and uploaded_rastreadores:
     st.header("2. Processamento e Resultado")
     try:
         # --- Passo 1: Processar o relatório principal de clientes ---
@@ -100,16 +103,27 @@ if uploaded_clientes and uploaded_rastreadores:
             df_base = processar_relatorio_clientes(df_clientes_raw)
             st.success("Relatório de Clientes processado com sucesso!")
 
-        # --- Passo 2: Adicionar o modelo do rastreador ---
+        # --- Passo 2: Adicionar dados da segunda planilha ---
+        with st.spinner('Adicionando novos dados de frota...'):
+            df_novo = pd.read_csv(uploaded_adicionais, header=None, names=['Cliente', 'Frota', 'Rastreador'])
+            client_info = df_base[['Cliente', 'CPF_CNPJ', 'Tipo_Cliente', 'Telefone']].drop_duplicates('Cliente')
+            df_novo_enriquecido = pd.merge(df_novo, client_info, on='Cliente', how='left')
+            df_novo_enriquecido['Descricao'] = 'Não Informado'
+            df_novo_enriquecido['SimCard'] = 'Não Informado'
+            df_novo_enriquecido = df_novo_enriquecido[df_base.columns]
+            df_combinado = pd.concat([df_base, df_novo_enriquecido], ignore_index=True).drop_duplicates()
+            st.success("Novos dados de frota incorporados!")
+
+        # --- Passo 3: Adicionar o modelo do rastreador ---
         with st.spinner('Cruzando informações com o estoque de rastreadores...'):
             df_rastreador = pd.read_csv(uploaded_rastreadores, skiprows=11)
             df_lookup = df_rastreador[['Modelo', 'Nº Série']].drop_duplicates(subset=['Nº Série'])
             
             # Garante que as chaves de junção sejam do mesmo tipo (string) e limpa sufixos '.0'
-            df_base['Rastreador'] = df_base['Rastreador'].astype(str).str.replace(r'\.0$', '', regex=True)
+            df_combinado['Rastreador'] = df_combinado['Rastreador'].astype(str).str.replace(r'\.0$', '', regex=True)
             df_lookup['Nº Série'] = df_lookup['Nº Série'].astype(str).str.replace(r'\.0$', '', regex=True)
 
-            df_final = pd.merge(df_base, df_lookup, left_on='Rastreador', right_on='Nº Série', how='left')
+            df_final = pd.merge(df_combinado, df_lookup, left_on='Rastreador', right_on='Nº Série', how='left')
             df_final.drop(columns=['Nº Série'], inplace=True)
             df_final['Modelo'].fillna('Modelo não encontrado', inplace=True)
             st.success("Modelo do rastreador adicionado!")
@@ -130,4 +144,4 @@ if uploaded_clientes and uploaded_rastreadores:
         st.warning("Verifique se os arquivos enviados estão no formato correto e se correspondem aos esperados.")
 
 else:
-    st.info("Aguardando o upload dos dois arquivos para iniciar o processamento.")
+    st.info("Aguardando o upload dos três arquivos para iniciar o processamento.")
