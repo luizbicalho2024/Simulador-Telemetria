@@ -16,26 +16,34 @@ if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. FUNÇÃO AUXILIAR ROBUSTA ---
-@st.cache_data(show_spinner=False)
+# --- 2. FUNÇÕES AUXILIARES ---
+def detectar_inicio_tabela(df_raw):
+    """Encontra o índice da primeira linha que parece ser um cabeçalho de dados."""
+    for i, row in df_raw.head(20).iterrows():
+        # Converte a linha para uma lista de strings para facilitar a verificação
+        row_str = ' '.join(map(str, row.values)).lower()
+        # Procura por palavras-chave que identificam o cabeçalho
+        if 'cliente' in row_str and 'terminal' in row_str and 'rastreador' in row_str:
+            return i
+    # Fallback para a linha 11 se a deteção falhar
+    return 11
+
+@st.cache_data(show_spinner="A processar e a cruzar as informações...")
 def processar_vinculos(file_clientes, file_rastreadores):
     """
-    Lê as duas planilhas, processa a estrutura aninhada dos clientes de forma robusta e
-    junta com as informações de modelo dos rastreadores.
+    Lê as duas planilhas, processa a estrutura aninhada dos clientes,
+    junta com as informações de modelo e retorna os resultados.
     """
     try:
         # Etapa 1: Preparar o mapa de Rastreador -> Modelo
         df_rastreadores = pd.read_excel(file_rastreadores, header=11, engine='openpyxl')
         df_rastreadores = df_rastreadores.rename(columns={'Nº Série': 'Rastreador', 'Modelo': 'Modelo_Rastreador'})
         df_rastreadores.dropna(subset=['Rastreador'], inplace=True)
-        # Garante que a chave de junção seja do mesmo tipo (string) e sem casas decimais
         df_rastreadores['Rastreador'] = df_rastreadores['Rastreador'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
         mapa_modelos = df_rastreadores.set_index('Rastreador')['Modelo_Rastreador'].to_dict()
 
         # Etapa 2: Ler e processar a planilha de clientes
         df_clientes_raw = pd.read_excel(file_clientes, header=11, engine='openpyxl')
-        
-        # Remove colunas completamente vazias
         df_clientes_raw = df_clientes_raw.loc[:, ~df_clientes_raw.columns.str.contains('^Unnamed', na=False)]
         df_clientes_raw.dropna(how='all', inplace=True)
         df_clientes_raw.columns = df_clientes_raw.columns.str.strip()
@@ -53,7 +61,6 @@ def processar_vinculos(file_clientes, file_rastreadores):
                     'CPF/CNPJ': row.get('CPF/CNPJ'),
                     'Tipo de Cliente': tipo_cliente
                 }
-                # Pula para a próxima linha se a informação do terminal não estiver na mesma linha do cliente
                 if pd.isna(row.get('Terminal')):
                     continue
             
@@ -118,19 +125,16 @@ st.markdown("---")
 # --- 5. ANÁLISE E EXIBIÇÃO ---
 if uploaded_clientes and uploaded_rastreadores:
     try:
-        with st.spinner("⏳ Processando e comparando as planilhas..."):
-            df_tabela, dados_json = processar_vinculos(uploaded_clientes, uploaded_rastreadores)
+        df_tabela, dados_json = processar_vinculos(uploaded_clientes, uploaded_rastreadores)
         
         if df_tabela is not None and not df_tabela.empty:
             st.success(f"✅ Análise concluída! Foram encontrados **{len(df_tabela)}** terminais vinculados a **{df_tabela['CPF/CNPJ'].nunique()}** clientes distintos.")
             
-            # --- Cards de Resumo ---
             col_m1, col_m2 = st.columns(2)
             col_m1.metric("Total de Clientes com Vínculos", value=df_tabela['CPF/CNPJ'].nunique())
             col_m2.metric("Total de Terminais Vinculados", value=len(df_tabela))
             st.markdown("---")
 
-            # --- Filtros ---
             clientes_unicos = sorted(df_tabela['Nome do Cliente'].unique())
             cliente_selecionado = st.multiselect("Filtrar por Cliente:", options=clientes_unicos)
 
@@ -139,7 +143,6 @@ if uploaded_clientes and uploaded_rastreadores:
             else:
                 df_filtrado = df_tabela
             
-            # --- Abas de Visualização ---
             tab1, tab2 = st.tabs(["📊 Tabela Consolidada", "📝 JSON Agrupado"])
 
             with tab1:
@@ -152,7 +155,6 @@ if uploaded_clientes and uploaded_rastreadores:
                 )
 
             with tab2:
-                # Filtra o JSON com base na seleção do utilizador
                 if cliente_selecionado:
                     json_filtrado = [item for item in dados_json if item['Nome do Cliente'] in cliente_selecionado]
                     st.json(json_filtrado)
