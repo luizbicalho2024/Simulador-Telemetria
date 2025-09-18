@@ -60,9 +60,9 @@ def get_fipe_modelos(tipo_veiculo, codigo_marca):
     try:
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
-            # A API pode retornar 'modelos' ou 'anos', verificamos ambos
-            data = response.json()
-            return data.get('modelos', data.get('anos', []))
+            # ***** CORREÇÃO PRINCIPAL AQUI *****
+            # A API retorna diretamente uma lista, não um dicionário com a chave 'modelos'
+            return response.json()
     except requests.exceptions.RequestException:
         return []
     return []
@@ -136,8 +136,6 @@ with st.expander("🚗 Consulta Tabela FIPE", expanded=True):
     if tipo_veiculo:
         marcas = get_fipe_marcas(tipo_veiculo)
         if marcas:
-            # ***** CORREÇÃO PRINCIPAL AQUI *****
-            # A API retorna a chave 'valor', não 'codigo'
             marcas_dict = {marca['nome']: marca['valor'] for marca in marcas}
             with col_marca:
                 marca_selecionada = st.selectbox(
