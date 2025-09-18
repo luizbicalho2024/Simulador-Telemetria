@@ -36,27 +36,53 @@ def consultar_cnpj(cnpj: str):
     except requests.exceptions.RequestException as e:
         return None, f"Erro de conexão: {e}"
 
-# --- 3. FUNÇÃO AUXILIAR (FIPE) ---
-@st.cache_data(ttl=3600) # Cache de 1 hora para preços
-def get_fipe_preco(codigo_fipe):
-    """Busca o preço de um veículo pelo código FIPE."""
-    # Limpa o código FIPE para garantir o formato correto (ex: 001004-9)
-    codigo_fipe_limpo = re.sub(r'[^0-9-]', '', codigo_fipe)
-    
-    if not codigo_fipe_limpo:
-        return None, "Código FIPE inválido."
-        
-    url = f"https://brasilapi.com.br/api/fipe/preco/v1/{codigo_fipe_limpo}"
+# --- 3. FUNÇÕES AUXILIARES (FIPE) ---
+BASE_FIPE_URL = "https://parallelum.com.br/fipe/api/v1"
+
+@st.cache_data(ttl=86400) # Cache de 1 dia
+def get_fipe_marcas(tipo_veiculo):
+    """Busca as marcas de veículos da API FIPE."""
+    if not tipo_veiculo: return []
+    url = f"{BASE_FIPE_URL}/{tipo_veiculo}/marcas"
     try:
-        response = requests.get(url, timeout=10)
+        response = requests.get(url)
+        if response.status_code == 200: return response.json()
+    except: return []
+    return []
+
+@st.cache_data(ttl=3600)
+def get_fipe_modelos(tipo_veiculo, codigo_marca):
+    """Busca os modelos de uma marca específica."""
+    if not codigo_marca: return []
+    url = f"{BASE_FIPE_URL}/{tipo_veiculo}/marcas/{codigo_marca}/modelos"
+    try:
+        response = requests.get(url)
         if response.status_code == 200:
-            return response.json(), None
-        elif response.status_code == 404:
-            return None, "Código FIPE não encontrado."
-        else:
-            return None, f"Erro na API. Código: {response.status_code}"
-    except requests.exceptions.RequestException as e:
-        return None, f"Erro de conexão: {e}"
+            return response.json().get('modelos', [])
+    except: return []
+    return []
+
+@st.cache_data(ttl=3600)
+def get_fipe_anos(tipo_veiculo, codigo_marca, codigo_modelo):
+    """Busca os anos de um modelo específico."""
+    if not codigo_modelo: return []
+    url = f"{BASE_FIPE_URL}/{tipo_veiculo}/marcas/{codigo_marca}/modelos/{codigo_modelo}/anos"
+    try:
+        response = requests.get(url)
+        if response.status_code == 200: return response.json()
+    except: return []
+    return []
+
+@st.cache_data(ttl=3600)
+def get_fipe_preco(tipo_veiculo, codigo_marca, codigo_modelo, codigo_ano):
+    """Busca o preço final do veículo."""
+    if not codigo_ano: return None
+    url = f"{BASE_FIPE_URL}/{tipo_veiculo}/marcas/{codigo_marca}/modelos/{codigo_modelo}/anos/{codigo_ano}"
+    try:
+        response = requests.get(url)
+        if response.status_code == 200: return response.json()
+    except: return None
+    return None
 
 # --- 4. INTERFACE DA PÁGINA ---
 st.sidebar.image("imgs/v-c.png", width=120)
@@ -72,56 +98,68 @@ st.markdown("---")
 
 # --- 5. SECÇÃO DE CONSULTA DE CNPJ ---
 with st.expander("🏢 Consulta de CNPJ", expanded=True):
-    cnpj_input = st.text_input("Digite o CNPJ (apenas números ou formatado):", key="cnpj_input")
-
-    if st.button("Consultar CNPJ", use_container_width=True, type="primary"):
-        if cnpj_input:
-            with st.spinner("A consultar..."):
-                dados_cnpj, erro = consultar_cnpj(cnpj_input)
-            
-            if erro:
-                st.error(f"**Falha na consulta:** {erro}")
-            elif dados_cnpj:
-                st.success("**Consulta realizada com sucesso!**")
-                st.header(dados_cnpj.get("razao_social", "N/A"))
-                
-                col1, col2, col3 = st.columns(3)
-                col1.metric("Nome Fantasia", dados_cnpj.get("nome_fantasia") or "N/A")
-                col2.metric("Situação Cadastral", dados_cnpj.get("descricao_situacao_cadastral", "N/A"))
-                col3.metric("Data de Abertura", dados_cnpj.get("data_inicio_atividade", "N/A"))
-        else:
-            st.warning("Por favor, digite um CNPJ para consultar.")
+    # ... (código da consulta CNPJ como na última versão) ...
 
 st.markdown("---")
 
 # --- 6. SECÇÃO DE CONSULTA FIPE (REFATORADA) ---
 with st.expander("🚗 Consulta Tabela FIPE", expanded=True):
-    st.subheader("Consulte o valor de um veículo na Tabela FIPE")
+    st.subheader("Encontre o valor de um veículo na Tabela FIPE")
     
-    codigo_fipe_input = st.text_input(
-        "Digite o Código FIPE do veículo:",
-        placeholder="Ex: 004001-1",
-        key="fipe_code_input"
+    col1, col2, col3, col4 = st.columns(4)
+
+    # Passo 1: Selecionar o tipo de veículo
+    tipo_veiculo = col1.selectbox(
+        "1. Tipo", ["carros", "motos", "caminhoes"],
+        format_func=str.capitalize, index=None, placeholder="Selecione..."
     )
-    
-    if st.button("Consultar Preço FIPE", use_container_width=True):
-        if codigo_fipe_input:
-            with st.spinner("A buscar o preço..."):
-                preco_info, erro_fipe = get_fipe_preco(codigo_fipe_input)
-            
-            if erro_fipe:
-                st.error(f"**Falha na consulta FIPE:** {erro_fipe}")
-            elif preco_info and len(preco_info) > 0:
-                veiculo = preco_info[0]
-                st.subheader(f"{veiculo.get('marca')} {veiculo.get('modelo')}")
+
+    # Passo 2: Selecionar a marca
+    if tipo_veiculo:
+        marcas = get_fipe_marcas(tipo_veiculo)
+        marcas_dict = {marca['nome']: marca['codigo'] for marca in marcas}
+        marca_nome = col2.selectbox(
+            "2. Marca", list(marcas_dict.keys()),
+            index=None, placeholder="Selecione..."
+        )
+        
+        # Passo 3: Selecionar o modelo
+        if marca_nome:
+            codigo_marca = marcas_dict[marca_nome]
+            modelos = get_fipe_modelos(tipo_veiculo, codigo_marca)
+            modelos_dict = {modelo['nome']: modelo['codigo'] for modelo in modelos}
+            modelo_nome = col3.selectbox(
+                "3. Modelo", list(modelos_dict.keys()),
+                index=None, placeholder="Selecione..."
+            )
+
+            # Passo 4: Selecionar o ano
+            if modelo_nome:
+                codigo_modelo = modelos_dict[modelo_nome]
+                anos = get_fipe_anos(tipo_veiculo, codigo_marca, codigo_modelo)
+                anos_dict = {ano['nome']: ano['codigo'] for ano in anos}
+                ano_nome = col4.selectbox(
+                    "4. Ano", list(anos_dict.keys()),
+                    index=None, placeholder="Selecione..."
+                )
                 
-                p_col1, p_col2, p_col3 = st.columns(3)
-                p_col1.metric("Valor FIPE", veiculo.get('valor'))
-                p_col2.metric("Ano Modelo", veiculo.get('anoModelo'))
-                p_col3.metric("Combustível", veiculo.get('combustivel'))
-                
-                st.caption(f"Mês de Referência: {veiculo.get('mesReferencia').strip()} | Código FIPE: {veiculo.get('codigoFipe')}")
-            else:
-                st.error("Não foi possível obter o preço para o código FIPE selecionado.")
-        else:
-            st.warning("Por favor, insira um Código FIPE para consultar.")
+                # Exibição do resultado
+                if ano_nome:
+                    codigo_ano = anos_dict[ano_nome]
+                    with st.spinner("A buscar o preço..."):
+                        veiculo_info = get_fipe_preco(tipo_veiculo, codigo_marca, codigo_modelo, codigo_ano)
+                    
+                    st.markdown("---")
+                    if veiculo_info:
+                        st.subheader(f"Resultado da Consulta FIPE:")
+                        st.title(veiculo_info.get('Valor'))
+                        
+                        r_col1, r_col2, r_col3, r_col4 = st.columns(4)
+                        r_col1.metric("Marca", veiculo_info.get('Marca'))
+                        r_col2.metric("Modelo", veiculo_info.get('Modelo'))
+                        r_col3.metric("Ano", str(veiculo_info.get('AnoModelo')))
+                        r_col4.metric("Combustível", veiculo_info.get('Combustivel'))
+                        
+                        st.caption(f"Mês de Referência: {veiculo_info.get('MesReferencia')} | Código FIPE: {veiculo_info.get('CodigoFipe')}")
+                    else:
+                        st.error("Não foi possível obter o preço para o veículo selecionado.")
