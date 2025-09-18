@@ -40,6 +40,8 @@ def consultar_cnpj(cnpj: str):
 @st.cache_data(ttl=86400) # Cache de 1 dia para marcas
 def get_fipe_marcas(tipo_veiculo):
     """Busca as marcas de veículos da API FIPE."""
+    if not tipo_veiculo:
+        return []
     url = f"https://brasilapi.com.br/api/fipe/marcas/v1/{tipo_veiculo}"
     try:
         response = requests.get(url, timeout=10)
@@ -58,8 +60,9 @@ def get_fipe_modelos(tipo_veiculo, codigo_marca):
     try:
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
-            # A API pode retornar 'modelos' ou 'anos'
-            return response.json().get('modelos', [])
+            # A API pode retornar 'modelos' ou 'anos', verificamos ambos
+            data = response.json()
+            return data.get('modelos', data.get('anos', []))
     except requests.exceptions.RequestException:
         return []
     return []
