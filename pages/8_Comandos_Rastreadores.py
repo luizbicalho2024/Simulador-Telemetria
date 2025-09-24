@@ -77,23 +77,6 @@ with tab_st310u:
             exibir_comando_com_botao("Ativar Saída 1 (Bloqueio)", f"ST300OUT;{serial};02;Enable1", "out1_on_310", serial)
             exibir_comando_com_botao("Desativar Saída 1 (Desbloqueio)", f"ST300OUT;{serial};02;Disable1", "out1_off_310", serial)
 
-# --- ABA ST4305 ---
-'''with tab_st4305:
-    if not serial:
-        st.info("Por favor, insira um número de série na barra lateral para gerar os comandos para este modelo.")
-    else:
-        st.header("Modelo ST4305")
-        with st.expander("⚙️ Configuração de Rede (APN, IP e Porta)", expanded=True):
-            apn_4305 = st.text_input("APN:", value="allcomiot.vivo.com.br", key="cmd_4305_apn")
-            user_4305 = st.text_input("Utilizador APN:", value="allcom", key="cmd_4305_user")
-            pwd_4305 = st.text_input("Senha APN:", value="allcom", key="cmd_4305_pwd", type="password")
-            comando_apn = f'PRG;{serial};10;00#01;01#{apn_4305};02#{user_4305};03#{pwd_4305}'
-            comando_ip = f'PRG;{serial};10;05#54.94.190.167;06#9601;08#54.94.190.167;09#9601'
-            exibir_comando_com_botao("APN", comando_apn, "apn_4305", serial)
-            exibir_comando_com_botao("IP e Porta", comando_ip, "ip_4305", serial)
-        with st.expander("▶️ Ações Remotas"):
-            exibir_comando_com_botao("Reboot (Reiniciar)", f'CMD;{serial};03;03', "reboot_4305", serial)
-            exibir_comando_com_botao("Solicitar Posição", f'CMD;{serial};03;01', "pos_4305", serial)'''
 
 # --- ABA ST390 ---
 with tab_st390:
