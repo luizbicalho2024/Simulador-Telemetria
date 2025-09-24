@@ -55,7 +55,7 @@ def exibir_comando_com_botao(titulo, comando, key_sufixo, target_id):
                     st.error(status_msg)
 
 # --- 3. ABAS POR MODELO ---
-tab_st310u, tab_st4305, tab_st390, tab_st4315u = st.tabs(["ST310U / ST340", "ST4305", "ST390", "ST4315U"])
+tab_st310u, tab_st4305, tab_st390, tab_st4315u = st.tabs(["ST300", "ST4305", "ST390", "ST4315U"])
 
 # --- ABA ST310U / ST340 ---
 with tab_st310u:
