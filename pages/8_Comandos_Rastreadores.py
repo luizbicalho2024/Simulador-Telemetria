@@ -62,7 +62,7 @@ with tab_st310u:
     if not serial:
         st.info("Por favor, insira um número de série na barra lateral para gerar os comandos para este modelo.")
     else:
-        st.header("Modelo ST310U / ST340")
+        st.header("Modelo ST300")
         with st.expander("⚙️ Configuração de Rede (IP, Porta e APN)", expanded=True):
             apn = st.text_input("APN:", value="allcom.claro.com.br", key="cmd_310_apn")
             user = st.text_input("Utilizador APN:", value="allcom", key="cmd_310_user")
@@ -72,13 +72,13 @@ with tab_st310u:
             comando_ntw = f"ST300NTW;{serial};02;1;{apn};{user};{pwd};{ip1};{porta1};;;"
             exibir_comando_com_botao("Comando de Rede", comando_ntw, "ntw_310", serial)
         with st.expander("▶️ Ações Remotas"):
-            exibir_comando_com_botao("Solicitar Posição Atual", f"ST300POS;{serial};02", "pos_310", serial)
-            exibir_comando_com_botao("Reiniciar o Equipamento (Reboot)", f"ST300RST;{serial};02", "rst_310", serial)
-            exibir_comando_com_botao("Ativar Saída 1 (Bloqueio)", f"ST300OUT;{serial};02;1;1", "out1_on_310", serial)
-            exibir_comando_com_botao("Desativar Saída 1 (Desbloqueio)", f"ST300OUT;{serial};02;1;0", "out1_off_310", serial)
+            exibir_comando_com_botao("Solicitar Posição Atual", f"ST300CMD;{serial};02;StatusReq", "pos_310", serial)
+            exibir_comando_com_botao("Reiniciar o Equipamento (Reboot)", f"ST300RST;{serial};02;Reboot", "rst_310", serial)
+            exibir_comando_com_botao("Ativar Saída 1 (Bloqueio)", f"ST300OUT;{serial};02;Enable1", "out1_on_310", serial)
+            exibir_comando_com_botao("Desativar Saída 1 (Desbloqueio)", f"ST300OUT;{serial};02;Disable1", "out1_off_310", serial)
 
 # --- ABA ST4305 ---
-with tab_st4305:
+'''with tab_st4305:
     if not serial:
         st.info("Por favor, insira um número de série na barra lateral para gerar os comandos para este modelo.")
     else:
@@ -93,7 +93,7 @@ with tab_st4305:
             exibir_comando_com_botao("IP e Porta", comando_ip, "ip_4305", serial)
         with st.expander("▶️ Ações Remotas"):
             exibir_comando_com_botao("Reboot (Reiniciar)", f'CMD;{serial};03;03', "reboot_4305", serial)
-            exibir_comando_com_botao("Solicitar Posição", f'CMD;{serial};03;01', "pos_4305", serial)
+            exibir_comando_com_botao("Solicitar Posição", f'CMD;{serial};03;01', "pos_4305", serial)'''
 
 # --- ABA ST390 ---
 with tab_st390:
