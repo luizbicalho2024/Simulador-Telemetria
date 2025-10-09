@@ -22,12 +22,13 @@ if not st.session_state.get("authentication_status"):
     st.stop()
 
 # --- 2. CONSTANTES E SELETORES (FINAIS E CORRIGIDOS) ---
-URL_DO_SISTEMA = "https://sistema.etrac.com.br/"
+URL_DO_SISTEMA = "https://sistema.etrac.com.br/index.php?r=site%2Flogin"
 URL_BASE_CADASTRO_VEICULO = "https://sistema.etrac.com.br/index.php?r=veiculo%2Fcreate&id="
 ID_CAMPO_USUARIO = "loginform-username"
 ID_CAMPO_SENHA = "loginform-password"
 BOTAO_ENTRAR_XPATH = "//button[@name='login-button']"
 
+# IDs dos campos do formulário CORRIGIDOS
 INPUT_PLACA_ID = "input_veic_placa"
 INPUT_CHASSI_ID = "veiculo-veic_chassi"
 INPUT_MARCA_ID = "veiculo-veic_fabricante"
@@ -37,8 +38,6 @@ INPUT_ANO_MODELO_ID = "veiculo-veic_ano_modelo"
 INPUT_COR_ID = "veiculo-veic_cor"
 RADIO_PLACA_MERCOSUL_XPATH = "//input[@name='tipo_placa' and @value='2']"
 BOTAO_CADASTRAR_VEICULO_XPATH = "//div[@class='form-group align-right']//button[contains(text(), 'Cadastrar')]"
-
-# Seletor para a mensagem de sucesso que aparece após o cadastro
 SUCCESS_TOAST_SELECTOR = "//div[contains(@class, 'jq-toast-single') and contains(., 'sucesso')]"
 
 COLUNAS_OBRIGATORIAS = [
@@ -62,7 +61,7 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
     try:
         service = Service() 
         driver = webdriver.Chrome(service=service, options=options)
-        wait = WebDriverWait(driver, 30)
+        wait = WebDriverWait(driver, 20)
         
         status_container.info("1. A fazer login no sistema Etrac...")
         driver.get(URL_DO_SISTEMA)
@@ -93,21 +92,22 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
                     driver.find_element(By.ID, INPUT_ANO_FABRICACAO_ID).send_keys(str(veiculo.get('Ano de Fabricação', '')))
                     driver.find_element(By.ID, INPUT_ANO_MODELO_ID).send_keys(str(veiculo.get('Ano Modelo', '')))
                     driver.find_element(By.ID, INPUT_COR_ID).send_keys(veiculo.get('Cor', ''))
-                    
+                    st.write("      ✓ Campos principais preenchidos.")
+
                     st.write("   - Selecionando Placa Mercosul...")
                     driver.find_element(By.XPATH, RADIO_PLACA_MERCOSUL_XPATH).click()
-                    
+                    st.write("      ✓ Placa Mercosul selecionada.")
+
                     st.write("   - Enviando o formulário...")
                     submit_button = wait.until(EC.element_to_be_clickable((By.XPATH, BOTAO_CADASTRAR_VEICULO_XPATH)))
                     driver.execute_script("arguments[0].click();", submit_button)
                     
-                    # ***** CORREÇÃO FINAL E DEFINITIVA *****
-                    # Espera pela notificação de sucesso que aparece na tela
+                    st.write("   - Aguardando confirmação de sucesso do sistema...")
                     wait.until(EC.visibility_of_element_located((By.XPATH, SUCCESS_TOAST_SELECTOR)))
                     
                     summary['success'].append(placa)
                     status.update(label=f"Veículo **{placa}** cadastrado com sucesso!", state="complete")
-                    time.sleep(1) # Pausa estratégica de 1 segundo
+                    time.sleep(1)
 
                 except (TimeoutException, NoSuchElementException) as e:
                     error_msg = f"Falha ao cadastrar **{placa}**. O robô não encontrou um elemento, a confirmação de sucesso não apareceu, ou a página demorou muito a responder."
