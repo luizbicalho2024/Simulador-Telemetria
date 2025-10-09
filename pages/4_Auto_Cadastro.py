@@ -107,7 +107,7 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
                     
                     summary['success'].append(placa)
                     status.update(label=f"Veículo **{placa}** cadastrado com sucesso!", state="complete")
-                    time.sleep(1)
+                    time.sleep(1) # Pausa estratégica de 1 segundo
 
                 except (TimeoutException, NoSuchElementException) as e:
                     error_msg = f"Falha ao cadastrar **{placa}**. O robô não encontrou um elemento, a confirmação de sucesso não apareceu, ou a página demorou muito a responder."
