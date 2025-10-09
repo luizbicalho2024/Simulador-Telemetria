@@ -12,11 +12,12 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 # ==============================================================================
-# FUNÇÃO PRINCIPAL DA AUTOMAÇÃO (VERSÃO FINAL COM CORREÇÃO DE MAPEAMENTO)
+# FUNÇÃO PRINCIPAL DA AUTOMAÇÃO (VERSÃO FINAL COM VERIFICAÇÃO DE URL)
 # ==============================================================================
 def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
     """
-    Executa a automação de cadastro de veículos com detecção de erro de campo.
+    Executa a automação de cadastro de veículos com a verificação de sucesso
+    mais robusta, baseada na mudança de URL.
     """
     # --- ETAPA 1: CONFIGURAÇÕES E SELETORES ---
     URL_DO_SISTEMA = "https://sistema.etrac.com.br/"
@@ -39,19 +40,14 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
     INPUT_MES_LICENCIAMENTO_ID = "veiculo-mes_licenciamento"
     BOTAO_CADASTRAR_VEICULO_XPATH = "//div[@class='form-group align-right']//button[contains(text(), 'Cadastrar')]"
     
-    MENSAGEM_SUCESSO_XPATH = "//div[contains(@class, 'alert-success') and contains(text(), 'Veículo salvo com sucesso')]"
-    MENSAGEM_ERRO_GERAL_XPATH = "//div[contains(@class, 'alert-danger')]"
     MENSAGEM_ERRO_CAMPO_XPATH = "//div[contains(@class, 'has-error')]//div[contains(@class, 'help-block')]"
 
-    # ##############################################################################
-    # CORREÇÃO APLICADA AQUI: Adicionado o espaço duplo na chave 'Cor  (*)'
-    # ##############################################################################
     mapa_colunas = {
         'ID_cliente (*)': 'cliente_id', 'Cliente/Unidade': 'Nome do Cliente',
         'Segmento (*)': 'Segmento', 'Placa (*)': 'Placa', 'Chassi (*)': 'Chassis',
         'Renavam': 'Renavam', 'Ano de Fabricação (*)': 'Ano',
         'Autonomia': 'Autonomia', 'Marca (*)': 'Marca', 'Modelo (*)': 'Modelo',
-        'Ano Modelo (*)': 'Ano Modelo', 'Cor  (*)': 'Cor', # <- CORRIGIDO
+        'Ano Modelo (*)': 'Ano Modelo', 'Cor  (*)': 'Cor',
         'Tanque de Combustivel (*)': 'Tanque de Comb',
         'Mes Licenciamento (*)': 'Mes de Licenciamento'
     }
@@ -99,8 +95,8 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
                 continue
             
             try:
-                url_final = f"{URL_BASE_CADASTRO_VEICULO}{cliente_id}"
-                driver.get(url_final)
+                url_cadastro = f"{URL_BASE_CADASTRO_VEICULO}{cliente_id}"
+                driver.get(url_cadastro)
 
                 radio_mercosul = wait.until(EC.presence_of_element_located((By.XPATH, RADIO_PLACA_MERCOSUL_XPATH)))
                 driver.execute_script("arguments[0].click();", radio_mercosul)
@@ -127,19 +123,18 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
                 botao_cadastrar = wait.until(EC.element_to_be_clickable((By.XPATH, BOTAO_CADASTRAR_VEICULO_XPATH)))
                 driver.execute_script("arguments[0].click();", botao_cadastrar)
                 
+                # --- LÓGICA DE VERIFICAÇÃO FINAL ---
                 try:
-                    wait.until(EC.presence_of_element_located((By.XPATH, MENSAGEM_SUCESSO_XPATH)))
-                    st.write(f"✅ **Confirmado:** Veículo '{placa_veiculo}' cadastrado para '{nome_cliente}'.")
+                    # Espera até 10 segundos para a URL MUDAR da página de cadastro.
+                    wait.until(EC.not_(EC.url_to_be(url_cadastro)))
+                    st.write(f"✅ **Confirmado:** Veículo '{placa_veiculo}' cadastrado com sucesso para '{nome_cliente}'.")
                 except TimeoutException:
+                    # Se a URL não mudou, significa que a página ficou presa por um erro.
                     try:
                         erro_campo_msg = driver.find_element(By.XPATH, MENSAGEM_ERRO_CAMPO_XPATH).text
                         st.error(f"❌ **Falha de Validação** para '{placa_veiculo}': {erro_campo_msg}")
                     except NoSuchElementException:
-                        try:
-                            erro_geral_msg = driver.find_element(By.XPATH, MENSAGEM_ERRO_GERAL_XPATH).text
-                            st.error(f"❌ **Falha no Sistema** para '{placa_veiculo}': {erro_geral_msg}")
-                        except NoSuchElementException:
-                             st.warning(f"⚠️ **Sem Confirmação** para '{placa_veiculo}'. O sistema não respondeu. Verifique manualmente.")
+                         st.warning(f"⚠️ **O formulário não foi enviado** para '{placa_veiculo}'. Verifique os dados e tente novamente.")
                     continue
 
             except Exception as e:
