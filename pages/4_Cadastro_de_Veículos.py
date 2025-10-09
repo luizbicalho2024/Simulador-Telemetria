@@ -4,23 +4,23 @@ import pandas as pd
 import time
 import os
 from selenium import webdriver
-# --- Alteração 1: Importar 'Options' do Selenium ---
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
+# --- Alteração 1: Service é importado diretamente ---
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
-from webdriver_manager.chrome import ChromeDriverManager
+# --- Alteração 2: webdriver-manager foi REMOVIDO ---
 
 # ==============================================================================
-# FUNÇÃO PRINCIPAL DA AUTOMAÇÃO (COM CORREÇÃO PARA AMBIENTE SEM TELA)
+# FUNÇÃO PRINCIPAL DA AUTOMAÇÃO (COM A CORREÇÃO FINAL)
 # ==============================================================================
 def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
     """
     Executa a automação de cadastro de veículos a partir de um DataFrame.
     """
-    # --- ETAPA 1: CONFIGURAÇÕES E SELETORES ---
+    # --- ETAPA 1: CONFIGURAÇÕES E SELETORES (sem alterações) ---
     URL_DO_SISTEMA = "https://sistema.etrac.com.br/"
     URL_BASE_CADASTRO_VEICULO = "https://sistema.etrac.com.br/index.php?r=veiculo%2Fcreate&id="
     ID_CAMPO_USUARIO = "loginform-username"
@@ -53,23 +53,19 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
     df_renomeado = df.rename(columns=mapa_colunas)
     lista_de_clientes = df_renomeado.to_dict('records')
 
-    # ##############################################################################
-    # CORREÇÃO APLICADA AQUI: Configurações para rodar no Streamlit Cloud
-    # ##############################################################################
     status_text.info("Configurando o navegador para ambiente de nuvem...")
     chrome_options = Options()
-    chrome_options.add_argument("--headless")  # Roda o Chrome sem abrir uma janela
+    chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
-    # ##############################################################################
 
-    service = Service(ChromeDriverManager().install())
-    # --- Alteração 2: Passar as 'options' na inicialização ---
+    # ##############################################################################
+    # CORREÇÃO APLICADA AQUI: Deixando o Selenium gerenciar o driver
+    # ##############################################################################
+    service = Service() # O Selenium vai encontrar o driver correto sozinho
     driver = webdriver.Chrome(service=service, options=chrome_options)
-    
-    # Não precisa mais maximizar a janela, pois não há janela
-    # driver.maximize_window()
+    # ##############################################################################
     
     wait = WebDriverWait(driver, 30)
     total_veiculos = len(lista_de_clientes)
@@ -142,7 +138,6 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
         status_text.error(f"‼️ OCORREU UM ERRO GERAL NO SCRIPT ‼️")
         st.error(f"Mensagem de erro: {e}")
         try:
-            # Em modo headless, o screenshot ainda é útil para depuração
             driver.save_screenshot("erro_geral_automacao.png")
             st.image("erro_geral_automacao.png")
         except:
