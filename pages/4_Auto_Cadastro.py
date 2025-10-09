@@ -5,7 +5,7 @@ import time
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 import user_management_db as umdb
@@ -32,14 +32,19 @@ INPUT_MODELO_ID = "veiculo-veic_modelo"
 INPUT_ANO_FABRICACAO_ID = "veiculo-veic_ano"
 INPUT_ANO_MODELO_ID = "veiculo-veic_ano_modelo"
 INPUT_COR_ID = "veiculo-veic_cor"
+INPUT_RENAVAM_ID = "veiculo-veic_renavam"
+INPUT_AUTONOMIA_ID = "veiculo-veic_autonomia_fabrica"
+INPUT_TANQUE_ID = "veiculo-veic_tanque_total"
+INPUT_MES_LICENCIAMENTO_ID = "veiculo-mes_licenciamento"
+SELECT_TIPO_VEICULO_ID = "veiculo-veti_codigo"
 RADIO_PLACA_MERCOSUL_XPATH = "//input[@name='tipo_placa' and @value='2']"
 BOTAO_CADASTRAR_VEICULO_XPATH = "//div[@class='form-group align-right']//button[contains(text(), 'Cadastrar')]"
 SUCCESS_TOAST_SELECTOR = "//div[contains(@class, 'jq-toast-single') and contains(., 'sucesso')]"
 
 COLUNAS_OBRIGATORIAS = [
-    'ID_cliente', 'Segmento', 'Placa', 'Chassi', 'Marca', 'Modelo', 
-    'Ano Modelo', 'Ano de Fabricação', 'Combustível', 'Cor', 
-    'Origem de Veículo', 'Tanque de Combustivel', 'Mes Licenciamento'
+    'ID_cliente', 'Segmento', 'Placa', 'Chassi', 'Renavam', 'Marca', 'Modelo', 
+    'Ano Modelo', 'Ano de Fabricação', 'Combustível', 'Cor', 'Origem de Veículo', 
+    'Tanque de Combustivel', 'Mes Licenciamento'
 ]
 
 # --- 3. FUNÇÃO PRINCIPAL DA AUTOMAÇÃO (VERSÃO À PROVA DE FALHAS) ---
@@ -90,8 +95,16 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
                     driver.find_element(By.ID, INPUT_ANO_FABRICACAO_ID).send_keys(str(int(veiculo.get('Ano de Fabricação'))))
                     driver.find_element(By.ID, INPUT_ANO_MODELO_ID).send_keys(str(int(veiculo.get('Ano Modelo'))))
                     driver.find_element(By.ID, INPUT_COR_ID).send_keys(veiculo.get('Cor', ''))
+                    driver.find_element(By.ID, INPUT_RENAVAM_ID).send_keys(str(veiculo.get('Renavam', '')))
+                    driver.find_element(By.ID, INPUT_TANQUE_ID).send_keys(str(veiculo.get('Tanque de Combustivel', '')))
+                    driver.find_element(By.ID, INPUT_MES_LICENCIAMENTO_ID).send_keys(str(veiculo.get('Mes Licenciamento', '')))
                     st.write("      ✓ Campos principais preenchidos.")
 
+                    st.write("   - Selecionando o Tipo de Veículo (Segmento)...")
+                    select_tipo_veiculo = Select(wait.until(EC.visibility_of_element_located((By.ID, SELECT_TIPO_VEICULO_ID))))
+                    select_tipo_veiculo.select_by_visible_text(veiculo.get('Segmento', 'Outros'))
+                    st.write(f"      ✓ Segmento '{veiculo.get('Segmento')}' selecionado.")
+                    
                     st.write("   - Selecionando Placa Mercosul...")
                     driver.find_element(By.XPATH, RADIO_PLACA_MERCOSUL_XPATH).click()
                     st.write("      ✓ Placa Mercosul selecionada.")
