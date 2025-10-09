@@ -59,9 +59,10 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
     options.add_argument("--window-size=1920,1080")
     
     summary = {'success': [], 'failed': []}
-    driver = None # Inicializa a variável driver
+    driver = None
 
     try:
+        # AVISO: A linha abaixo pode gerar um aviso 'deprecated', mas é necessária para o Streamlit Cloud
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=options)
         wait = WebDriverWait(driver, 20)
@@ -149,11 +150,8 @@ if st.button("🚀 Iniciar Automação", use_container_width=True, type="primary
         st.error("Por favor, carregue a planilha de importação.")
     else:
         try:
-            # ***** LEITURA CORRETA DA PLANILHA *****
-            # header=1: Usa a segunda linha (índice 1) como cabeçalho
             df = pd.read_excel(uploaded_file, header=1, engine='openpyxl')
             
-            # Limpa os nomes das colunas
             df.columns = df.columns.str.replace(r'\s*\(\*\)', '', regex=True).str.strip()
 
             st.write("🔍 A validar a planilha...")
@@ -161,6 +159,7 @@ if st.button("🚀 Iniciar Automação", use_container_width=True, type="primary
             
             if missing_cols:
                 st.error(f"A planilha está em falta das seguintes colunas obrigatórias: **{', '.join(missing_cols)}**")
+                st.info("Colunas encontradas na sua planilha:", df.columns.tolist())
             else:
                 df_obrigatorias = df[COLUNAS_OBRIGATORIAS]
                 if df_obrigatorias.isnull().values.any():
