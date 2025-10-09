@@ -28,7 +28,7 @@ ID_CAMPO_USUARIO = "loginform-username"
 ID_CAMPO_SENHA = "loginform-password"
 BOTAO_ENTRAR_XPATH = "//button[@name='login-button']"
 
-# IDs dos campos do formulário CORRIGIDOS
+# IDs dos campos do formulário CORRIGIDOS com base no HTML fornecido
 INPUT_PLACA_ID = "input_veic_placa"
 INPUT_CHASSI_ID = "veiculo-veic_chassi"
 INPUT_MARCA_ID = "veiculo-veic_fabricante"
