@@ -23,3 +23,6 @@ folium
 streamlit-folium
 fpdf2
 twilio
+
+selenium
+webdriver-manager
