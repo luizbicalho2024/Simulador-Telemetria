@@ -24,7 +24,7 @@ ID_CAMPO_USUARIO = "loginform-username"
 ID_CAMPO_SENHA = "loginform-password"
 BOTAO_ENTRAR_XPATH = "//button[@name='login-button']"
 
-# IDs dos campos do formulário CORRIGIDOS com base no HTML e script de referência
+# IDs dos campos do formulário CORRIGIDOS
 INPUT_PLACA_ID = "input_veic_placa"
 INPUT_CHASSI_ID = "veiculo-veic_chassi"
 INPUT_MARCA_ID = "veiculo-veic_fabricante"
@@ -42,7 +42,7 @@ COLUNAS_OBRIGATORIAS = [
     'Origem de Veículo', 'Tanque de Combustivel', 'Mes Licenciamento'
 ]
 
-# --- 3. FUNÇÃO PRINCIPAL DA AUTOMAÇÃO (VERSÃO DEFINITIVA) ---
+# --- 3. FUNÇÃO PRINCIPAL DA AUTOMAÇÃO (VERSÃO À PROVA DE FALHAS) ---
 def iniciar_automacao(username, password, df_veiculos, status_container):
     options = webdriver.ChromeOptions()
     options.add_argument("--headless")
@@ -57,7 +57,7 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
     try:
         service = Service() 
         driver = webdriver.Chrome(service=service, options=options)
-        wait = WebDriverWait(driver, 25) # Tempo de espera global de 25 segundos
+        wait = WebDriverWait(driver, 25)
         
         status_container.info("1. A fazer login no sistema Etrac...")
         driver.get(URL_DO_SISTEMA)
