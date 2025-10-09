@@ -38,6 +38,9 @@ INPUT_COR_ID = "veiculo-veic_cor"
 RADIO_PLACA_MERCOSUL_XPATH = "//input[@name='tipo_placa' and @value='2']"
 BOTAO_CADASTRAR_VEICULO_XPATH = "//div[@class='form-group align-right']//button[contains(text(), 'Cadastrar')]"
 
+# Seletor para a mensagem de sucesso que aparece após o cadastro
+SUCCESS_TOAST_SELECTOR = "//div[contains(@class, 'jq-toast-single') and contains(., 'sucesso')]"
+
 COLUNAS_OBRIGATORIAS = [
     'ID_cliente', 'Segmento', 'Placa', 'Chassi', 'Marca', 'Modelo', 
     'Ano Modelo', 'Ano de Fabricação', 'Combustível', 'Cor', 
@@ -98,18 +101,18 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
                     submit_button = wait.until(EC.element_to_be_clickable((By.XPATH, BOTAO_CADASTRAR_VEICULO_XPATH)))
                     driver.execute_script("arguments[0].click();", submit_button)
                     
-                    # Confirmação robusta: espera que a página recarregue e o campo da placa esteja vazio
-                    wait.until(EC.staleness_of(placa_field))
-                    wait.until(EC.visibility_of_element_located((By.ID, INPUT_PLACA_ID)))
+                    # ***** CORREÇÃO FINAL E DEFINITIVA *****
+                    # Espera pela notificação de sucesso que aparece na tela
+                    wait.until(EC.visibility_of_element_located((By.XPATH, SUCCESS_TOAST_SELECTOR)))
                     
                     summary['success'].append(placa)
                     status.update(label=f"Veículo **{placa}** cadastrado com sucesso!", state="complete")
-                    time.sleep(1) # Pausa de 1 segundo entre cada cadastro
+                    time.sleep(1) # Pausa estratégica de 1 segundo
 
                 except (TimeoutException, NoSuchElementException) as e:
-                    error_msg = f"Falha ao cadastrar **{placa}**. O robô não encontrou um elemento ou a página demorou muito a responder."
+                    error_msg = f"Falha ao cadastrar **{placa}**. O robô não encontrou um elemento, a confirmação de sucesso não apareceu, ou a página demorou muito a responder."
                     st.error(error_msg)
-                    summary['failed'].append({'placa': placa, 'motivo': 'Elemento não encontrado ou tempo de espera excedido'})
+                    summary['failed'].append({'placa': placa, 'motivo': 'Tempo de espera excedido ou elemento não encontrado'})
                     status.update(label=error_msg, state="error")
                     continue
 
@@ -142,7 +145,7 @@ if st.button("🚀 Iniciar Automação", use_container_width=True, type="primary
         try:
             df = pd.read_excel(uploaded_file, header=1, engine='openpyxl')
             df.columns = df.columns.str.replace(r'\s*\(\*\)', '', regex=True).str.strip()
-            
+
             st.write("🔍 A validar a planilha...")
             missing_cols = [col for col in COLUNAS_OBRIGATORIAS if col not in df.columns]
             
