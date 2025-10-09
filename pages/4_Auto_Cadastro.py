@@ -10,6 +10,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from webdriver_manager.chrome import ChromeDriverManager
+import user_management_db as umdb
 
 # --- 1. CONFIGURAÇÃO DA PÁGINA E AUTENTICAÇÃO ---
 st.set_page_config(
@@ -39,7 +40,6 @@ INPUT_COR_ID = "veiculo-cor"
 RADIO_PLACA_MERCOSUL_XPATH = "//input[@name='tipo_placa' and @value='2']"
 BOTAO_CADASTRAR_VEICULO_XPATH = "//button[text()='Cadastrar']"
 
-# Colunas obrigatórias na planilha (nomes já limpos)
 COLUNAS_OBRIGATORIAS = [
     'ID_cliente', 'Segmento', 'Placa', 'Chassi', 'Marca', 'Modelo', 
     'Ano Modelo', 'Ano de Fabricação', 'Combustível', 'Cor', 
@@ -63,7 +63,7 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
     try:
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=options)
-        wait = WebDriverWait(driver, 20) # Aumentar o tempo de espera para 20 segundos
+        wait = WebDriverWait(driver, 20)
         
         status_container.info("1. A fazer login no sistema Etrac...")
         driver.get(URL_DO_SISTEMA)
@@ -111,7 +111,7 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
                         st.error(error_msg)
                         summary['failed'].append({'placa': placa, 'motivo': 'Elemento não encontrado ou tempo de espera excedido'})
                         status.update(label=error_msg, state="error")
-                        driver.get(url_cadastro) # Recarrega a página para tentar o próximo
+                        driver.get(url_cadastro)
                         continue
 
     except Exception as e:
@@ -149,8 +149,8 @@ if st.button("🚀 Iniciar Automação", use_container_width=True, type="primary
     else:
         try:
             # ***** CORREÇÃO PRINCIPAL AQUI *****
-            # skiprows=1 para ignorar a primeira linha e usar a segunda como cabeçalho
-            df = pd.read_excel(uploaded_file, skiprows=1, header=0)
+            # header=1: Usa a segunda linha (índice 1) como cabeçalho, ignorando a primeira
+            df = pd.read_excel(uploaded_file, header=1, engine='openpyxl')
             
             # Limpa os nomes das colunas (remove "(*)" e espaços)
             df.columns = df.columns.str.replace(r'\s*\(\*\)', '', regex=True).str.strip()
@@ -160,7 +160,8 @@ if st.button("🚀 Iniciar Automação", use_container_width=True, type="primary
             
             if missing_cols:
                 st.error(f"A planilha está em falta das seguintes colunas obrigatórias: **{', '.join(missing_cols)}**")
-                st.write("Colunas encontradas na sua planilha:", df.columns.tolist())
+                st.info("Abaixo estão as colunas que o robô encontrou no seu ficheiro. Verifique se os nomes correspondem:")
+                st.code(str(df.columns.tolist()), language='text')
             else:
                 df_obrigatorias = df[COLUNAS_OBRIGATORIAS]
                 if df_obrigatorias.isnull().values.any():
