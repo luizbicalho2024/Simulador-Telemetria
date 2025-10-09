@@ -1,3 +1,5 @@
+chromium
+chromedriver
 libglib2.0-0
 libnss3
 libgconf-2-4
@@ -21,5 +23,3 @@ libdbus-glib-1-2
 libatk1.0-0
 libatspi2.0-0
 libpangocairo-1.0-0
-chromium-browser
-chromium-chromedriver
