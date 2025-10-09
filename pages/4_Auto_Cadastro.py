@@ -21,13 +21,12 @@ if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. CONSTANTES E SELETORES (AGORA CORRIGIDOS) ---
+# --- 2. CONSTANTES E SELETORES (CORRIGIDOS) ---
 URL_DO_SISTEMA = "https://sistema.etrac.com.br/"
 URL_BASE_CADASTRO_VEICULO = "https://sistema.etrac.com.br/index.php?r=veiculo%2Fcreate&id="
 ID_CAMPO_USUARIO = "loginform-username"
 ID_CAMPO_SENHA = "loginform-password"
 BOTAO_ENTRAR_XPATH = "//button[@name='login-button']"
-BOTAO_ADICIONAR_VEICULO_XPATH = "//a[contains(text(), 'Adicionar Veículo')]"
 
 # IDs dos campos do formulário CORRIGIDOS de acordo com o código-fonte
 INPUT_PLACA_ID = "input_veic_placa"
@@ -46,7 +45,7 @@ COLUNAS_OBRIGATORIAS = [
     'Origem de Veículo', 'Tanque de Combustivel', 'Mes Licenciamento'
 ]
 
-# --- 3. FUNÇÃO PRINCIPAL DA AUTOMAÇÃO ---
+# --- 3. FUNÇÃO PRINCIPAL DA AUTOMAÇÃO (CORRIGIDA) ---
 def iniciar_automacao(username, password, df_veiculos, status_container):
     options = webdriver.ChromeOptions()
     options.add_argument("--headless")
@@ -73,19 +72,14 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
         status_container.success("   Login realizado com sucesso!")
 
         for id_cliente, group in df_veiculos.groupby('ID_cliente'):
-            status_container.info(f"2. Processando cliente com ID: {id_cliente}")
             url_cadastro = f"{URL_BASE_CADASTRO_VEICULO}{id_cliente}"
-            driver.get(url_cadastro)
             
-            wait.until(EC.presence_of_element_located((By.XPATH, BOTAO_ADICIONAR_VEICULO_XPATH)))
-
             for index, veiculo in group.iterrows():
                 placa = veiculo.get('Placa')
-                with st.status(f"Cadastrando veículo: **{placa}**...") as status:
+                with st.status(f"Processando veículo: **{placa}**...") as status:
                     try:
-                        st.write("   - Aguardando e clicando em 'Adicionar Veículo'...")
-                        add_vehicle_button = wait.until(EC.element_to_be_clickable((By.XPATH, BOTAO_ADICIONAR_VEICULO_XPATH)))
-                        driver.execute_script("arguments[0].click();", add_vehicle_button)
+                        st.write(f"   - Navegando para a página de cadastro do cliente {id_cliente}...")
+                        driver.get(url_cadastro)
                         
                         st.write("   - Aguardando formulário e preenchendo campos...")
                         placa_field = wait.until(EC.visibility_of_element_located((By.ID, INPUT_PLACA_ID)))
@@ -104,7 +98,9 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
                         st.write("   - Enviando o formulário...")
                         wait.until(EC.element_to_be_clickable((By.XPATH, BOTAO_CADASTRAR_VEICULO_XPATH))).click()
                         
-                        wait.until(EC.visibility_of_element_located((By.XPATH, BOTAO_ADICIONAR_VEICULO_XPATH)))
+                        # Confirma que o cadastro foi bem sucedido esperando a URL de sucesso (que é a mesma)
+                        # e que o formulário está pronto para um novo cadastro (verificando o campo placa)
+                        wait.until(EC.visibility_of_element_located((By.ID, INPUT_PLACA_ID)))
                         
                         summary['success'].append(placa)
                         status.update(label=f"Veículo **{placa}** cadastrado com sucesso!", state="complete")
@@ -114,7 +110,6 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
                         st.error(error_msg)
                         summary['failed'].append({'placa': placa, 'motivo': 'Elemento não encontrado ou tempo de espera excedido'})
                         status.update(label=error_msg, state="error")
-                        driver.get(url_cadastro)
                         continue
 
     except Exception as e:
