@@ -1,53 +1,45 @@
-# requirements.txt
+# --- Core do Streamlit ---
 streamlit>=1.33.0
 streamlit-authenticator>=0.3.2
+streamlit-option-menu
+streamlit_extras
+
+# --- Autenticação e Segurança ---
 passlib>=1.7.4
 bcrypt>=3.2.0
+
+# --- Base de Dados ---
 pymongo[srv]>=4.6.0
+
+# --- Manipulação de Dados e Planilhas ---
 pandas
 numpy
 openpyxl
 XlsxWriter
+xlrd
+
+# --- Geração de Documentos e Relatórios ---
 python-docx
 docxtpl
-requests
-streamlit-option-menu
-streamlit_extras
-Pillow
-pytest
-plotly
-xlrd
-html5lib
-lxml
-folium
-streamlit-folium
 fpdf2
+
+# --- APIs, Web e Comunicação ---
+requests
 twilio
 
+# --- Automação Web (Robô) ---
 selenium>=4.10.0
 webdriver-manager>=4.0.0
 
+# --- Visualização e Mapas ---
+plotly
+folium
+streamlit-folium
+Pillow
 
-libglib2.0-0
-libnss3
-libgconf-2-4
-libfontconfig1
-libx11-6
-libx11-xcb1
-libxcb1
-libxcomposite1
-libxcursor1
-libxdamage1
-libxext6
-libxfixes3
-libxi6
-libxrandr2
-libxrender1
-libxss1
-libxtst6
-libgtk-3-0
-libasound2
-libdbus-glib-1-2
-libatk1.0-0
-libatspi2.0-0
-libpangocairo-1.0-0
+# --- Processamento de HTML/XML ---
+html5lib
+lxml
+
+# --- Testes (Opcional) ---
+pytest
