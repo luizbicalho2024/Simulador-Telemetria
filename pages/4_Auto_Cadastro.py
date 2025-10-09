@@ -59,7 +59,7 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
     try:
         service = Service() 
         driver = webdriver.Chrome(service=service, options=options)
-        wait = WebDriverWait(driver, 30) # Aumentado o tempo de espera global para 30 segundos
+        wait = WebDriverWait(driver, 30)
         
         status_container.info("1. A fazer login no sistema Etrac...")
         driver.get(URL_DO_SISTEMA)
@@ -75,7 +75,6 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
             url_cadastro = f"{URL_BASE_CADASTRO_VEICULO}{id_cliente}"
             driver.get(url_cadastro)
             
-            # Garante que a página do cliente carregou antes de prosseguir
             wait.until(EC.presence_of_element_located((By.XPATH, BOTAO_ADICIONAR_VEICULO_XPATH)))
 
             for index, veiculo in group.iterrows():
@@ -84,7 +83,7 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
                     try:
                         st.write("   - Aguardando e clicando em 'Adicionar Veículo'...")
                         add_vehicle_button = wait.until(EC.element_to_be_clickable((By.XPATH, BOTAO_ADICIONAR_VEICULO_XPATH)))
-                        add_vehicle_button.click()
+                        driver.execute_script("arguments[0].click();", add_vehicle_button)
                         
                         st.write("   - Aguardando formulário e preenchendo campos...")
                         placa_field = wait.until(EC.visibility_of_element_located((By.ID, INPUT_PLACA_ID)))
@@ -103,7 +102,6 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
                         st.write("   - Enviando o formulário...")
                         wait.until(EC.element_to_be_clickable((By.XPATH, BOTAO_CADASTRAR_VEICULO_XPATH))).click()
                         
-                        # Espera a página recarregar e o botão "Adicionar Veículo" aparecer novamente
                         wait.until(EC.visibility_of_element_located((By.XPATH, BOTAO_ADICIONAR_VEICULO_XPATH)))
                         
                         summary['success'].append(placa)
