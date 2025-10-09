@@ -21,22 +21,24 @@ if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. CONSTANTES E SELETORES ---
+# --- 2. CONSTANTES E SELETORES (AGORA CORRIGIDOS) ---
 URL_DO_SISTEMA = "https://sistema.etrac.com.br/"
 URL_BASE_CADASTRO_VEICULO = "https://sistema.etrac.com.br/index.php?r=veiculo%2Fcreate&id="
 ID_CAMPO_USUARIO = "loginform-username"
 ID_CAMPO_SENHA = "loginform-password"
 BOTAO_ENTRAR_XPATH = "//button[@name='login-button']"
 BOTAO_ADICIONAR_VEICULO_XPATH = "//a[contains(text(), 'Adicionar Veículo')]"
-INPUT_PLACA_ID = "veiculo-placa"
-INPUT_CHASSI_ID = "veiculo-chassi"
-INPUT_MARCA_ID = "veiculo-marca"
-INPUT_MODELO_ID = "veiculo-modelo"
-INPUT_ANO_FABRICACAO_ID = "veiculo-ano_fabricacao"
-INPUT_ANO_MODELO_ID = "veiculo-ano_modelo"
-INPUT_COR_ID = "veiculo-cor"
+
+# IDs dos campos do formulário CORRIGIDOS de acordo com o código-fonte
+INPUT_PLACA_ID = "input_veic_placa"
+INPUT_CHASSI_ID = "veiculo-veic_chassi"
+INPUT_MARCA_ID = "veiculo-veic_fabricante"
+INPUT_MODELO_ID = "veiculo-veic_modelo"
+INPUT_ANO_FABRICACAO_ID = "veiculo-veic_ano"
+INPUT_ANO_MODELO_ID = "veiculo-veic_ano_modelo"
+INPUT_COR_ID = "veiculo-veic_cor"
 RADIO_PLACA_MERCOSUL_XPATH = "//input[@name='tipo_placa' and @value='2']"
-BOTAO_CADASTRAR_VEICULO_XPATH = "//button[text()='Cadastrar']"
+BOTAO_CADASTRAR_VEICULO_XPATH = "//div[@class='form-group align-right']//button[contains(text(), 'Cadastrar')]"
 
 COLUNAS_OBRIGATORIAS = [
     'ID_cliente', 'Segmento', 'Placa', 'Chassi', 'Marca', 'Modelo', 
@@ -44,7 +46,7 @@ COLUNAS_OBRIGATORIAS = [
     'Origem de Veículo', 'Tanque de Combustivel', 'Mes Licenciamento'
 ]
 
-# --- 3. FUNÇÃO PRINCIPAL DA AUTOMAÇÃO (MAIS ROBUSTA) ---
+# --- 3. FUNÇÃO PRINCIPAL DA AUTOMAÇÃO ---
 def iniciar_automacao(username, password, df_veiculos, status_container):
     options = webdriver.ChromeOptions()
     options.add_argument("--headless")
@@ -126,16 +128,13 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
 # --- 4. INTERFACE DA PÁGINA ---
 st.markdown("<h1 style='text-align: center; color: #54A033;'>🤖 Automação de Cadastro de Veículos</h1>", unsafe_allow_html=True)
 st.markdown("---")
-
 st.info("Esta ferramenta automatiza o cadastro de múltiplos veículos no sistema Etrac a partir de uma planilha. Siga os passos abaixo.")
 st.subheader("1. Credenciais de Acesso ao Sistema Etrac")
 col1, col2 = st.columns(2)
 etrac_user = col1.text_input("Usuário Etrac", key="etrac_user")
 etrac_pass = col2.text_input("Senha Etrac", type="password", key="etrac_pass")
-
 st.subheader("2. Upload da Planilha de Veículos")
 uploaded_file = st.file_uploader("Carregue o arquivo `modelo_importacao.xlsx`", type=['xlsx'])
-
 st.markdown("---")
 
 if st.button("🚀 Iniciar Automação", use_container_width=True, type="primary"):
@@ -154,8 +153,8 @@ if st.button("🚀 Iniciar Automação", use_container_width=True, type="primary
             if missing_cols:
                 st.error(f"A planilha está em falta das seguintes colunas obrigatórias: **{', '.join(missing_cols)}**")
             else:
-                df_obrigatorias = df[COLUNAS_OBRIGATORIAS].dropna()
-                if len(df_obrigatorias) < len(df):
+                df_obrigatorias = df[COLUNAS_OBRIGATORIAS].dropna(how='all')
+                if df_obrigatorias.isnull().values.any():
                     st.error("A sua planilha tem células vazias em colunas obrigatórias. Por favor, preencha todos os campos e tente novamente.")
                 else:
                     st.success("✅ Planilha validada com sucesso! A iniciar a automação...")
