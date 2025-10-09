@@ -1,7 +1,6 @@
 # pages/🤖_Automação_Cadastro.py
 import streamlit as st
 import pandas as pd
-import io
 import time
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -9,10 +8,9 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
-from webdriver_manager.chrome import ChromeDriverManager
 import user_management_db as umdb
 
-# --- 1. CONFIGURAÇÃO DA PÁGINA E AUTENTICAÇÃO ---
+# --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
 st.set_page_config(
     layout="wide",
     page_title="Automação de Cadastros",
@@ -23,7 +21,7 @@ if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. CONSTANTES E SELETORES DO SISTEMA ETRAC ---
+# --- 2. CONSTANTES E SELETORES ---
 URL_DO_SISTEMA = "https://sistema.etrac.com.br/"
 URL_BASE_CADASTRO_VEICULO = "https://sistema.etrac.com.br/index.php?r=veiculo%2Fcreate&id="
 ID_CAMPO_USUARIO = "loginform-username"
@@ -48,9 +46,6 @@ COLUNAS_OBRIGATORIAS = [
 
 # --- 3. FUNÇÃO PRINCIPAL DA AUTOMAÇÃO ---
 def iniciar_automacao(username, password, df_veiculos, status_container):
-    """
-    Executa o robô de automação para cadastrar veículos no sistema Etrac.
-    """
     options = webdriver.ChromeOptions()
     options.add_argument("--headless")
     options.add_argument("--no-sandbox")
@@ -62,8 +57,8 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
     driver = None
 
     try:
-        # AVISO: A linha abaixo pode gerar um aviso 'deprecated', mas é necessária para o Streamlit Cloud
-        service = Service(ChromeDriverManager().install())
+        # No Streamlit Cloud, o chromedriver já estará no path do sistema
+        service = Service() 
         driver = webdriver.Chrome(service=service, options=options)
         wait = WebDriverWait(driver, 20)
         
@@ -129,17 +124,13 @@ st.markdown("<h1 style='text-align: center; color: #54A033;'>🤖 Automação de
 st.markdown("---")
 
 st.info("Esta ferramenta automatiza o cadastro de múltiplos veículos no sistema Etrac a partir de uma planilha. Siga os passos abaixo.")
-
 st.subheader("1. Credenciais de Acesso ao Sistema Etrac")
 col1, col2 = st.columns(2)
 etrac_user = col1.text_input("Usuário Etrac", key="etrac_user")
 etrac_pass = col2.text_input("Senha Etrac", type="password", key="etrac_pass")
 
 st.subheader("2. Upload da Planilha de Veículos")
-uploaded_file = st.file_uploader(
-    "Carregue o arquivo `modelo_importacao.xlsx`",
-    type=['xlsx']
-)
+uploaded_file = st.file_uploader("Carregue o arquivo `modelo_importacao.xlsx`", type=['xlsx'])
 
 st.markdown("---")
 
@@ -151,7 +142,6 @@ if st.button("🚀 Iniciar Automação", use_container_width=True, type="primary
     else:
         try:
             df = pd.read_excel(uploaded_file, header=1, engine='openpyxl')
-            
             df.columns = df.columns.str.replace(r'\s*\(\*\)', '', regex=True).str.strip()
 
             st.write("🔍 A validar a planilha...")
@@ -159,16 +149,14 @@ if st.button("🚀 Iniciar Automação", use_container_width=True, type="primary
             
             if missing_cols:
                 st.error(f"A planilha está em falta das seguintes colunas obrigatórias: **{', '.join(missing_cols)}**")
-                st.info("Colunas encontradas na sua planilha:", df.columns.tolist())
             else:
-                df_obrigatorias = df[COLUNAS_OBRIGATORIAS]
-                if df_obrigatorias.isnull().values.any():
+                df_obrigatorias = df[COLUNAS_OBRIGATORIAS].dropna()
+                if len(df_obrigatorias) < len(df):
                     st.error("A sua planilha tem células vazias em colunas obrigatórias. Por favor, preencha todos os campos e tente novamente.")
                 else:
                     st.success("✅ Planilha validada com sucesso! A iniciar a automação...")
-                    
                     status_container = st.empty()
-                    summary_report = iniciar_automacao(etrac_user, etrac_pass, df, status_container)
+                    summary_report = iniciar_automacao(etrac_user, etrac_pass, df_obrigatorias, status_container)
                     
                     st.markdown("---")
                     st.subheader("🏁 Relatório Final da Automação")
@@ -180,6 +168,5 @@ if st.button("🚀 Iniciar Automação", use_container_width=True, type="primary
                         st.error("Alguns veículos falharam ao serem cadastrados:")
                         for item in summary_report['failed']:
                             st.write(f"- **Placa:** {item['placa']} | **Motivo:** {item['motivo']}")
-
         except Exception as e:
             st.error(f"Não foi possível ler o ficheiro Excel. Verifique se o formato está correto. Detalhe do erro: {e}")
