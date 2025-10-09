@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 import time
 import os
+import io
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
@@ -164,7 +165,7 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
             driver.quit()
 
 # ==============================================================================
-# INTERFACE DO USUÁRIO COM STREAMLIT (Sem alterações)
+# INTERFACE DO USUÁRIO COM STREAMLIT
 # ==============================================================================
 st.set_page_config(page_title="Automação de Cadastro de Veículos", layout="wide")
 
@@ -183,15 +184,27 @@ try:
     script_dir = os.path.dirname(__file__) 
     model_file_path = os.path.join(script_dir, '..', 'modelo_importacao - Sheet1.csv')
 
-    with open(model_file_path, "rb") as file:
-        st.download_button(
-            label="📄 Baixar Modelo de Importação (CSV)",
-            data=file,
-            file_name="modelo_importacao.csv",
-            mime="text/csv",
-        )
+    # Lê o ficheiro CSV original para um DataFrame do pandas
+    df_modelo = pd.read_csv(model_file_path)
+
+    # Cria um buffer de bytes em memória para o ficheiro Excel
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df_modelo.to_excel(writer, index=False, sheet_name='Sheet1')
+    
+    # Obtém os dados do buffer para o botão de download
+    excel_data = output.getvalue()
+
+    st.download_button(
+        label="📄 Baixar Modelo de Importação (XLSX)",
+        data=excel_data,
+        file_name="modelo_importacao.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 except FileNotFoundError:
     st.warning("Arquivo 'modelo_importacao - Sheet1.csv' não encontrado. O botão de download está desativado.")
+except Exception as e:
+    st.error(f"Ocorreu um erro ao gerar o modelo XLSX: {e}")
 
 st.divider()
 
