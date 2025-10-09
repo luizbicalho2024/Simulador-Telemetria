@@ -21,14 +21,13 @@ if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
     st.stop()
 
-# --- 2. CONSTANTES E SELETORES (CORRIGIDOS) ---
+# --- 2. CONSTANTES E SELETORES (FINAIS E CORRIGIDOS) ---
 URL_DO_SISTEMA = "https://sistema.etrac.com.br/"
 URL_BASE_CADASTRO_VEICULO = "https://sistema.etrac.com.br/index.php?r=veiculo%2Fcreate&id="
 ID_CAMPO_USUARIO = "loginform-username"
 ID_CAMPO_SENHA = "loginform-password"
 BOTAO_ENTRAR_XPATH = "//button[@name='login-button']"
 
-# IDs dos campos do formulário CORRIGIDOS de acordo com o código-fonte
 INPUT_PLACA_ID = "input_veic_placa"
 INPUT_CHASSI_ID = "veiculo-veic_chassi"
 INPUT_MARCA_ID = "veiculo-veic_fabricante"
@@ -45,7 +44,7 @@ COLUNAS_OBRIGATORIAS = [
     'Origem de Veículo', 'Tanque de Combustivel', 'Mes Licenciamento'
 ]
 
-# --- 3. FUNÇÃO PRINCIPAL DA AUTOMAÇÃO (CORRIGIDA) ---
+# --- 3. FUNÇÃO PRINCIPAL DA AUTOMAÇÃO (VERSÃO ROBUSTA) ---
 def iniciar_automacao(username, password, df_veiculos, status_container):
     options = webdriver.ChromeOptions()
     options.add_argument("--headless")
@@ -71,46 +70,48 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
         wait.until(EC.url_contains("index.php?r=site%2Findex"))
         status_container.success("   Login realizado com sucesso!")
 
-        for id_cliente, group in df_veiculos.groupby('ID_cliente'):
-            url_cadastro = f"{URL_BASE_CADASTRO_VEICULO}{id_cliente}"
+        for index, veiculo in df_veiculos.iterrows():
+            id_cliente = veiculo.get('ID_cliente')
+            placa = veiculo.get('Placa')
             
-            for index, veiculo in group.iterrows():
-                placa = veiculo.get('Placa')
-                with st.status(f"Processando veículo: **{placa}**...") as status:
-                    try:
-                        st.write(f"   - Navegando para a página de cadastro do cliente {id_cliente}...")
-                        driver.get(url_cadastro)
-                        
-                        st.write("   - Aguardando formulário e preenchendo campos...")
-                        placa_field = wait.until(EC.visibility_of_element_located((By.ID, INPUT_PLACA_ID)))
-                        
-                        placa_field.send_keys(placa)
-                        driver.find_element(By.ID, INPUT_CHASSI_ID).send_keys(str(veiculo.get('Chassi', '')))
-                        driver.find_element(By.ID, INPUT_MARCA_ID).send_keys(veiculo.get('Marca', ''))
-                        driver.find_element(By.ID, INPUT_MODELO_ID).send_keys(veiculo.get('Modelo', ''))
-                        driver.find_element(By.ID, INPUT_ANO_FABRICACAO_ID).send_keys(str(veiculo.get('Ano de Fabricação', '')))
-                        driver.find_element(By.ID, INPUT_ANO_MODELO_ID).send_keys(str(veiculo.get('Ano Modelo', '')))
-                        driver.find_element(By.ID, INPUT_COR_ID).send_keys(veiculo.get('Cor', ''))
-                        
-                        st.write("   - Selecionando Placa Mercosul...")
-                        driver.find_element(By.XPATH, RADIO_PLACA_MERCOSUL_XPATH).click()
-                        
-                        st.write("   - Enviando o formulário...")
-                        wait.until(EC.element_to_be_clickable((By.XPATH, BOTAO_CADASTRAR_VEICULO_XPATH))).click()
-                        
-                        # Confirma que o cadastro foi bem sucedido esperando a URL de sucesso (que é a mesma)
-                        # e que o formulário está pronto para um novo cadastro (verificando o campo placa)
-                        wait.until(EC.visibility_of_element_located((By.ID, INPUT_PLACA_ID)))
-                        
-                        summary['success'].append(placa)
-                        status.update(label=f"Veículo **{placa}** cadastrado com sucesso!", state="complete")
+            with st.status(f"Processando veículo: **{placa}**...") as status:
+                try:
+                    url_cadastro = f"{URL_BASE_CADASTRO_VEICULO}{id_cliente}"
+                    st.write(f"   - Navegando para a página de cadastro do cliente {id_cliente}...")
+                    driver.get(url_cadastro)
+                    
+                    st.write("   - Aguardando formulário e preenchendo campos...")
+                    placa_field = wait.until(EC.visibility_of_element_located((By.ID, INPUT_PLACA_ID)))
+                    
+                    placa_field.send_keys(placa)
+                    driver.find_element(By.ID, INPUT_CHASSI_ID).send_keys(str(veiculo.get('Chassi', '')))
+                    driver.find_element(By.ID, INPUT_MARCA_ID).send_keys(veiculo.get('Marca', ''))
+                    driver.find_element(By.ID, INPUT_MODELO_ID).send_keys(veiculo.get('Modelo', ''))
+                    driver.find_element(By.ID, INPUT_ANO_FABRICACAO_ID).send_keys(str(veiculo.get('Ano de Fabricação', '')))
+                    driver.find_element(By.ID, INPUT_ANO_MODELO_ID).send_keys(str(veiculo.get('Ano Modelo', '')))
+                    driver.find_element(By.ID, INPUT_COR_ID).send_keys(veiculo.get('Cor', ''))
+                    
+                    st.write("   - Selecionando Placa Mercosul...")
+                    driver.find_element(By.XPATH, RADIO_PLACA_MERCOSUL_XPATH).click()
+                    
+                    st.write("   - Enviando o formulário...")
+                    submit_button = wait.until(EC.element_to_be_clickable((By.XPATH, BOTAO_CADASTRAR_VEICULO_XPATH)))
+                    driver.execute_script("arguments[0].click();", submit_button)
+                    
+                    # Confirmação robusta: espera que a página recarregue e o campo da placa esteja vazio
+                    wait.until(EC.staleness_of(placa_field))
+                    wait.until(EC.visibility_of_element_located((By.ID, INPUT_PLACA_ID)))
+                    
+                    summary['success'].append(placa)
+                    status.update(label=f"Veículo **{placa}** cadastrado com sucesso!", state="complete")
+                    time.sleep(1) # Pausa de 1 segundo entre cada cadastro
 
-                    except (TimeoutException, NoSuchElementException) as e:
-                        error_msg = f"Falha ao cadastrar **{placa}**. O robô não encontrou um elemento ou a página demorou muito a responder."
-                        st.error(error_msg)
-                        summary['failed'].append({'placa': placa, 'motivo': 'Elemento não encontrado ou tempo de espera excedido'})
-                        status.update(label=error_msg, state="error")
-                        continue
+                except (TimeoutException, NoSuchElementException) as e:
+                    error_msg = f"Falha ao cadastrar **{placa}**. O robô não encontrou um elemento ou a página demorou muito a responder."
+                    st.error(error_msg)
+                    summary['failed'].append({'placa': placa, 'motivo': 'Elemento não encontrado ou tempo de espera excedido'})
+                    status.update(label=error_msg, state="error")
+                    continue
 
     except Exception as e:
         st.error(f"Ocorreu um erro geral na automação: {e}")
@@ -141,7 +142,7 @@ if st.button("🚀 Iniciar Automação", use_container_width=True, type="primary
         try:
             df = pd.read_excel(uploaded_file, header=1, engine='openpyxl')
             df.columns = df.columns.str.replace(r'\s*\(\*\)', '', regex=True).str.strip()
-
+            
             st.write("🔍 A validar a planilha...")
             missing_cols = [col for col in COLUNAS_OBRIGATORIAS if col not in df.columns]
             
