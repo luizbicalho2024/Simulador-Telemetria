@@ -6,21 +6,19 @@ import os
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
-# --- Alteração 1: Service é importado diretamente ---
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
-# --- Alteração 2: webdriver-manager foi REMOVIDO ---
 
 # ==============================================================================
-# FUNÇÃO PRINCIPAL DA AUTOMAÇÃO (COM A CORREÇÃO FINAL)
+# FUNÇÃO PRINCIPAL DA AUTOMAÇÃO (COM VERIFICAÇÃO DE SUCESSO)
 # ==============================================================================
 def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
     """
-    Executa a automação de cadastro de veículos a partir de um DataFrame.
+    Executa a automação de cadastro de veículos com verificação de sucesso.
     """
-    # --- ETAPA 1: CONFIGURAÇÕES E SELETORES (sem alterações) ---
+    # --- ETAPA 1: CONFIGURAÇÕES E SELETORES ---
     URL_DO_SISTEMA = "https://sistema.etrac.com.br/"
     URL_BASE_CADASTRO_VEICULO = "https://sistema.etrac.com.br/index.php?r=veiculo%2Fcreate&id="
     ID_CAMPO_USUARIO = "loginform-username"
@@ -40,6 +38,10 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
     INPUT_TANQUE_ID = "veiculo-veic_tanque_total"
     INPUT_MES_LICENCIAMENTO_ID = "veiculo-mes_licenciamento"
     BOTAO_CADASTRAR_VEICULO_XPATH = "//div[@class='form-group align-right']//button[contains(text(), 'Cadastrar')]"
+    
+    # --- Alteração 1: Seletores para as mensagens de confirmação ---
+    MENSAGEM_SUCESSO_XPATH = "//div[contains(@class, 'alert-success') and contains(text(), 'Veículo salvo com sucesso')]"
+    MENSAGEM_ERRO_XPATH = "//div[contains(@class, 'alert-danger')]"
 
     mapa_colunas = {
         'ID_cliente (*)': 'cliente_id', 'Cliente/Unidade': 'Nome do Cliente',
@@ -60,14 +62,10 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
 
-    # ##############################################################################
-    # CORREÇÃO APLICADA AQUI: Deixando o Selenium gerenciar o driver
-    # ##############################################################################
-    service = Service() # O Selenium vai encontrar o driver correto sozinho
+    service = Service()
     driver = webdriver.Chrome(service=service, options=chrome_options)
-    # ##############################################################################
     
-    wait = WebDriverWait(driver, 30)
+    wait = WebDriverWait(driver, 15) # Aumentar a espera padrão para 15 segundos
     total_veiculos = len(lista_de_clientes)
 
     try:
@@ -79,7 +77,7 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
         wait.until(EC.element_to_be_clickable((By.XPATH, BOTAO_ENTRAR_XPATH))).click()
         
         status_text.info("Login realizado com sucesso. Aguardando a página principal...")
-        time.sleep(5)
+        time.sleep(3)
 
         status_text.info("2/3 - Iniciando o cadastro dos veículos...")
         for i, cliente in enumerate(lista_de_clientes):
@@ -123,12 +121,22 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
 
                 wait.until(EC.element_to_be_clickable((By.XPATH, BOTAO_CADASTRAR_VEICULO_XPATH))).click()
                 
-                st.write(f"✅ Sucesso: Veículo '{placa_veiculo}' cadastrado para '{nome_cliente}'.")
-                time.sleep(2)
+                # --- Alteração 2: Lógica de verificação de sucesso/erro ---
+                try:
+                    # Espera até 10 segundos pela mensagem de sucesso
+                    wait.until(EC.presence_of_element_located((By.XPATH, MENSAGEM_SUCESSO_XPATH)))
+                    st.write(f"✅ **Confirmado:** Veículo '{placa_veiculo}' cadastrado para '{nome_cliente}'.")
+                except TimeoutException:
+                    # Se não achou sucesso, procura por uma mensagem de erro
+                    try:
+                        erro_msg = driver.find_element(By.XPATH, MENSAGEM_ERRO_XPATH).text
+                        st.error(f"❌ **Falha no Sistema** ao cadastrar '{placa_veiculo}': {erro_msg}")
+                    except NoSuchElementException:
+                        st.error(f"❌ **Falha Desconhecida** ao cadastrar '{placa_veiculo}'. O sistema não confirmou o cadastro.")
+                    continue # Pula para o próximo veículo
 
-            except (TimeoutException, NoSuchElementException) as e:
-                st.error(f"❌ Erro ao cadastrar '{placa_veiculo}'. Pulando para o próximo.")
-                st.error(f"   Detalhe: Verifique se o 'Segmento' ({segmento_veiculo}) está correto ou se o veículo já existe.")
+            except Exception as e:
+                st.error(f"❌ Erro Crítico no processo da placa '{placa_veiculo}'. Pulando. Detalhe: {e}")
                 continue
         
         status_text.success("3/3 - Processo de automação finalizado!")
