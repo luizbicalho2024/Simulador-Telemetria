@@ -23,6 +23,8 @@ URL_BASE_CADASTRO_VEICULO = "https://sistema.etrac.com.br/index.php?r=veiculo%2F
 ID_CAMPO_USUARIO = "loginform-username"
 ID_CAMPO_SENHA = "loginform-password"
 BOTAO_ENTRAR_XPATH = "//button[@name='login-button']"
+
+# IDs dos campos do formulário CORRIGIDOS com base no HTML e script de referência
 INPUT_PLACA_ID = "input_veic_placa"
 INPUT_CHASSI_ID = "veiculo-veic_chassi"
 INPUT_MARCA_ID = "veiculo-veic_fabricante"
@@ -55,7 +57,7 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
     try:
         service = Service() 
         driver = webdriver.Chrome(service=service, options=options)
-        wait = WebDriverWait(driver, 25)
+        wait = WebDriverWait(driver, 25) # Tempo de espera global de 25 segundos
         
         status_container.info("1. A fazer login no sistema Etrac...")
         driver.get(URL_DO_SISTEMA)
@@ -76,7 +78,7 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
                     st.write(f"   - Navegando para a página de cadastro do cliente {id_cliente}...")
                     driver.get(url_cadastro)
                     
-                    st.write("   - Aguardando formulário...")
+                    st.write("   - Aguardando formulário carregar...")
                     placa_field = wait.until(EC.visibility_of_element_located((By.ID, INPUT_PLACA_ID)))
                     st.write("      ✓ Formulário carregado.")
 
@@ -94,7 +96,7 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
                     driver.find_element(By.XPATH, RADIO_PLACA_MERCOSUL_XPATH).click()
                     st.write("      ✓ Placa Mercosul selecionada.")
 
-                    st.write("   - Enviando o formulário...")
+                    st.write("   - Clicando no botão 'Cadastrar'...")
                     submit_button = wait.until(EC.element_to_be_clickable((By.XPATH, BOTAO_CADASTRAR_VEICULO_XPATH)))
                     driver.execute_script("arguments[0].click();", submit_button)
                     
