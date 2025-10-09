@@ -11,11 +11,7 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 import user_management_db as umdb
 
 # --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
-st.set_page_config(
-    layout="wide",
-    page_title="Automação de Cadastros",
-    page_icon="🤖"
-)
+st.set_page_config(layout="wide", page_title="Automação de Cadastros", page_icon="🤖")
 
 if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
@@ -28,7 +24,6 @@ ID_CAMPO_USUARIO = "loginform-username"
 ID_CAMPO_SENHA = "loginform-password"
 BOTAO_ENTRAR_XPATH = "//button[@name='login-button']"
 
-# IDs dos campos do formulário CORRIGIDOS com base no HTML fornecido
 INPUT_PLACA_ID = "input_veic_placa"
 INPUT_CHASSI_ID = "veiculo-veic_chassi"
 INPUT_MARCA_ID = "veiculo-veic_fabricante"
@@ -46,7 +41,7 @@ COLUNAS_OBRIGATORIAS = [
     'Origem de Veículo', 'Tanque de Combustivel', 'Mes Licenciamento'
 ]
 
-# --- 3. FUNÇÃO PRINCIPAL DA AUTOMAÇÃO (VERSÃO ROBUSTA) ---
+# --- 3. FUNÇÃO PRINCIPAL DA AUTOMAÇÃO (VERSÃO DEFINITIVA) ---
 def iniciar_automacao(username, password, df_veiculos, status_container):
     options = webdriver.ChromeOptions()
     options.add_argument("--headless")
@@ -61,11 +56,11 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
     try:
         service = Service() 
         driver = webdriver.Chrome(service=service, options=options)
-        wait = WebDriverWait(driver, 20)
+        wait = WebDriverWait(driver, 25)
         
         status_container.info("1. A fazer login no sistema Etrac...")
         driver.get(URL_DO_SISTEMA)
-        wait.until(EC.presence_of_element_located((By.ID, ID_CAMPO_USUARIO))).send_keys(username)
+        wait.until(EC.visibility_of_element_located((By.ID, ID_CAMPO_USUARIO))).send_keys(username)
         driver.find_element(By.ID, ID_CAMPO_SENHA).send_keys(password)
         driver.find_element(By.XPATH, BOTAO_ENTRAR_XPATH).click()
         
@@ -73,7 +68,7 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
         status_container.success("   Login realizado com sucesso!")
 
         for index, veiculo in df_veiculos.iterrows():
-            id_cliente = veiculo.get('ID_cliente')
+            id_cliente = int(veiculo.get('ID_cliente'))
             placa = veiculo.get('Placa')
             
             with st.status(f"Processando veículo: **{placa}**...") as status:
@@ -82,15 +77,17 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
                     st.write(f"   - Navegando para a página de cadastro do cliente {id_cliente}...")
                     driver.get(url_cadastro)
                     
-                    st.write("   - Aguardando formulário e preenchendo campos...")
+                    st.write("   - Aguardando formulário...")
                     placa_field = wait.until(EC.visibility_of_element_located((By.ID, INPUT_PLACA_ID)))
-                    
+                    st.write("      ✓ Formulário carregado.")
+
+                    st.write("   - Preenchendo dados do veículo...")
                     placa_field.send_keys(placa)
                     driver.find_element(By.ID, INPUT_CHASSI_ID).send_keys(str(veiculo.get('Chassi', '')))
                     driver.find_element(By.ID, INPUT_MARCA_ID).send_keys(veiculo.get('Marca', ''))
                     driver.find_element(By.ID, INPUT_MODELO_ID).send_keys(veiculo.get('Modelo', ''))
-                    driver.find_element(By.ID, INPUT_ANO_FABRICACAO_ID).send_keys(str(veiculo.get('Ano de Fabricação', '')))
-                    driver.find_element(By.ID, INPUT_ANO_MODELO_ID).send_keys(str(veiculo.get('Ano Modelo', '')))
+                    driver.find_element(By.ID, INPUT_ANO_FABRICACAO_ID).send_keys(str(int(veiculo.get('Ano de Fabricação'))))
+                    driver.find_element(By.ID, INPUT_ANO_MODELO_ID).send_keys(str(int(veiculo.get('Ano Modelo'))))
                     driver.find_element(By.ID, INPUT_COR_ID).send_keys(veiculo.get('Cor', ''))
                     st.write("      ✓ Campos principais preenchidos.")
 
@@ -107,7 +104,7 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
                     
                     summary['success'].append(placa)
                     status.update(label=f"Veículo **{placa}** cadastrado com sucesso!", state="complete")
-                    time.sleep(1) # Pausa estratégica de 1 segundo
+                    time.sleep(1)
 
                 except (TimeoutException, NoSuchElementException) as e:
                     error_msg = f"Falha ao cadastrar **{placa}**. O robô não encontrou um elemento, a confirmação de sucesso não apareceu, ou a página demorou muito a responder."
