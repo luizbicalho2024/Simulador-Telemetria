@@ -57,7 +57,7 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
     driver = None
 
     try:
-        # No Streamlit Cloud, o chromedriver já estará no path do sistema
+        # Usa o chromedriver instalado pelo packages.txt
         service = Service() 
         driver = webdriver.Chrome(service=service, options=options)
         wait = WebDriverWait(driver, 20)
