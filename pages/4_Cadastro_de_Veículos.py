@@ -1,10 +1,11 @@
-
 # -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
 import time
-import os  # <<< ADICIONADO: para lidar com caminhos de arquivos
+import os
 from selenium import webdriver
+# --- Alteração 1: Importar 'Options' do Selenium ---
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
@@ -13,20 +14,13 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from webdriver_manager.chrome import ChromeDriverManager
 
 # ==============================================================================
-# FUNÇÃO PRINCIPAL DA AUTOMAÇÃO (REATORADA DO SCRIPT ORIGINAL)
+# FUNÇÃO PRINCIPAL DA AUTOMAÇÃO (COM CORREÇÃO PARA AMBIENTE SEM TELA)
 # ==============================================================================
 def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
     """
     Executa a automação de cadastro de veículos a partir de um DataFrame.
-
-    Args:
-        df (pd.DataFrame): DataFrame com os dados dos veículos.
-        usuario (str): Usuário para login no sistema.
-        senha (str): Senha para login no sistema.
-        progress_bar: Objeto st.progress para atualizar a barra de progresso.
-        status_text: Objeto st.empty para exibir mensagens de status.
     """
-    # --- ETAPA 1: CONFIGURAÇÕES E SELETORES (mantidos do script original) ---
+    # --- ETAPA 1: CONFIGURAÇÕES E SELETORES ---
     URL_DO_SISTEMA = "https://sistema.etrac.com.br/"
     URL_BASE_CADASTRO_VEICULO = "https://sistema.etrac.com.br/index.php?r=veiculo%2Fcreate&id="
     ID_CAMPO_USUARIO = "loginform-username"
@@ -59,11 +53,25 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
     df_renomeado = df.rename(columns=mapa_colunas)
     lista_de_clientes = df_renomeado.to_dict('records')
 
+    # ##############################################################################
+    # CORREÇÃO APLICADA AQUI: Configurações para rodar no Streamlit Cloud
+    # ##############################################################################
+    status_text.info("Configurando o navegador para ambiente de nuvem...")
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")  # Roda o Chrome sem abrir uma janela
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    # ##############################################################################
+
     service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service)
-    driver.maximize_window()
-    wait = WebDriverWait(driver, 30)
+    # --- Alteração 2: Passar as 'options' na inicialização ---
+    driver = webdriver.Chrome(service=service, options=chrome_options)
     
+    # Não precisa mais maximizar a janela, pois não há janela
+    # driver.maximize_window()
+    
+    wait = WebDriverWait(driver, 30)
     total_veiculos = len(lista_de_clientes)
 
     try:
@@ -86,7 +94,7 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
             cliente_id = cliente.get('cliente_id')
             placa_veiculo = cliente.get('Placa', 'N/A')
             
-            status_text.info(f"Cadastrando veículo {i+1}/{total_veiculos} (Placa: {placa_veiculo}) para o cliente '{nome_cliente}'...")
+            status_text.info(f"Cadastrando veículo {i+1}/{total_veiculos} (Placa: {placa_veiculo})...")
 
             if not cliente_id:
                 st.warning(f"Registro para '{nome_cliente}' não possui 'ID_cliente'. Pulando...")
@@ -123,8 +131,8 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
                 time.sleep(2)
 
             except (TimeoutException, NoSuchElementException) as e:
-                st.error(f"❌ Erro no processo do cliente '{nome_cliente}' (Placa: {placa_veiculo}). Pulando para o próximo.")
-                st.error(f"   Detalhe do erro: {e}")
+                st.error(f"❌ Erro ao cadastrar '{placa_veiculo}'. Pulando para o próximo.")
+                st.error(f"   Detalhe: Verifique se o 'Segmento' ({segmento_veiculo}) está correto ou se o veículo já existe.")
                 continue
         
         status_text.success("3/3 - Processo de automação finalizado!")
@@ -134,6 +142,7 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
         status_text.error(f"‼️ OCORREU UM ERRO GERAL NO SCRIPT ‼️")
         st.error(f"Mensagem de erro: {e}")
         try:
+            # Em modo headless, o screenshot ainda é útil para depuração
             driver.save_screenshot("erro_geral_automacao.png")
             st.image("erro_geral_automacao.png")
         except:
@@ -145,7 +154,7 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
             driver.quit()
 
 # ==============================================================================
-# INTERFACE DO USUÁRIO COM STREAMLIT
+# INTERFACE DO USUÁRIO COM STREAMLIT (Sem alterações aqui)
 # ==============================================================================
 st.set_page_config(page_title="Automação de Cadastro de Veículos", layout="wide")
 
@@ -160,15 +169,8 @@ Siga os passos abaixo:
 4.  **Inicie a automação**: Clique no botão e aguarde o processo ser concluído.
 """)
 
-# ##############################################################################
-# CORREÇÃO APLICADA AQUI
-# ##############################################################################
-# Constrói um caminho para o arquivo modelo que funciona de forma confiável
-# partindo do local deste script (que está na pasta 'pages').
 try:
-    # Obtém o caminho do diretório onde o script está -> '.../pages'
     script_dir = os.path.dirname(__file__) 
-    # Concatena com '..' para voltar um nível (para a raiz do projeto) e com o nome do arquivo
     model_file_path = os.path.join(script_dir, '..', 'modelo_importacao - Sheet1.csv')
 
     with open(model_file_path, "rb") as file:
@@ -179,8 +181,7 @@ try:
             mime="text/csv",
         )
 except FileNotFoundError:
-    st.warning("Arquivo 'modelo_importacao - Sheet1.csv' não encontrado na raiz do projeto. O botão de download do modelo está desativado.")
-# ##############################################################################
+    st.warning("Arquivo 'modelo_importacao - Sheet1.csv' não encontrado. O botão de download está desativado.")
 
 st.divider()
 
@@ -217,7 +218,7 @@ if uploaded_file:
             elif df.empty:
                 st.error("O arquivo carregado está vazio ou não contém dados válidos.")
             else:
-                st.info("Iniciando a automação... Uma janela do navegador será aberta. Não a feche.")
+                st.info("Iniciando a automação... Este processo ocorre em segundo plano e pode levar alguns minutos.")
                 
                 progress_bar = st.progress(0)
                 status_text = st.empty()
