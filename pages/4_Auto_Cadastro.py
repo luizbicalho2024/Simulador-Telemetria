@@ -44,7 +44,7 @@ COLUNAS_OBRIGATORIAS = [
     'Origem de Veículo', 'Tanque de Combustivel', 'Mes Licenciamento'
 ]
 
-# --- 3. FUNÇÃO PRINCIPAL DA AUTOMAÇÃO ---
+# --- 3. FUNÇÃO PRINCIPAL DA AUTOMAÇÃO (MAIS ROBUSTA) ---
 def iniciar_automacao(username, password, df_veiculos, status_container):
     options = webdriver.ChromeOptions()
     options.add_argument("--headless")
@@ -57,10 +57,9 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
     driver = None
 
     try:
-        # Usa o chromedriver instalado pelo packages.txt
         service = Service() 
         driver = webdriver.Chrome(service=service, options=options)
-        wait = WebDriverWait(driver, 20)
+        wait = WebDriverWait(driver, 30) # Aumentado o tempo de espera global para 30 segundos
         
         status_container.info("1. A fazer login no sistema Etrac...")
         driver.get(URL_DO_SISTEMA)
@@ -76,15 +75,21 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
             url_cadastro = f"{URL_BASE_CADASTRO_VEICULO}{id_cliente}"
             driver.get(url_cadastro)
             
+            # Garante que a página do cliente carregou antes de prosseguir
+            wait.until(EC.presence_of_element_located((By.XPATH, BOTAO_ADICIONAR_VEICULO_XPATH)))
+
             for index, veiculo in group.iterrows():
                 placa = veiculo.get('Placa')
                 with st.status(f"Cadastrando veículo: **{placa}**...") as status:
                     try:
-                        st.write("   - Clicando em 'Adicionar Veículo'...")
-                        wait.until(EC.element_to_be_clickable((By.XPATH, BOTAO_ADICIONAR_VEICULO_XPATH))).click()
+                        st.write("   - Aguardando e clicando em 'Adicionar Veículo'...")
+                        add_vehicle_button = wait.until(EC.element_to_be_clickable((By.XPATH, BOTAO_ADICIONAR_VEICULO_XPATH)))
+                        add_vehicle_button.click()
                         
-                        st.write("   - Preenchendo campos do formulário...")
-                        wait.until(EC.presence_of_element_located((By.ID, INPUT_PLACA_ID))).send_keys(placa)
+                        st.write("   - Aguardando formulário e preenchendo campos...")
+                        placa_field = wait.until(EC.visibility_of_element_located((By.ID, INPUT_PLACA_ID)))
+                        
+                        placa_field.send_keys(placa)
                         driver.find_element(By.ID, INPUT_CHASSI_ID).send_keys(str(veiculo.get('Chassi', '')))
                         driver.find_element(By.ID, INPUT_MARCA_ID).send_keys(veiculo.get('Marca', ''))
                         driver.find_element(By.ID, INPUT_MODELO_ID).send_keys(veiculo.get('Modelo', ''))
@@ -98,13 +103,14 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
                         st.write("   - Enviando o formulário...")
                         wait.until(EC.element_to_be_clickable((By.XPATH, BOTAO_CADASTRAR_VEICULO_XPATH))).click()
                         
-                        wait.until(EC.url_contains(f"r=veiculo%2Fcreate&id={id_cliente}"))
+                        # Espera a página recarregar e o botão "Adicionar Veículo" aparecer novamente
+                        wait.until(EC.visibility_of_element_located((By.XPATH, BOTAO_ADICIONAR_VEICULO_XPATH)))
                         
                         summary['success'].append(placa)
                         status.update(label=f"Veículo **{placa}** cadastrado com sucesso!", state="complete")
 
                     except (TimeoutException, NoSuchElementException) as e:
-                        error_msg = f"Falha ao cadastrar **{placa}**. O robô não encontrou um elemento necessário."
+                        error_msg = f"Falha ao cadastrar **{placa}**. O robô não encontrou um elemento ou a página demorou muito a responder."
                         st.error(error_msg)
                         summary['failed'].append({'placa': placa, 'motivo': 'Elemento não encontrado ou tempo de espera excedido'})
                         status.update(label=error_msg, state="error")
