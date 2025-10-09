@@ -12,11 +12,11 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 # ==============================================================================
-# FUNÇÃO PRINCIPAL DA AUTOMAÇÃO (COM VERIFICAÇÃO DE SUCESSO)
+# FUNÇÃO PRINCIPAL DA AUTOMAÇÃO (COM CLIQUE JS E SCREENSHOT DE ERRO)
 # ==============================================================================
 def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
     """
-    Executa a automação de cadastro de veículos com verificação de sucesso.
+    Executa a automação de cadastro de veículos com verificação aprimorada.
     """
     # --- ETAPA 1: CONFIGURAÇÕES E SELETORES ---
     URL_DO_SISTEMA = "https://sistema.etrac.com.br/"
@@ -39,7 +39,6 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
     INPUT_MES_LICENCIAMENTO_ID = "veiculo-mes_licenciamento"
     BOTAO_CADASTRAR_VEICULO_XPATH = "//div[@class='form-group align-right']//button[contains(text(), 'Cadastrar')]"
     
-    # --- Alteração 1: Seletores para as mensagens de confirmação ---
     MENSAGEM_SUCESSO_XPATH = "//div[contains(@class, 'alert-success') and contains(text(), 'Veículo salvo com sucesso')]"
     MENSAGEM_ERRO_XPATH = "//div[contains(@class, 'alert-danger')]"
 
@@ -61,11 +60,12 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--window-size=1920,1080") # Definir um tamanho de janela
 
     service = Service()
     driver = webdriver.Chrome(service=service, options=chrome_options)
     
-    wait = WebDriverWait(driver, 15) # Aumentar a espera padrão para 15 segundos
+    wait = WebDriverWait(driver, 15)
     total_veiculos = len(lista_de_clientes)
 
     try:
@@ -98,6 +98,7 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
                 url_final = f"{URL_BASE_CADASTRO_VEICULO}{cliente_id}"
                 driver.get(url_final)
 
+                # Preenchimento do formulário (sem alterações)
                 radio_mercosul = wait.until(EC.presence_of_element_located((By.XPATH, RADIO_PLACA_MERCOSUL_XPATH)))
                 driver.execute_script("arguments[0].click();", radio_mercosul)
                 time.sleep(1)
@@ -119,21 +120,28 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
                 driver.find_element(By.ID, INPUT_TANQUE_ID).send_keys(str(cliente.get('Tanque de Comb', '')))
                 driver.find_element(By.ID, INPUT_MES_LICENCIAMENTO_ID).send_keys(str(int(cliente.get('Mes de Licenciamento', ''))))
 
-                wait.until(EC.element_to_be_clickable((By.XPATH, BOTAO_CADASTRAR_VEICULO_XPATH))).click()
+                # --- Alteração 1: Clique no botão via JavaScript ---
+                botao_cadastrar = wait.until(EC.element_to_be_clickable((By.XPATH, BOTAO_CADASTRAR_VEICULO_XPATH)))
+                driver.execute_script("arguments[0].click();", botao_cadastrar)
                 
-                # --- Alteração 2: Lógica de verificação de sucesso/erro ---
                 try:
-                    # Espera até 10 segundos pela mensagem de sucesso
                     wait.until(EC.presence_of_element_located((By.XPATH, MENSAGEM_SUCESSO_XPATH)))
                     st.write(f"✅ **Confirmado:** Veículo '{placa_veiculo}' cadastrado para '{nome_cliente}'.")
                 except TimeoutException:
-                    # Se não achou sucesso, procura por uma mensagem de erro
+                    # --- Alteração 2: Screenshot de Diagnóstico ---
+                    st.error(f"❌ **Falha na Confirmação** para a placa '{placa_veiculo}'. O sistema não respondeu com sucesso.")
+                    screenshot_file = f"erro_cadastro_{placa_veiculo}.png"
+                    driver.save_screenshot(screenshot_file)
+                    st.warning(f"Foi gerado um screenshot de diagnóstico. Veja a imagem abaixo:")
+                    st.image(screenshot_file)
+                    
+                    # Tenta encontrar uma mensagem de erro explícita
                     try:
                         erro_msg = driver.find_element(By.XPATH, MENSAGEM_ERRO_XPATH).text
-                        st.error(f"❌ **Falha no Sistema** ao cadastrar '{placa_veiculo}': {erro_msg}")
+                        st.error(f"   **Mensagem de Erro Encontrada:** {erro_msg}")
                     except NoSuchElementException:
-                        st.error(f"❌ **Falha Desconhecida** ao cadastrar '{placa_veiculo}'. O sistema não confirmou o cadastro.")
-                    continue # Pula para o próximo veículo
+                        st.info("   Nenhuma mensagem de erro explícita foi encontrada na página.")
+                    continue
 
             except Exception as e:
                 st.error(f"❌ Erro Crítico no processo da placa '{placa_veiculo}'. Pulando. Detalhe: {e}")
@@ -157,7 +165,7 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
             driver.quit()
 
 # ==============================================================================
-# INTERFACE DO USUÁRIO COM STREAMLIT (Sem alterações aqui)
+# INTERFACE DO USUÁRIO COM STREAMLIT (Sem alterações)
 # ==============================================================================
 st.set_page_config(page_title="Automação de Cadastro de Veículos", layout="wide")
 
