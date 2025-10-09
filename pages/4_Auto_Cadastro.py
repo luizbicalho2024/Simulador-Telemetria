@@ -39,7 +39,7 @@ INPUT_COR_ID = "veiculo-cor"
 RADIO_PLACA_MERCOSUL_XPATH = "//input[@name='tipo_placa' and @value='2']"
 BOTAO_CADASTRAR_VEICULO_XPATH = "//button[text()='Cadastrar']"
 
-# Colunas obrigatórias na planilha
+# Colunas obrigatórias na planilha (nomes já limpos)
 COLUNAS_OBRIGATORIAS = [
     'ID_cliente', 'Segmento', 'Placa', 'Chassi', 'Marca', 'Modelo', 
     'Ano Modelo', 'Ano de Fabricação', 'Combustível', 'Cor', 
@@ -56,13 +56,14 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
+    options.add_argument("--window-size=1920,1080")
     
     summary = {'success': [], 'failed': []}
 
     try:
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=options)
-        wait = WebDriverWait(driver, 15) # Aumentar o tempo de espera para 15 segundos
+        wait = WebDriverWait(driver, 20) # Aumentar o tempo de espera para 20 segundos
         
         status_container.info("1. A fazer login no sistema Etrac...")
         driver.get(URL_DO_SISTEMA)
@@ -70,11 +71,9 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
         driver.find_element(By.ID, ID_CAMPO_SENHA).send_keys(password)
         driver.find_element(By.XPATH, BOTAO_ENTRAR_XPATH).click()
         
-        # Espera o login ser bem sucedido verificando a URL
         wait.until(EC.url_contains("index.php?r=site%2Findex"))
         status_container.success("   Login realizado com sucesso!")
 
-        # Agrupa os veículos por ID de cliente
         for id_cliente, group in df_veiculos.groupby('ID_cliente'):
             status_container.info(f"2. Processando cliente com ID: {id_cliente}")
             url_cadastro = f"{URL_BASE_CADASTRO_VEICULO}{id_cliente}"
@@ -102,7 +101,6 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
                         st.write("   - Enviando o formulário...")
                         wait.until(EC.element_to_be_clickable((By.XPATH, BOTAO_CADASTRAR_VEICULO_XPATH))).click()
                         
-                        # Espera a URL voltar para a página de cadastro, indicando sucesso
                         wait.until(EC.url_contains(f"r=veiculo%2Fcreate&id={id_cliente}"))
                         
                         summary['success'].append(placa)
@@ -113,8 +111,7 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
                         st.error(error_msg)
                         summary['failed'].append({'placa': placa, 'motivo': 'Elemento não encontrado ou tempo de espera excedido'})
                         status.update(label=error_msg, state="error")
-                        # Recarrega a página para tentar o próximo veículo
-                        driver.get(url_cadastro)
+                        driver.get(url_cadastro) # Recarrega a página para tentar o próximo
                         continue
 
     except Exception as e:
@@ -125,7 +122,7 @@ def iniciar_automacao(username, password, df_veiculos, status_container):
             driver.quit()
         return summary
 
-# --- 5. INTERFACE DA PÁGINA ---
+# --- 4. INTERFACE DA PÁGINA ---
 st.markdown("<h1 style='text-align: center; color: #54A033;'>🤖 Automação de Cadastro de Veículos</h1>", unsafe_allow_html=True)
 st.markdown("---")
 
@@ -151,24 +148,29 @@ if st.button("🚀 Iniciar Automação", use_container_width=True, type="primary
         st.error("Por favor, carregue a planilha de importação.")
     else:
         try:
-            df = pd.read_excel(uploaded_file)
+            # ***** CORREÇÃO PRINCIPAL AQUI *****
+            # skiprows=1 para ignorar a primeira linha e usar a segunda como cabeçalho
+            df = pd.read_excel(uploaded_file, skiprows=1, header=0)
             
-            # Validação da planilha
+            # Limpa os nomes das colunas (remove "(*)" e espaços)
+            df.columns = df.columns.str.replace(r'\s*\(\*\)', '', regex=True).str.strip()
+
             st.write("🔍 A validar a planilha...")
             missing_cols = [col for col in COLUNAS_OBRIGATORIAS if col not in df.columns]
+            
             if missing_cols:
                 st.error(f"A planilha está em falta das seguintes colunas obrigatórias: **{', '.join(missing_cols)}**")
+                st.write("Colunas encontradas na sua planilha:", df.columns.tolist())
             else:
                 df_obrigatorias = df[COLUNAS_OBRIGATORIAS]
                 if df_obrigatorias.isnull().values.any():
-                    st.error("A sua planilha tem células vazias em colunas obrigatórias. Por favor, preencha todos os campos marcados com '(*)' e tente novamente.")
+                    st.error("A sua planilha tem células vazias em colunas obrigatórias. Por favor, preencha todos os campos e tente novamente.")
                 else:
                     st.success("✅ Planilha validada com sucesso! A iniciar a automação...")
                     
                     status_container = st.empty()
                     summary_report = iniciar_automacao(etrac_user, etrac_pass, df, status_container)
                     
-                    # Relatório Final
                     st.markdown("---")
                     st.subheader("🏁 Relatório Final da Automação")
                     st.metric("Total de Veículos Processados", len(summary_report['success']) + len(summary_report['failed']))
