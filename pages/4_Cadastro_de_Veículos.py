@@ -1,7 +1,9 @@
+
 # -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
 import time
+import os  # <<< ADICIONADO: para lidar com caminhos de arquivos
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
@@ -45,28 +47,18 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
     INPUT_MES_LICENCIAMENTO_ID = "veiculo-mes_licenciamento"
     BOTAO_CADASTRAR_VEICULO_XPATH = "//div[@class='form-group align-right']//button[contains(text(), 'Cadastrar')]"
 
-    # Mapeamento das colunas do CSV para as chaves usadas no script
-    # Isso garante compatibilidade sem alterar a lógica principal
     mapa_colunas = {
-        'ID_cliente (*)': 'cliente_id',
-        'Cliente/Unidade': 'Nome do Cliente',
-        'Segmento (*)': 'Segmento',
-        'Placa (*)': 'Placa',
-        'Chassi (*)': 'Chassis',
-        'Renavam': 'Renavam',
-        'Ano de Fabricação (*)': 'Ano',
-        'Autonomia': 'Autonomia', # Campo opcional
-        'Marca (*)': 'Marca',
-        'Modelo (*)': 'Modelo',
-        'Ano Modelo (*)': 'Ano Modelo',
-        'Cor (*)': 'Cor',
+        'ID_cliente (*)': 'cliente_id', 'Cliente/Unidade': 'Nome do Cliente',
+        'Segmento (*)': 'Segmento', 'Placa (*)': 'Placa', 'Chassi (*)': 'Chassis',
+        'Renavam': 'Renavam', 'Ano de Fabricação (*)': 'Ano',
+        'Autonomia': 'Autonomia', 'Marca (*)': 'Marca', 'Modelo (*)': 'Modelo',
+        'Ano Modelo (*)': 'Ano Modelo', 'Cor (*)': 'Cor',
         'Tanque de Combustivel (*)': 'Tanque de Comb',
         'Mes Licenciamento (*)': 'Mes de Licenciamento'
     }
     df_renomeado = df.rename(columns=mapa_colunas)
     lista_de_clientes = df_renomeado.to_dict('records')
 
-    # --- ETAPA 2: INICIALIZAÇÃO DO NAVEGADOR ---
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service)
     driver.maximize_window()
@@ -75,7 +67,6 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
     total_veiculos = len(lista_de_clientes)
 
     try:
-        # --- Ação de Login ---
         status_text.info("1/3 - Acessando o sistema e realizando login...")
         driver.get(URL_DO_SISTEMA)
         
@@ -86,7 +77,6 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
         status_text.info("Login realizado com sucesso. Aguardando a página principal...")
         time.sleep(5)
 
-        # --- Início do Cadastro de Veículos ---
         status_text.info("2/3 - Iniciando o cadastro dos veículos...")
         for i, cliente in enumerate(lista_de_clientes):
             progresso = (i + 1) / total_veiculos
@@ -106,23 +96,20 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
                 url_final = f"{URL_BASE_CADASTRO_VEICULO}{cliente_id}"
                 driver.get(url_final)
 
-                # Seleciona Placa Mercosul
                 radio_mercosul = wait.until(EC.presence_of_element_located((By.XPATH, RADIO_PLACA_MERCOSUL_XPATH)))
                 driver.execute_script("arguments[0].click();", radio_mercosul)
                 time.sleep(1)
 
-                # Seleciona o tipo de veículo
                 segmento_veiculo = str(cliente.get('Segmento', 'Outros')).capitalize()
                 wait.until(EC.element_to_be_clickable((By.XPATH, SELECT2_TIPO_VEICULO_BOX_XPATH))).click()
                 xpath_opcao_veiculo = f"//span[@class='select2-results']//li[text()='{segmento_veiculo}']"
                 wait.until(EC.element_to_be_clickable((By.XPATH, xpath_opcao_veiculo))).click()
                 
-                # Preenche os campos de texto
                 driver.find_element(By.ID, INPUT_PLACA_ID).send_keys(str(cliente.get('Placa', '')))
                 driver.find_element(By.ID, INPUT_CHASSI_ID).send_keys(str(cliente.get('Chassis', '')))
                 driver.find_element(By.ID, INPUT_RENAVAM_ID).send_keys(str(cliente.get('Renavam', '')))
                 driver.find_element(By.ID, INPUT_ANO_ID).send_keys(str(cliente.get('Ano', '')))
-                driver.find_element(By.ID, INPUT_AUTONOMIA_ID).send_keys(str(cliente.get('Autonomia', '0'))) # Valor padrão se não existir
+                driver.find_element(By.ID, INPUT_AUTONOMIA_ID).send_keys(str(cliente.get('Autonomia', '0')))
                 driver.find_element(By.ID, INPUT_FABRICANTE_ID).send_keys(str(cliente.get('Marca', '')))
                 driver.find_element(By.ID, INPUT_MODELO_ID).send_keys(str(cliente.get('Modelo', '')))
                 driver.find_element(By.ID, INPUT_ANO_MODELO_ID).send_keys(str(cliente.get('Ano Modelo', '')))
@@ -130,7 +117,6 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
                 driver.find_element(By.ID, INPUT_TANQUE_ID).send_keys(str(cliente.get('Tanque de Comb', '')))
                 driver.find_element(By.ID, INPUT_MES_LICENCIAMENTO_ID).send_keys(str(int(cliente.get('Mes de Licenciamento', ''))))
 
-                # Clica no botão "Cadastrar"
                 wait.until(EC.element_to_be_clickable((By.XPATH, BOTAO_CADASTRAR_VEICULO_XPATH))).click()
                 
                 st.write(f"✅ Sucesso: Veículo '{placa_veiculo}' cadastrado para '{nome_cliente}'.")
@@ -142,14 +128,17 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
                 continue
         
         status_text.success("3/3 - Processo de automação finalizado!")
-        return True # Retorna sucesso
+        return True
 
     except Exception as e:
         status_text.error(f"‼️ OCORREU UM ERRO GERAL NO SCRIPT ‼️")
         st.error(f"Mensagem de erro: {e}")
-        driver.save_screenshot("erro_geral_automacao.png")
-        st.image("erro_geral_automacao.png")
-        return False # Retorna falha
+        try:
+            driver.save_screenshot("erro_geral_automacao.png")
+            st.image("erro_geral_automacao.png")
+        except:
+            st.error("Não foi possível capturar a tela do erro.")
+        return False
     
     finally:
         if 'driver' in locals():
@@ -171,18 +160,30 @@ Siga os passos abaixo:
 4.  **Inicie a automação**: Clique no botão e aguarde o processo ser concluído.
 """)
 
-# Link para baixar o arquivo modelo (opcional, mas recomendado)
-with open("modelo_importacao - Sheet1.csv", "rb") as file:
-    st.download_button(
-        label="📄 Baixar Modelo de Importação (CSV)",
-        data=file,
-        file_name="modelo_importacao.csv",
-        mime="text/csv",
-    )
+# ##############################################################################
+# CORREÇÃO APLICADA AQUI
+# ##############################################################################
+# Constrói um caminho para o arquivo modelo que funciona de forma confiável
+# partindo do local deste script (que está na pasta 'pages').
+try:
+    # Obtém o caminho do diretório onde o script está -> '.../pages'
+    script_dir = os.path.dirname(__file__) 
+    # Concatena com '..' para voltar um nível (para a raiz do projeto) e com o nome do arquivo
+    model_file_path = os.path.join(script_dir, '..', 'modelo_importacao - Sheet1.csv')
+
+    with open(model_file_path, "rb") as file:
+        st.download_button(
+            label="📄 Baixar Modelo de Importação (CSV)",
+            data=file,
+            file_name="modelo_importacao.csv",
+            mime="text/csv",
+        )
+except FileNotFoundError:
+    st.warning("Arquivo 'modelo_importacao - Sheet1.csv' não encontrado na raiz do projeto. O botão de download do modelo está desativado.")
+# ##############################################################################
 
 st.divider()
 
-# 1. Upload do arquivo
 uploaded_file = st.file_uploader(
     "Carregue o arquivo de veículos (CSV ou Excel)",
     type=["csv", "xlsx"]
@@ -191,13 +192,11 @@ uploaded_file = st.file_uploader(
 if uploaded_file:
     try:
         if uploaded_file.name.endswith('.csv'):
-            df = pd.read_csv(uploaded_file, skiprows=1) # Pula a primeira linha do modelo
+            df = pd.read_csv(uploaded_file, skiprows=1)
         else:
-            df = pd.read_excel(uploaded_file, skiprows=1) # Pula a primeira linha do modelo
+            df = pd.read_excel(uploaded_file, skiprows=1)
         
-        # Remove linhas onde o 'ID_cliente (*)' é nulo
         df.dropna(subset=['ID_cliente (*)'], inplace=True)
-        # Converte ID do cliente para inteiro para remover casas decimais
         df['ID_cliente (*)'] = df['ID_cliente (*)'].astype(int)
 
         st.success("Arquivo carregado e processado com sucesso!")
@@ -205,7 +204,6 @@ if uploaded_file:
 
         st.divider()
 
-        # 2. Credenciais de acesso
         st.subheader("Credenciais do Sistema")
         col1, col2 = st.columns(2)
         with col1:
@@ -213,7 +211,6 @@ if uploaded_file:
         with col2:
             senha = st.text_input("Senha", type="password", placeholder="Sua senha de acesso")
 
-        # 3. Botão para iniciar a automação
         if st.button("🚀 Iniciar Cadastro em Lote", type="primary", use_container_width=True):
             if not usuario or not senha:
                 st.error("Por favor, insira o usuário e a senha para continuar.")
@@ -222,11 +219,9 @@ if uploaded_file:
             else:
                 st.info("Iniciando a automação... Uma janela do navegador será aberta. Não a feche.")
                 
-                # Elementos para feedback em tempo real
                 progress_bar = st.progress(0)
                 status_text = st.empty()
 
-                # Chama a função de automação
                 sucesso = executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text)
 
                 if sucesso:
