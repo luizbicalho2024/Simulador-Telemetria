@@ -4,9 +4,9 @@ streamlit-authenticator>=0.3.2
 streamlit-option-menu
 streamlit_extras
 
-# --- Autenticação e Segurança ---
-passlib>=1.7.4
-bcrypt>=3.2.0
+# --- Autenticação e Segurança (Versões Fixadas para Compatibilidade) ---
+passlib==1.7.4
+bcrypt==3.2.0
 
 # --- Base de Dados ---
 pymongo[srv]>=4.6.0
