@@ -248,3 +248,48 @@ def delete_billing_history(history_id: str):
             print(f"ERROR: Falha ao excluir histórico de faturamento (ID: {history_id}): {e}")
             return False
     return False
+def get_fipe_collection():
+    """Retorna a coleção de veículos da FIPE."""
+    return get_collection("fipe_vehicles")
+
+def save_fipe_data(vehicle_data_list: list):
+    """
+    Salva uma lista de dados de veículos da FIPE no banco de dados.
+    Usa o 'codigoFipe' e 'anoModelo' como chave única para evitar duplicatas.
+    """
+    fipe_collection = get_fipe_collection()
+    if fipe_collection is None: return False
+    
+    try:
+        for vehicle in vehicle_data_list:
+            # Chave de busca única para cada variação de modelo/ano
+            query = {
+                "codigoFipe": vehicle.get("codigoFipe"),
+                "anoModelo": vehicle.get("anoModelo")
+            }
+            # O operador $set garante que o documento seja atualizado se já existir
+            update = {"$set": vehicle}
+            fipe_collection.update_one(query, update, upsert=True)
+        return True
+    except Exception as e:
+        print(f"ERROR: Falha ao salvar dados da FIPE: {e}")
+        return False
+
+def search_vehicle_in_db(model_name: str):
+    """
+    Busca por veículos no banco de dados local cujo modelo contenha o termo pesquisado.
+    """
+    fipe_collection = get_fipe_collection()
+    if fipe_collection is None: return []
+    
+    try:
+        # Usando regex para fazer uma busca "case-insensitive" (não diferencia maiúsculas/minúsculas)
+        # O 'i' no final da regex é o que ativa a busca case-insensitive
+        regex_query = {"$regex": model_name, "$options": "i"}
+        
+        # Busca no campo 'modelo' usando a regex
+        results = fipe_collection.find({"modelo": regex_query}).sort("anoModelo", -1)
+        return list(results)
+    except Exception as e:
+        print(f"ERROR: Falha ao buscar veículo no DB: {e}")
+        return []
