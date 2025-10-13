@@ -1,4 +1,4 @@
-# pages/4_Consultas_Gerais.py (substitua o conteúdo de pages/4_Consulta_CNPJ.py)
+# pages/4_Consultas_Gerais.py (CORRIGIDO)
 import streamlit as st
 import pandas as pd
 import requests
@@ -35,6 +35,7 @@ def consultar_cnpj(cnpj: str):
 @st.cache_data(ttl=86400) # Cache de 1 dia para marcas
 def get_fipe_marcas(tipo_veiculo):
     if not tipo_veiculo: return []
+    # Usando a API da BrasilAPI, que é a documentada
     url = f"https://brasilapi.com.br/api/fipe/marcas/v1/{tipo_veiculo}"
     try:
         r = requests.get(url, timeout=10)
@@ -44,10 +45,10 @@ def get_fipe_marcas(tipo_veiculo):
 @st.cache_data(ttl=3600)
 def get_fipe_modelos_por_marca(tipo_veiculo, codigo_marca):
     if not codigo_marca: return []
+    # Usando a API da Parallelum para obter a lista de modelos, que é mais completa
     url = f"https://parallelum.com.br/fipe/api/v1/{tipo_veiculo}/marcas/{codigo_marca}/modelos"
     try:
         r = requests.get(url, timeout=10)
-        # A API Parallelum retorna um dicionário com 'modelos' e 'anos'
         return r.json().get('modelos', []) if r.status_code == 200 else []
     except: return []
 
@@ -68,11 +69,10 @@ def exibir_resultados_fipe(resultados):
         st.warning("Nenhum resultado encontrado."); return
 
     df = pd.DataFrame(resultados)
-    # Renomeia as colunas para um formato mais legível
     df.rename(columns={
         'Valor': 'valor', 'Marca': 'marca', 'Modelo': 'modelo', 'AnoModelo': 'anoModelo',
         'Combustivel': 'combustivel', 'CodigoFipe': 'codigoFipe', 'MesReferencia': 'mesReferencia'
-    }, inplace=True, errors='ignore') # Ignora erros se a coluna já tiver o nome correto
+    }, inplace=True, errors='ignore')
 
     cols_to_show = ['marca', 'modelo', 'anoModelo', 'combustivel', 'valor', 'codigoFipe', 'mesReferencia']
     df_display = df[[col for col in cols_to_show if col in df.columns]]
@@ -91,7 +91,7 @@ st.markdown("<h1 style='text-align: center; color: #006494;'>🔍 Consultas Gera
 
 tab_fipe, tab_cnpj = st.tabs(["🚗 Consulta Tabela FIPE", "🏢 Consulta de CNPJ"])
 
-# --- ABA DE CONSULTA FIPE (LÓGICA PRINCIPAL) ---
+# --- ABA DE CONSULTA FIPE ---
 with tab_fipe:
     st.info("""
     **Como funciona:**
@@ -124,7 +124,12 @@ with tab_fipe:
 
     if tipo_veiculo:
         marcas = get_fipe_marcas(tipo_veiculo)
-        marcas_dict = {m['nome']: m['codigo'] for m in marcas}
+        # ==================================================================
+        # CORREÇÃO APLICADA AQUI
+        # A API retorna a chave 'valor', e não 'codigo'.
+        # ==================================================================
+        marcas_dict = {m['nome']: m['valor'] for m in marcas}
+        
         marca_selecionada = col_marca.selectbox(
             "Marca", list(marcas_dict.keys()), index=None, placeholder="Selecione...", key="fipe_marca"
         )
@@ -141,11 +146,9 @@ with tab_fipe:
                 if st.button("Consultar e Salvar Dados do Modelo", type="primary", use_container_width=True):
                     codigo_modelo = modelos_dict.get(modelo_selecionado_nome)
                     with st.spinner(f"Buscando todas as versões de '{modelo_selecionado_nome}' na API FIPE e salvando no banco..."):
-                        # Ação principal: busca na API
                         dados_completos_modelo = get_fipe_precos_por_modelo(tipo_veiculo, codigo_marca, codigo_modelo)
 
                         if dados_completos_modelo:
-                            # Ação principal: salva no banco de dados
                             umdb.save_fipe_data(dados_completos_modelo)
                             umdb.add_log(st.session_state["username"], "Sincronizou Modelo FIPE", {"modelo": modelo_selecionado_nome, "registros_salvos": len(dados_completos_modelo)})
                             st.toast(f"{len(dados_completos_modelo)} registros salvos no banco!", icon="💾")
