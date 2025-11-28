@@ -2,8 +2,8 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 from datetime import datetime
+from fpdf import FPDF
 import io
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
@@ -25,7 +25,6 @@ st.markdown("""
         text-align: center;
         box-shadow: 0 1px 2px rgba(0,0,0,0.05);
     }
-    
     /* CARDS COMPACTOS */
     .compact-card {
         background-color: #ffffff;
@@ -34,60 +33,30 @@ st.markdown("""
         margin-bottom: 8px;
         box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         border-left: 5px solid #ddd;
-        transition: transform 0.1s ease-in-out, box-shadow 0.1s;
     }
-    .compact-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }
+    .border-critical { border-left-color: #d32f2f; }
+    .border-warning { border-left-color: #f57c00; }
     
-    /* Cores das Bordas */
-    .border-critical { border-left-color: #d32f2f; } /* Vermelho */
-    .border-warning { border-left-color: #f57c00; }  /* Laranja */
+    .card-title { font-size: 16px; font-weight: 600; color: #333; display: flex; justify-content: space-between; }
+    .card-violation { font-size: 13px; color: #d32f2f; font-weight: 500; margin-top: 6px; }
     
-    /* Tipografia do Card */
-    .card-title {
-        font-size: 16px;
-        font-weight: 600;
-        color: #333;
-        margin: 0;
-        display: flex;
-        justify-content: space-between;
-    }
-    .card-meta {
-        font-size: 12px;
-        color: #666;
-        margin-top: 4px;
-    }
-    .card-violation {
-        font-size: 13px;
-        color: #d32f2f;
-        font-weight: 500;
-        margin-top: 6px;
-    }
-    
-    /* Ajuste de Tabs */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 24px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        height: 50px;
+    /* Email Box */
+    .email-box {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 5px;
+        padding: 20px;
+        font-family: monospace;
         white-space: pre-wrap;
-        background-color: transparent;
-        border-radius: 4px 4px 0px 0px;
-        gap: 1px;
-        padding-top: 10px;
-        padding-bottom: 10px;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# Autenticação
 if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login.")
     st.stop()
 
-# --- FUNÇÕES ---
+# --- FUNÇÕES DE PROCESSAMENTO ---
 
 def time_str_to_minutes(time_str):
     if pd.isna(time_str) or str(time_str).strip() == '' or str(time_str).strip() == '00:00:00':
@@ -101,12 +70,6 @@ def time_str_to_minutes(time_str):
         return 0
     except:
         return 0
-
-def minutes_to_str(minutes):
-    """Converte minutos inteiros de volta para HH:MM"""
-    h = int(minutes // 60)
-    m = int(minutes % 60)
-    return f"{h:02d}:{m:02d}"
 
 def processar_relatorio_complexo(file):
     try:
@@ -164,12 +127,10 @@ def analisar_conformidade(df):
         conducao_continua_min = time_str_to_minutes(row['Max_Conducao_Continua'])
         jornada_total_min = time_str_to_minutes(row['Jornada_Total'])
         
-        # Regra Crítica: > 5h30 Condução
         if conducao_continua_min > 330:
             violacoes_criticas.append(f"Direção Ininterrupta: {row['Max_Conducao_Continua']} (Limite 05:30)")
             status = "Crítico"
 
-        # Regra Secundária: < 11h Interjornada
         if 0 < interjornada_min < 650:
             violacoes_secundarias.append(f"Interjornada Curta: {row['Interjornada']} (Mín 11:00)")
             if status == "Conforme": status = "Atenção"
@@ -177,7 +138,7 @@ def analisar_conformidade(df):
         resultados.append({
             "Motorista": row['Motorista'],
             "Data_Ref": f"{row['Dia']} ({row['Semana']})",
-            "Dia_Num": int(row['Dia']), # Para ordenação gráfica
+            "Dia_Num": int(row['Dia']),
             "Status": status,
             "Critica_Msg": violacoes_criticas[0] if violacoes_criticas else "",
             "Secundaria_Msg": violacoes_secundarias[0] if violacoes_secundarias else "",
@@ -190,6 +151,94 @@ def analisar_conformidade(df):
         })
         
     return pd.DataFrame(resultados)
+
+# --- FUNÇÃO DE GERAÇÃO DE PDF ---
+def create_pdf_report(df_criticos, df_atencao, total_dias, total_motoristas):
+    class PDF(FPDF):
+        def header(self):
+            self.set_font('Arial', 'B', 15)
+            self.cell(0, 10, 'Relatório de Auditoria de Jornada (Lei 13.103)', 0, 1, 'C')
+            self.ln(5)
+        
+        def footer(self):
+            self.set_y(-15)
+            self.set_font('Arial', 'I', 8)
+            self.cell(0, 10, f'Página {self.page_no()}', 0, 0, 'C')
+
+    pdf = PDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    
+    # Resumo
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 10, "Resumo Executivo", 0, 1)
+    pdf.set_font("Arial", size=12)
+    pdf.cell(0, 8, f"Dias Analisados: {total_dias}", 0, 1)
+    pdf.cell(0, 8, f"Motoristas Auditados: {total_motoristas}", 0, 1)
+    pdf.cell(0, 8, f"Total de Infrações Críticas (Condução > 5h30): {len(df_criticos)}", 0, 1)
+    pdf.cell(0, 8, f"Total de Pontos de Atenção (Interjornada < 11h): {len(df_atencao)}", 0, 1)
+    pdf.ln(10)
+    
+    # Detalhes Críticos
+    if not df_criticos.empty:
+        pdf.set_font("Arial", 'B', 12)
+        pdf.set_text_color(200, 0, 0)
+        pdf.cell(0, 10, "INFRAÇÕES CRÍTICAS (Excesso de Direção)", 0, 1)
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_font("Arial", size=10)
+        
+        # Cabeçalho da tabela
+        pdf.cell(60, 8, "Motorista", 1)
+        pdf.cell(40, 8, "Data", 1)
+        pdf.cell(90, 8, "Detalhe", 1)
+        pdf.ln()
+        
+        for idx, row in df_criticos.iterrows():
+            # Tenta codificar para latin-1 para aceitar acentos, remove se falhar
+            try:
+                mot = row['Motorista'].encode('latin-1', 'replace').decode('latin-1')
+                detalhe = row['Critica_Msg'].encode('latin-1', 'replace').decode('latin-1')
+                data = row['Data_Ref'].encode('latin-1', 'replace').decode('latin-1')
+            except:
+                mot = row['Motorista']
+                detalhe = row['Critica_Msg']
+                data = row['Data_Ref']
+
+            pdf.cell(60, 8, mot[:28], 1)
+            pdf.cell(40, 8, data, 1)
+            pdf.cell(90, 8, detalhe, 1)
+            pdf.ln()
+        pdf.ln(10)
+
+    # Detalhes Atenção
+    if not df_atencao.empty:
+        pdf.set_font("Arial", 'B', 12)
+        pdf.set_text_color(255, 140, 0)
+        pdf.cell(0, 10, "PONTOS DE ATENÇÃO (Interjornada)", 0, 1)
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_font("Arial", size=10)
+        
+        pdf.cell(60, 8, "Motorista", 1)
+        pdf.cell(40, 8, "Data", 1)
+        pdf.cell(90, 8, "Detalhe", 1)
+        pdf.ln()
+        
+        for idx, row in df_atencao.iterrows():
+            try:
+                mot = row['Motorista'].encode('latin-1', 'replace').decode('latin-1')
+                detalhe = row['Secundaria_Msg'].encode('latin-1', 'replace').decode('latin-1')
+                data = row['Data_Ref'].encode('latin-1', 'replace').decode('latin-1')
+            except:
+                mot = row['Motorista']
+                detalhe = row['Secundaria_Msg']
+                data = row['Data_Ref']
+
+            pdf.cell(60, 8, mot[:28], 1)
+            pdf.cell(40, 8, data, 1)
+            pdf.cell(90, 8, detalhe, 1)
+            pdf.ln()
+
+    return pdf.output(dest='S').encode('latin-1')
 
 # --- UI PRINCIPAL ---
 
@@ -206,143 +255,142 @@ if uploaded_file:
         
         # Filtros
         df_criticos = df_analise[df_analise['Tem_Critica'] == True]
+        df_atencao = df_analise[df_analise['Tem_Atencao'] == True]
+        
         total_criticos = len(df_criticos)
-        total_atencao = len(df_analise[df_analise['Tem_Atencao'] == True])
+        total_atencao = len(df_atencao)
         
         # --- KPIs ---
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Motoristas", df_analise['Motorista'].nunique())
         c2.metric("Dias Analisados", len(df_analise))
-        c3.metric("Violações Críticas (Condução)", total_criticos, delta_color="inverse")
-        c4.metric("Pontos de Atenção (Interjornada)", total_atencao, delta_color="inverse")
+        c3.metric("Violações Críticas", total_criticos, delta_color="inverse")
+        c4.metric("Pontos de Atenção", total_atencao, delta_color="inverse")
         
         st.markdown("---")
 
-        tab1, tab2, tab3 = st.tabs(["🚨 Gestão de Risco", "📊 Inteligência de Dados", "📋 Lista Detalhada"])
+        tab1, tab2, tab3, tab4 = st.tabs(["🚨 Gestão de Risco", "📊 Inteligência de Dados", "📋 Lista Detalhada", "📧 Comunicar Gestor"])
 
-        # --- TAB 1: CARDs COMPACTOS ---
+        # --- TAB 1: RISCO ---
         with tab1:
             c_left, c_right = st.columns([1, 1])
-            
             with c_left:
                 st.subheader("🔴 Crítico: Excesso de Direção")
-                st.caption("Motoristas que dirigiram mais de 5h30 sem parar.")
-                
                 if not df_criticos.empty:
-                    # Filtro por motorista
                     motoristas_criticos = df_criticos['Motorista'].unique()
                     filtro_mot = st.multiselect("Filtrar Motorista:", options=motoristas_criticos, default=motoristas_criticos[:5])
-                    
                     df_show_crit = df_criticos[df_criticos['Motorista'].isin(filtro_mot)]
-                    
                     for idx, row in df_show_crit.iterrows():
-                        # HTML Card Compacto Vermelho
                         st.markdown(f"""
                         <div class="compact-card border-critical">
-                            <div class="card-title">
-                                <span>{row['Motorista']}</span>
-                                <span style="font-size: 14px; color: #666;">{row['Data_Ref']}</span>
-                            </div>
+                            <div class="card-title"><span>{row['Motorista']}</span><span style="font-size:14px;color:#666;">{row['Data_Ref']}</span></div>
                             <div class="card-violation">⚠️ {row['Critica_Msg']}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
+                        </div>""", unsafe_allow_html=True)
                 else:
                     st.success("Nenhuma violação crítica encontrada.")
 
             with c_right:
                 st.subheader("🟠 Atenção: Interjornada")
-                st.caption("Descanso entre jornadas inferior a 11 horas.")
-                
-                df_atencao = df_analise[df_analise['Tem_Atencao'] == True]
-                
                 if not df_atencao.empty:
-                    with st.container(height=500): # Scrollable container
+                    with st.container(height=500):
                         for idx, row in df_atencao.iterrows():
-                            # HTML Card Compacto Laranja
                             st.markdown(f"""
                             <div class="compact-card border-warning">
-                                <div class="card-title">
-                                    <span>{row['Motorista']}</span>
-                                    <span style="font-size: 14px; color: #666;">{row['Data_Ref']}</span>
-                                </div>
-                                <div class="card-meta">
-                                    <span style="color: #e65100;">{row['Secundaria_Msg']}</span>
-                                </div>
-                            </div>
-                            """, unsafe_allow_html=True)
+                                <div class="card-title"><span>{row['Motorista']}</span><span style="font-size:14px;color:#666;">{row['Data_Ref']}</span></div>
+                                <div class="card-violation" style="color:#e65100">{row['Secundaria_Msg']}</div>
+                            </div>""", unsafe_allow_html=True)
                 else:
                     st.info("Interjornadas conformes.")
 
-        # --- TAB 2: GRÁFICOS ANALÍTICOS ---
+        # --- TAB 2: GRÁFICOS ---
         with tab2:
-            st.subheader("Análise de Tendências e Risco")
-            
             col_g1, col_g2 = st.columns([2, 1])
-            
             with col_g1:
-                # 1. SCATTER PLOT: Correlação Cansaço vs Infrações
-                # Eixo X: Tamanho da Jornada Total
-                # Eixo Y: Tempo Máximo de Condução Contínua
-                # Cor: Status (Crítico/Conforme)
-                # Objetivo: Mostrar que jornadas longas tendem a gerar infrações de condução
-                
                 fig_scatter = px.scatter(
-                    df_analise, 
-                    x="Jornada_Total_Min", 
-                    y="Conducao_Continua_Min",
-                    color="Status",
+                    df_analise, x="Jornada_Total_Min", y="Conducao_Continua_Min", color="Status",
                     color_discrete_map={"Conforme": "#aaddaa", "Atenção": "#ffcc80", "Crítico": "#ff5252"},
                     hover_data=["Motorista", "Data_Ref", "Max_Conducao_Continua"],
-                    title="Relação: Duração da Jornada vs Tempo ao Volante",
-                    labels={"Jornada_Total_Min": "Jornada Total (min)", "Conducao_Continua_Min": "Máx. Volante sem Parar (min)"}
+                    title="Relação: Duração da Jornada vs Tempo ao Volante"
                 )
-                # Adiciona linha de limite 330min (5h30)
                 fig_scatter.add_hline(y=330, line_dash="dash", line_color="red", annotation_text="Limite Lei (5h30)")
                 st.plotly_chart(fig_scatter, use_container_width=True)
 
             with col_g2:
-                # 2. BAR CHART: Top Infratores
                 infratores = df_criticos['Motorista'].value_counts().reset_index()
                 infratores.columns = ['Motorista', 'Qtd']
-                
                 if not infratores.empty:
-                    fig_bar = px.bar(
-                        infratores.head(10), 
-                        x='Qtd', 
-                        y='Motorista', 
-                        orientation='h',
-                        title="Top Infratores (Condução)",
-                        color_discrete_sequence=['#d32f2f']
-                    )
+                    fig_bar = px.bar(infratores.head(10), x='Qtd', y='Motorista', orientation='h', title="Top Infratores", color_discrete_sequence=['#d32f2f'])
                     fig_bar.update_layout(yaxis={'categoryorder':'total ascending'})
                     st.plotly_chart(fig_bar, use_container_width=True)
                 else:
                     st.info("Sem dados para ranking.")
 
-            # 3. HEATMAP / DISTRIBUIÇÃO DIÁRIA
-            st.markdown("#### 📅 Distribuição de Ocorrências no Mês")
-            # Agrupar violações por dia do mês
-            violacoes_por_dia = df_criticos.groupby('Dia_Num').size().reset_index(name='Qtd')
-            # Garantir que todos os dias até 31 apareçam (opcional, mas bom visualmente)
-            
-            if not violacoes_por_dia.empty:
-                fig_line = px.area(
-                    violacoes_por_dia, 
-                    x='Dia_Num', 
-                    y='Qtd', 
-                    title="Volume de Infrações Críticas por Dia do Mês",
-                    markers=True,
-                    color_discrete_sequence=['#ff5252']
-                )
-                fig_line.update_xaxes(dtick=1) # Mostrar todos os dias
-                st.plotly_chart(fig_line, use_container_width=True)
-
         # --- TAB 3: DADOS ---
         with tab3:
-            st.dataframe(
-                df_analise[['Motorista', 'Data_Ref', 'Status', 'Max_Conducao_Continua', 'Interjornada', 'Critica_Msg', 'Secundaria_Msg']],
-                use_container_width=True
-            )
+            st.dataframe(df_analise[['Motorista', 'Data_Ref', 'Status', 'Max_Conducao_Continua', 'Interjornada', 'Critica_Msg', 'Secundaria_Msg']], use_container_width=True)
+
+        # --- TAB 4: EMAIL & PDF ---
+        with tab4:
+            st.header("📧 Central de Comunicação")
+            st.markdown("Gere um email padrão para o gestor da frota e anexe o relatório PDF.")
+
+            # Preparar Dados para o Email
+            mes_referencia = datetime.now().strftime("%B/%Y")
+            top_infratores_lista = ""
+            if not df_criticos.empty:
+                top_3 = df_criticos['Motorista'].value_counts().head(3).index.tolist()
+                top_infratores_lista = "\n".join([f"   - {m}" for m in top_3])
+            else:
+                top_infratores_lista = "   - Nenhum motorista crítico identificado."
+
+            # Template do Email
+            email_subject = f"Relatório de Auditoria de Jornada - {mes_referencia} - Ação Requerida"
+            email_body = f"""Olá Gestor,
+
+Segue o resumo da auditoria de jornada (Lei 13.103) referente aos dados processados recentemente.
+
+RESUMO EXECUTIVO:
+------------------------------------------------
+- Total de Motoristas Analisados: {df_analise['Motorista'].nunique()}
+- Violações Críticas (Direção > 5h30): {total_criticos}
+- Pontos de Atenção (Interjornada < 11h): {total_atencao}
+
+MOTORISTAS COM MAIOR RISCO (Top 3):
+{top_infratores_lista}
+
+AÇÃO NECESSÁRIA:
+Por favor, analise o relatório PDF em anexo para visualizar os detalhes de cada ocorrência e tome as medidas corretivas necessárias para garantir a conformidade legal e a segurança da operação.
+
+Atenciosamente,
+Sistema de Gestão de Frotas"""
+
+            col_email, col_anexo = st.columns([2, 1])
+
+            with col_email:
+                st.subheader("1. Texto do Email")
+                st.text_area("Copie o texto abaixo:", value=email_body, height=350)
+                st.info("💡 Dica: Você pode copiar e colar este texto diretamente no seu cliente de email (Outlook, Gmail).")
+
+            with col_anexo:
+                st.subheader("2. Anexos")
+                st.write("Baixe o relatório oficial para anexar ao email.")
+                
+                # Gerar PDF
+                try:
+                    pdf_bytes = create_pdf_report(df_criticos, df_atencao, len(df_analise), df_analise['Motorista'].nunique())
+                    st.download_button(
+                        label="📥 Baixar Relatório PDF",
+                        data=pdf_bytes,
+                        file_name="Relatorio_Auditoria_Jornada.pdf",
+                        mime="application/pdf",
+                        type="primary",
+                        use_container_width=True
+                    )
+                except Exception as e:
+                    st.error(f"Erro ao gerar PDF (verifique se 'fpdf' está instalado): {e}")
+                
+                st.markdown("---")
+                st.caption("**Dica:** Para incluir os gráficos, você pode tirar um 'print' da aba 'Inteligência de Dados' ou clicar no ícone de câmera que aparece ao passar o mouse sobre os gráficos.")
 
     else:
         st.error("Erro ao ler dados.")
