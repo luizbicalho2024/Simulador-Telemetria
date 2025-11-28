@@ -21,13 +21,22 @@ st.markdown("""
         padding: 15px;
         border-left: 5px solid #006494;
     }
-    .violation-card {
+    .violation-card-critical {
         background-color: #ffe6e6;
+        border-radius: 8px;
+        padding: 15px;
+        color: #b30000;
+        margin-bottom: 10px;
+        border: 2px solid #ff4d4d;
+        box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+    }
+    .violation-card-warning {
+        background-color: #fff4e6;
         border-radius: 5px;
         padding: 10px;
-        color: #b30000;
+        color: #cc7a00;
         margin-bottom: 5px;
-        border: 1px solid #ffcccc;
+        border: 1px solid #ffcc80;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -59,12 +68,10 @@ def time_str_to_minutes(time_str):
 def processar_relatorio_complexo(file):
     """
     Lê o relatório CSV/Excel com estrutura aninhada (Motorista -> Dados)
-    e transforma em uma tabela plana (flat table) para análise.
+    e transforma numa tabela plana (flat table) para análise.
     """
     try:
-        # Lê o arquivo bruto sem cabeçalho para varrer as linhas manualmente
         if file.name.endswith('.csv'):
-            # Tenta diferentes encodings
             try:
                 df_raw = pd.read_csv(file, header=None, encoding='utf-8', sep=',')
             except:
@@ -75,29 +82,20 @@ def processar_relatorio_complexo(file):
         dados_processados = []
         motorista_atual = None
         
-        # Itera linha a linha
         for index, row in df_raw.iterrows():
             row_list = [str(x).strip() for x in row.values]
-            
-            # Limpeza básica de 'nan' string
             row_list = [x if x.lower() != 'nan' else '' for x in row_list]
 
-            # 1. Tenta identificar o Motorista 
-            # Lógica: Coluna 1 (index 1) tem texto, Coluna 0 é vazia, e não é cabeçalho
+            # Identifica Motorista
             if len(row_list) > 2 and row_list[1] and row_list[1].lower() not in ['dia do mês', 'nome', '', 'jornada de motorista']:
-                # Verifica se é um nome (não começa com número, coluna seguinte vazia)
                 if not row_list[1][0].isdigit() and row_list[2] == '':
                     motorista_atual = row_list[1]
                     continue
             
-            # 2. Identifica se é uma linha de dados de jornada
-            # A linha de dados começa com o dia do mês (ex: "01") na coluna 1
+            # Identifica Dados
             if len(row_list) > 13 and motorista_atual:
                 dia_mes = row_list[1]
-                
-                # Verifica se a coluna "Dia do Mês" é um número válido (1-31)
                 if dia_mes.isdigit() and 1 <= int(dia_mes) <= 31:
-                    
                     dados_processados.append({
                         "Motorista": motorista_atual,
                         "Dia": dia_mes,
@@ -116,186 +114,174 @@ def processar_relatorio_complexo(file):
         return pd.DataFrame(dados_processados)
 
     except Exception as e:
-        st.error(f"Erro ao processar estrutura do arquivo. Detalhe: {e}")
+        st.error(f"Erro ao processar estrutura do ficheiro. Detalhe: {e}")
         return None
 
 def analisar_conformidade(df):
-    """Aplica as regras da Lei 13.103 (Exceto Refeição, conforme solicitado)."""
+    """Aplica as regras da Lei 13.103 com foco na Condução Contínua."""
     resultados = []
     
     for idx, row in df.iterrows():
-        violacoes = []
+        violacoes_criticas = [] # Condução Contínua
+        violacoes_secundarias = [] # Interjornada, etc.
         status = "Conforme"
         
-        # Converter tempos para minutos para cálculo
+        # Converter tempos para minutos
         interjornada_min = time_str_to_minutes(row['Interjornada'])
         conducao_continua_min = time_str_to_minutes(row['Max_Conducao_Continua'])
-        # refeicao_min = time_str_to_minutes(row['Refeicao']) # Ignorado temporariamente
-        # jornada_total_min = time_str_to_minutes(row['Jornada_Total']) # Ignorado temporariamente
         
-        # --- REGRA 1: Interjornada (Mínimo 11h = 660 min) ---
-        # Ignoramos se for 0, pois pode ser o primeiro dia ou folga
-        if 0 < interjornada_min < 660: 
-            # Tolerância de 10 min (considera violação se < 10h50m)
-            if interjornada_min < 650:
-                violacoes.append(f"Interjornada de {row['Interjornada']} (Mín exigido: 11:00)")
-                status = "Violação"
-
-        # --- REGRA 2: Condução Contínua (Máx 5h30 = 330 min) ---
+        # --- REGRA CRÍTICA: Condução Contínua (Máx 5h30 = 330 min) ---
         if conducao_continua_min > 330:
-            violacoes.append(f"Dirigiu {row['Max_Conducao_Continua']} sem parar (Máx permitido: 05:30)")
-            status = "Violação"
+            violacoes_criticas.append(f"⚠️ EXCESSO GRAVE: Dirigiu {row['Max_Conducao_Continua']} sem parar (Limite Lei 13.103: 05:30)")
+            status = "Violação Crítica"
 
-        # --- REGRA 3: Refeição (DESATIVADA TEMPORARIAMENTE) ---
-        # if jornada_total_min > 360:
-        #     if refeicao_min < 60:
-        #         violacoes.append(f"Intervalo de refeição de {row['Refeicao']} (Mín exigido: 01:00)")
-        #         status = "Violação"
+        # --- REGRA SECUNDÁRIA: Interjornada (Mínimo 11h = 660 min) ---
+        # Tolerância de 10 min
+        if 0 < interjornada_min < 650:
+            violacoes_secundarias.append(f"Interjornada insuficiente: {row['Interjornada']} (Mín exigido: 11:00)")
+            if status == "Conforme":
+                status = "Violação"
 
         resultados.append({
             "Motorista": row['Motorista'],
-            "Dia": row['Dia'],
-            "Semana": row['Semana'],
             "Data_Ref": f"{row['Dia']} ({row['Semana']})",
             "Status": status,
-            "Violacoes_Lista": violacoes,
-            "Violacoes_Texto": ", ".join(violacoes) if violacoes else "Nenhuma",
+            "Violacoes_Criticas": violacoes_criticas,
+            "Violacoes_Secundarias": violacoes_secundarias,
+            "Tem_Critica": len(violacoes_criticas) > 0,
             "Jornada_Total": row['Jornada_Total'],
             "Interjornada": row['Interjornada'],
-            "Conducao_Continua": row['Max_Conducao_Continua'],
-            "Refeicao": row['Refeicao']
+            "Conducao_Continua": row['Max_Conducao_Continua']
         })
         
     return pd.DataFrame(resultados)
 
 # --- INTERFACE PRINCIPAL ---
 
-# Tenta carregar imagens, se falhar, segue sem elas
+# Tenta carregar imagens
 try:
     st.sidebar.image("imgs/v-c.png", width=120)
 except:
     pass
 
 st.sidebar.markdown("# Auditoria de Jornada")
-st.sidebar.info("Ferramenta para análise automática de conformidade com a Lei do Motorista 13.103.")
+st.sidebar.info("Foco prioritário: Tempo de Condução Contínua (Máx 5h30).")
 
 st.title("🚛 Auditoria de Jornada (Lei 13.103)")
-st.markdown("Analise o relatório de jornada, identifique não conformidades (**Interjornada e Condução Contínua**) e garanta a segurança jurídica da frota.")
+st.markdown("""
+Analise o relatório de jornada. 
+**Prioridade Zero:** Identificar motoristas que ultrapassaram o tempo limite de direção ininterrupta (**5h30**).
+""")
 
 uploaded_file = st.file_uploader("Carregue o relatório `Jornada de Motorista` (Excel ou CSV)", type=['xlsx', 'csv'])
 
 if uploaded_file:
     with st.status("A processar a inteligência de dados...", expanded=True) as status:
-        # 1. Processamento
-        st.write("Lendo estrutura do arquivo...")
+        st.write("Lendo estrutura do ficheiro...")
         df_flat = processar_relatorio_complexo(uploaded_file)
         
         if df_flat is not None and not df_flat.empty:
-            st.write(f"Dados estruturados com sucesso: {len(df_flat)} registros de jornada encontrados.")
+            st.write(f"Dados estruturados: {len(df_flat)} registos processados.")
             
-            # 2. Análise
-            st.write("Aplicando regras da Lei 13.103 (Ignorando Refeição)...")
+            st.write("Verificando limites de 5h30 de condução...")
             df_analise = analisar_conformidade(df_flat)
             status.update(label="Análise Concluída!", state="complete", expanded=False)
             
-            # --- KPIs GERAIS ---
-            total_registros = len(df_analise)
-            df_violacoes = df_analise[df_analise['Status'] == 'Violação']
-            total_violacoes = len(df_violacoes)
-            motoristas_com_infracao = df_violacoes['Motorista'].nunique()
-            percentual_conformidade = ((total_registros - total_violacoes) / total_registros) * 100
+            # --- SEPARAÇÃO DOS DADOS ---
+            df_criticos = df_analise[df_analise['Tem_Critica'] == True]
+            total_criticos = len(df_criticos)
             
-            st.markdown("### 📊 Panorama Geral")
+            # --- KPIs GERAIS ---
+            st.markdown("### 📊 Indicadores de Risco")
             col1, col2, col3, col4 = st.columns(4)
             
-            col1.metric("Dias Analisados", total_registros)
-            col2.metric("Motoristas com Infração", f"{motoristas_com_infracao} / {df_analise['Motorista'].nunique()}", delta_color="inverse")
-            col3.metric("Total de Infrações", total_violacoes, delta_color="inverse")
-            col4.metric("Índice de Conformidade", f"{percentual_conformidade:.1f}%", 
-                        delta=f"{percentual_conformidade-100:.1f}%" if percentual_conformidade < 100 else "OK")
+            col1.metric("Dias Analisados", len(df_analise))
+            col2.metric("Motoristas Auditados", df_analise['Motorista'].nunique())
+            
+            # KPI DE DESTAQUE PARA CONDUÇÃO
+            col3.metric(
+                "Violações de Condução (>5h30)", 
+                total_criticos, 
+                delta="- Crítico" if total_criticos > 0 else "OK", 
+                delta_color="inverse"
+            )
+            
+            total_outras = df_analise['Violacoes_Secundarias'].apply(len).sum()
+            col4.metric("Outras Violações (Interjornada)", total_outras, delta_color="inverse")
 
             st.markdown("---")
 
             # --- ABAS DE DETALHE ---
-            tab1, tab2, tab3 = st.tabs(["🔴 Pontos de Atenção (Infrações)", "📈 Gráficos Gerenciais", "📋 Dados Completos"])
+            tab1, tab2, tab3 = st.tabs(["🚨 PONTOS DE ATENÇÃO (Condução)", "📉 Outras Infrações", "📋 Dados Completos"])
 
             with tab1:
-                st.subheader("Detalhamento das Infrações Encontradas")
+                st.subheader("🔴 Prioridade: Excesso de Condução Contínua")
+                st.markdown("Estes eventos representam o maior risco de acidente e passivo trabalhista (Lei 13.103 - Art. 67-C).")
                 
-                if not df_violacoes.empty:
-                    # Ranking de Infratores
-                    ranking = df_violacoes['Motorista'].value_counts().reset_index()
-                    ranking.columns = ['Motorista', 'Qtd Infrações']
+                if not df_criticos.empty:
+                    # Ranking dos Críticos
+                    ranking_critico = df_criticos['Motorista'].value_counts().reset_index()
+                    ranking_critico.columns = ['Motorista', 'Ocorrências > 5h30']
                     
                     c1, c2 = st.columns([1, 2])
                     with c1:
-                        st.markdown("**Top Infratores**")
-                        st.dataframe(ranking, hide_index=True, use_container_width=True)
+                        st.markdown("**Top Infratores (Condução Contínua)**")
+                        st.dataframe(ranking_critico, hide_index=True, use_container_width=True)
                     
                     with c2:
-                        st.markdown("**Detalhes das Ocorrências**")
-                        motorista_foco = st.selectbox("Filtrar por Motorista:", ["Todos"] + list(ranking['Motorista']))
+                        st.markdown("**Detalhamento das Ocorrências Críticas**")
+                        motorista_foco = st.selectbox("Filtrar Motorista:", ["Todos"] + list(ranking_critico['Motorista']), key="sb_critico")
                         
-                        df_filtro = df_violacoes.copy()
+                        df_show = df_criticos.copy()
                         if motorista_foco != "Todos":
-                            df_filtro = df_filtro[df_filtro['Motorista'] == motorista_foco]
+                            df_show = df_show[df_show['Motorista'] == motorista_foco]
                         
-                        for idx, row in df_filtro.iterrows():
-                            with st.expander(f"👮 {row['Motorista']} | Dia {row['Data_Ref']} | {len(row['Violacoes_Lista'])} Infração(ões)", expanded=True):
-                                for v in row['Violacoes_Lista']:
-                                    st.markdown(f"- ❌ **{v}**")
-                                st.caption(f"Jornada: {row['Jornada_Total']} | Refeição: {row['Refeicao']} | Interjornada: {row['Interjornada']}")
+                        for idx, row in df_show.iterrows():
+                            # CARD VERMELHO PARA CRÍTICO
+                            st.markdown(f"""
+                            <div class="violation-card-critical">
+                                <h4>👮 {row['Motorista']}</h4>
+                                <strong>📅 Data: {row['Data_Ref']}</strong><br>
+                                <span style="font-size: 1.2em;">⏱️ {row['Violacoes_Criticas'][0]}</span>
+                            </div>
+                            """, unsafe_allow_html=True)
                 else:
-                    st.success("✅ Nenhuma violação de Interjornada ou Condução Contínua encontrada! Parabéns pela gestão.")
+                    st.success("✅ Excelente! Nenhum motorista excedeu o limite de 5h30 de condução contínua.")
 
             with tab2:
-                c1, c2 = st.columns(2)
+                st.subheader("🟠 Outras Infrações (Interjornada)")
                 
-                # Gráfico de Tipos de Violação
-                violacoes_flat = []
-                for v_list in df_analise['Violacoes_Lista']:
-                    for v in v_list:
-                        # Simplifica o nome da infração para o gráfico
-                        if "Interjornada" in v: tipo = "Interjornada Insuficiente"
-                        elif "condução contínua" in v: tipo = "Excesso Condução Contínua"
-                        else: tipo = "Outros"
-                        violacoes_flat.append(tipo)
+                # Filtra quem tem violação secundária
+                df_secundario = df_analise[df_analise['Violacoes_Secundarias'].apply(len) > 0]
                 
-                if violacoes_flat:
-                    df_v_type = pd.DataFrame(violacoes_flat, columns=['Tipo']).value_counts().reset_index()
-                    df_v_type.columns = ['Tipo', 'Qtd']
-                    
-                    fig_pizza = px.pie(df_v_type, values='Qtd', names='Tipo', title='Distribuição por Tipo de Infração', hole=0.4, color_discrete_sequence=px.colors.qualitative.Set1)
-                    c1.plotly_chart(fig_pizza, use_container_width=True)
-                
-                # Gráfico Barras Infratores
-                if not df_violacoes.empty:
-                    ranking_top10 = ranking.head(10).sort_values('Qtd Infrações', ascending=True)
-                    fig_bar = px.bar(ranking_top10, x='Qtd Infrações', y='Motorista', orientation='h', title='Top 10 Motoristas com Ocorrências', text='Qtd Infrações')
-                    c2.plotly_chart(fig_bar, use_container_width=True)
+                if not df_secundario.empty:
+                    for idx, row in df_secundario.iterrows():
+                        msg_list = "<br>".join([f"- {v}" for v in row['Violacoes_Secundarias']])
+                        st.markdown(f"""
+                        <div class="violation-card-warning">
+                            <strong>{row['Motorista']} - {row['Data_Ref']}</strong><br>
+                            {msg_list}
+                        </div>
+                        """, unsafe_allow_html=True)
                 else:
-                    c1.info("Sem dados para gráficos de infração.")
+                    st.success("Nenhuma violação de interjornada encontrada.")
 
             with tab3:
                 st.subheader("Tabela Analítica Completa")
                 
-                def highlight_status(val):
-                    color = '#ffe6e6' if val == 'Violação' else '#e6ffe6'
-                    return f'background-color: {color}'
-
+                # Prepara dataframe para visualização limpa
+                df_view = df_analise.copy()
+                df_view['Infrações Condução'] = df_view['Violacoes_Criticas'].apply(lambda x: ", ".join(x) if x else "")
+                df_view['Outras Infrações'] = df_view['Violacoes_Secundarias'].apply(lambda x: ", ".join(x) if x else "")
+                
                 st.dataframe(
-                    df_analise.style.applymap(highlight_status, subset=['Status']),
-                    use_container_width=True,
-                    column_config={
-                        "Violacoes_Texto": st.column_config.TextColumn("Detalhes da Infração", width="large"),
-                        "Violacoes_Lista": None # Ocultar coluna de lista
-                    }
+                    df_view[['Motorista', 'Data_Ref', 'Status', 'Conducao_Continua', 'Infrações Condução', 'Interjornada', 'Outras Infrações']],
+                    use_container_width=True
                 )
                 
-                # Prepara CSV para download (converte lista para string)
-                df_download = df_analise.drop(columns=['Violacoes_Lista'])
-                csv = df_download.to_csv(index=False).encode('utf-8')
-                st.download_button("📥 Baixar Relatório de Auditoria (CSV)", data=csv, file_name="auditoria_lei_motorista.csv", mime="text/csv")
+                # Download CSV
+                csv = df_view.to_csv(index=False).encode('utf-8')
+                st.download_button("📥 Baixar Relatório Completo", data=csv, file_name="auditoria_conducao_lei13103.csv", mime="text/csv")
 
         else:
-            st.error("Não foi possível ler os dados corretamente. Verifique se o formato do arquivo corresponde ao padrão 'Jornada de Motorista' (Nome do motorista nas linhas e dados abaixo).")
+            st.error("Não foi possível ler os dados. Verifique se o formato do ficheiro corresponde ao padrão 'Jornada de Motorista'.")
