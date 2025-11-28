@@ -152,40 +152,40 @@ def analisar_conformidade(df):
         
     return pd.DataFrame(resultados)
 
-# --- FUNÇÃO DE GERAÇÃO DE PDF ---
+# --- FUNÇÃO DE GERAÇÃO DE PDF (CORRIGIDA PARA FPDF2) ---
 def create_pdf_report(df_criticos, df_atencao, total_dias, total_motoristas):
     class PDF(FPDF):
         def header(self):
-            self.set_font('Arial', 'B', 15)
-            self.cell(0, 10, 'Relatório de Auditoria de Jornada (Lei 13.103)', 0, 1, 'C')
+            self.set_font('helvetica', 'B', 15)
+            self.cell(0, 10, 'Relatorio de Auditoria de Jornada (Lei 13.103)', 0, 1, 'C')
             self.ln(5)
         
         def footer(self):
             self.set_y(-15)
-            self.set_font('Arial', 'I', 8)
-            self.cell(0, 10, f'Página {self.page_no()}', 0, 0, 'C')
+            self.set_font('helvetica', 'I', 8)
+            self.cell(0, 10, f'Pagina {self.page_no()}', 0, 0, 'C')
 
     pdf = PDF()
     pdf.add_page()
-    pdf.set_font("Arial", size=12)
+    pdf.set_font("helvetica", size=12)
     
     # Resumo
-    pdf.set_font("Arial", 'B', 12)
+    pdf.set_font("helvetica", 'B', 12)
     pdf.cell(0, 10, "Resumo Executivo", 0, 1)
-    pdf.set_font("Arial", size=12)
+    pdf.set_font("helvetica", size=12)
     pdf.cell(0, 8, f"Dias Analisados: {total_dias}", 0, 1)
     pdf.cell(0, 8, f"Motoristas Auditados: {total_motoristas}", 0, 1)
-    pdf.cell(0, 8, f"Total de Infrações Críticas (Condução > 5h30): {len(df_criticos)}", 0, 1)
-    pdf.cell(0, 8, f"Total de Pontos de Atenção (Interjornada < 11h): {len(df_atencao)}", 0, 1)
+    pdf.cell(0, 8, f"Total de Infracoes Criticas (Conducao > 5h30): {len(df_criticos)}", 0, 1)
+    pdf.cell(0, 8, f"Total de Pontos de Atencao (Interjornada < 11h): {len(df_atencao)}", 0, 1)
     pdf.ln(10)
     
     # Detalhes Críticos
     if not df_criticos.empty:
-        pdf.set_font("Arial", 'B', 12)
+        pdf.set_font("helvetica", 'B', 12)
         pdf.set_text_color(200, 0, 0)
-        pdf.cell(0, 10, "INFRAÇÕES CRÍTICAS (Excesso de Direção)", 0, 1)
+        pdf.cell(0, 10, "INFRACOES CRITICAS (Excesso de Direcao)", 0, 1)
         pdf.set_text_color(0, 0, 0)
-        pdf.set_font("Arial", size=10)
+        pdf.set_font("helvetica", size=10)
         
         # Cabeçalho da tabela
         pdf.cell(60, 8, "Motorista", 1)
@@ -194,17 +194,12 @@ def create_pdf_report(df_criticos, df_atencao, total_dias, total_motoristas):
         pdf.ln()
         
         for idx, row in df_criticos.iterrows():
-            # Tenta codificar para latin-1 para aceitar acentos, remove se falhar
-            try:
-                mot = row['Motorista'].encode('latin-1', 'replace').decode('latin-1')
-                detalhe = row['Critica_Msg'].encode('latin-1', 'replace').decode('latin-1')
-                data = row['Data_Ref'].encode('latin-1', 'replace').decode('latin-1')
-            except:
-                mot = row['Motorista']
-                detalhe = row['Critica_Msg']
-                data = row['Data_Ref']
+            # Limpeza simples de caracteres para evitar erro de encoding no PDF básico
+            mot = str(row['Motorista'])[:28].replace('ã','a').replace('ç','c').replace('é','e')
+            detalhe = str(row['Critica_Msg']).replace('ã','a').replace('ç','c').replace('é','e')
+            data = str(row['Data_Ref'])
 
-            pdf.cell(60, 8, mot[:28], 1)
+            pdf.cell(60, 8, mot, 1)
             pdf.cell(40, 8, data, 1)
             pdf.cell(90, 8, detalhe, 1)
             pdf.ln()
@@ -212,11 +207,11 @@ def create_pdf_report(df_criticos, df_atencao, total_dias, total_motoristas):
 
     # Detalhes Atenção
     if not df_atencao.empty:
-        pdf.set_font("Arial", 'B', 12)
+        pdf.set_font("helvetica", 'B', 12)
         pdf.set_text_color(255, 140, 0)
-        pdf.cell(0, 10, "PONTOS DE ATENÇÃO (Interjornada)", 0, 1)
+        pdf.cell(0, 10, "PONTOS DE ATENCAO (Interjornada)", 0, 1)
         pdf.set_text_color(0, 0, 0)
-        pdf.set_font("Arial", size=10)
+        pdf.set_font("helvetica", size=10)
         
         pdf.cell(60, 8, "Motorista", 1)
         pdf.cell(40, 8, "Data", 1)
@@ -224,21 +219,17 @@ def create_pdf_report(df_criticos, df_atencao, total_dias, total_motoristas):
         pdf.ln()
         
         for idx, row in df_atencao.iterrows():
-            try:
-                mot = row['Motorista'].encode('latin-1', 'replace').decode('latin-1')
-                detalhe = row['Secundaria_Msg'].encode('latin-1', 'replace').decode('latin-1')
-                data = row['Data_Ref'].encode('latin-1', 'replace').decode('latin-1')
-            except:
-                mot = row['Motorista']
-                detalhe = row['Secundaria_Msg']
-                data = row['Data_Ref']
+            mot = str(row['Motorista'])[:28].replace('ã','a').replace('ç','c').replace('é','e')
+            detalhe = str(row['Secundaria_Msg']).replace('ã','a').replace('ç','c').replace('é','e')
+            data = str(row['Data_Ref'])
 
-            pdf.cell(60, 8, mot[:28], 1)
+            pdf.cell(60, 8, mot, 1)
             pdf.cell(40, 8, data, 1)
             pdf.cell(90, 8, detalhe, 1)
             pdf.ln()
 
-    return pdf.output(dest='S').encode('latin-1')
+    # CORREÇÃO AQUI: fpdf2 output() retorna bytes, não precisa de encode
+    return bytes(pdf.output())
 
 # --- UI PRINCIPAL ---
 
@@ -343,8 +334,6 @@ if uploaded_file:
             else:
                 top_infratores_lista = "   - Nenhum motorista crítico identificado."
 
-            # Template do Email
-            email_subject = f"Relatório de Auditoria de Jornada - {mes_referencia} - Ação Requerida"
             email_body = f"""Olá Gestor,
 
 Segue o resumo da auditoria de jornada (Lei 13.103) referente aos dados processados recentemente.
@@ -359,7 +348,7 @@ MOTORISTAS COM MAIOR RISCO (Top 3):
 {top_infratores_lista}
 
 AÇÃO NECESSÁRIA:
-Por favor, analise o relatório PDF em anexo para visualizar os detalhes de cada ocorrência e tome as medidas corretivas necessárias para garantir a conformidade legal e a segurança da operação.
+Por favor, analise o relatório PDF em anexo para visualizar os detalhes de cada ocorrência.
 
 Atenciosamente,
 Sistema de Gestão de Frotas"""
@@ -369,13 +358,11 @@ Sistema de Gestão de Frotas"""
             with col_email:
                 st.subheader("1. Texto do Email")
                 st.text_area("Copie o texto abaixo:", value=email_body, height=350)
-                st.info("💡 Dica: Você pode copiar e colar este texto diretamente no seu cliente de email (Outlook, Gmail).")
 
             with col_anexo:
                 st.subheader("2. Anexos")
                 st.write("Baixe o relatório oficial para anexar ao email.")
                 
-                # Gerar PDF
                 try:
                     pdf_bytes = create_pdf_report(df_criticos, df_atencao, len(df_analise), df_analise['Motorista'].nunique())
                     st.download_button(
@@ -387,10 +374,7 @@ Sistema de Gestão de Frotas"""
                         use_container_width=True
                     )
                 except Exception as e:
-                    st.error(f"Erro ao gerar PDF (verifique se 'fpdf' está instalado): {e}")
-                
-                st.markdown("---")
-                st.caption("**Dica:** Para incluir os gráficos, você pode tirar um 'print' da aba 'Inteligência de Dados' ou clicar no ícone de câmera que aparece ao passar o mouse sobre os gráficos.")
+                    st.error(f"Erro ao gerar PDF: {e}")
 
     else:
         st.error("Erro ao ler dados.")
