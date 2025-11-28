@@ -2,8 +2,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
-from datetime import datetime, timedelta
+from datetime import datetime
 import io
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
@@ -30,18 +29,10 @@ st.markdown("""
         margin-bottom: 5px;
         border: 1px solid #ffcccc;
     }
-    .success-card {
-        background-color: #e6ffe6;
-        border-radius: 5px;
-        padding: 10px;
-        color: #006600;
-        margin-bottom: 5px;
-        border: 1px solid #ccffcc;
-    }
     </style>
 """, unsafe_allow_html=True)
 
-# Autenticação (Mantendo o padrão do seu sistema)
+# Autenticação
 if not st.session_state.get("authentication_status"):
     st.error("🔒 Acesso Negado! Por favor, faça login.")
     st.stop()
@@ -73,7 +64,7 @@ def processar_relatorio_complexo(file):
     try:
         # Lê o arquivo bruto sem cabeçalho para varrer as linhas manualmente
         if file.name.endswith('.csv'):
-            # Tenta diferentes encodings comuns no Brasil
+            # Tenta diferentes encodings
             try:
                 df_raw = pd.read_csv(file, header=None, encoding='utf-8', sep=',')
             except:
@@ -88,28 +79,24 @@ def processar_relatorio_complexo(file):
         for index, row in df_raw.iterrows():
             row_list = [str(x).strip() for x in row.values]
             
-            # Limpeza básica
-            row_list = [x if x != 'nan' else '' for x in row_list]
+            # Limpeza básica de 'nan' string
+            row_list = [x if x.lower() != 'nan' else '' for x in row_list]
 
             # 1. Tenta identificar o Motorista 
-            # Lógica baseada no seu arquivo: Coluna 1 vazia, Coluna 2 tem nome, Coluna 3 vazia (ou código)
+            # Lógica: Coluna 1 (index 1) tem texto, Coluna 0 é vazia, e não é cabeçalho
             if len(row_list) > 2 and row_list[1] and row_list[1].lower() not in ['dia do mês', 'nome', '', 'jornada de motorista']:
-                # Verifica se é um nome (não é numero, não é data)
+                # Verifica se é um nome (não começa com número, coluna seguinte vazia)
                 if not row_list[1][0].isdigit() and row_list[2] == '':
                     motorista_atual = row_list[1]
                     continue
             
             # 2. Identifica se é uma linha de dados de jornada
-            # A linha de dados começa com o dia do mês (ex: "01") na coluna 1 (index 1 no pandas se col 0 for vazia)
+            # A linha de dados começa com o dia do mês (ex: "01") na coluna 1
             if len(row_list) > 13 and motorista_atual:
                 dia_mes = row_list[1]
                 
                 # Verifica se a coluna "Dia do Mês" é um número válido (1-31)
                 if dia_mes.isdigit() and 1 <= int(dia_mes) <= 31:
-                    
-                    # Mapeamento das colunas baseado no seu CSV:
-                    # 1: Dia, 2: Semana, 3: Inicio, 4: Fim, 5: Jornada Total, 
-                    # 6: Condução Total, 9: Máx Condução Contínua, 10: Espera, 11: Refeição, 12: Descanso, 13: Interjornada
                     
                     dados_processados.append({
                         "Motorista": motorista_atual,
@@ -133,42 +120,37 @@ def processar_relatorio_complexo(file):
         return None
 
 def analisar_conformidade(df):
-    """Aplica as regras da Lei 13.103."""
+    """Aplica as regras da Lei 13.103 (Exceto Refeição, conforme solicitado)."""
     resultados = []
     
     for idx, row in df.iterrows():
         violacoes = []
         status = "Conforme"
-        pontos_atencao = []
         
         # Converter tempos para minutos para cálculo
         interjornada_min = time_str_to_minutes(row['Interjornada'])
         conducao_continua_min = time_str_to_minutes(row['Max_Conducao_Continua'])
-        refeicao_min = time_str_to_minutes(row['Refeicao'])
-        jornada_total_min = time_str_to_minutes(row['Jornada_Total'])
+        # refeicao_min = time_str_to_minutes(row['Refeicao']) # Ignorado temporariamente
+        # jornada_total_min = time_str_to_minutes(row['Jornada_Total']) # Ignorado temporariamente
         
         # --- REGRA 1: Interjornada (Mínimo 11h = 660 min) ---
         # Ignoramos se for 0, pois pode ser o primeiro dia ou folga
         if 0 < interjornada_min < 660: 
-            # Tolerância de 10 min
+            # Tolerância de 10 min (considera violação se < 10h50m)
             if interjornada_min < 650:
                 violacoes.append(f"Interjornada de {row['Interjornada']} (Mín exigido: 11:00)")
                 status = "Violação"
-            else:
-                pontos_atencao.append(f"Interjornada no limite: {row['Interjornada']}")
 
         # --- REGRA 2: Condução Contínua (Máx 5h30 = 330 min) ---
         if conducao_continua_min > 330:
             violacoes.append(f"Dirigiu {row['Max_Conducao_Continua']} sem parar (Máx permitido: 05:30)")
             status = "Violação"
 
-        # --- REGRA 3: Refeição (Mín 1h para jornadas > 6h) ---
-        # Jornada > 6h (360 min) exige min 1h (60 min) de refeição
-        if jornada_total_min > 360:
-            if refeicao_min < 60:
-                # Tolerância: se fez menos de 1h
-                violacoes.append(f"Intervalo de refeição de {row['Refeicao']} (Mín exigido: 01:00)")
-                status = "Violação"
+        # --- REGRA 3: Refeição (DESATIVADA TEMPORARIAMENTE) ---
+        # if jornada_total_min > 360:
+        #     if refeicao_min < 60:
+        #         violacoes.append(f"Intervalo de refeição de {row['Refeicao']} (Mín exigido: 01:00)")
+        #         status = "Violação"
 
         resultados.append({
             "Motorista": row['Motorista'],
@@ -188,12 +170,17 @@ def analisar_conformidade(df):
 
 # --- INTERFACE PRINCIPAL ---
 
-st.sidebar.image("imgs/v-c.png", width=120)
+# Tenta carregar imagens, se falhar, segue sem elas
+try:
+    st.sidebar.image("imgs/v-c.png", width=120)
+except:
+    pass
+
 st.sidebar.markdown("# Auditoria de Jornada")
 st.sidebar.info("Ferramenta para análise automática de conformidade com a Lei do Motorista 13.103.")
 
 st.title("🚛 Auditoria de Jornada (Lei 13.103)")
-st.markdown("Analise o relatório de jornada, identifique não conformidades e garanta a segurança jurídica da frota.")
+st.markdown("Analise o relatório de jornada, identifique não conformidades (**Interjornada e Condução Contínua**) e garanta a segurança jurídica da frota.")
 
 uploaded_file = st.file_uploader("Carregue o relatório `Jornada de Motorista` (Excel ou CSV)", type=['xlsx', 'csv'])
 
@@ -207,7 +194,7 @@ if uploaded_file:
             st.write(f"Dados estruturados com sucesso: {len(df_flat)} registros de jornada encontrados.")
             
             # 2. Análise
-            st.write("Aplicando regras da Lei 13.103...")
+            st.write("Aplicando regras da Lei 13.103 (Ignorando Refeição)...")
             df_analise = analisar_conformidade(df_flat)
             status.update(label="Análise Concluída!", state="complete", expanded=False)
             
@@ -259,7 +246,7 @@ if uploaded_file:
                                     st.markdown(f"- ❌ **{v}**")
                                 st.caption(f"Jornada: {row['Jornada_Total']} | Refeição: {row['Refeicao']} | Interjornada: {row['Interjornada']}")
                 else:
-                    st.success("✅ Nenhuma violação encontrada neste período! Parabéns pela gestão.")
+                    st.success("✅ Nenhuma violação de Interjornada ou Condução Contínua encontrada! Parabéns pela gestão.")
 
             with tab2:
                 c1, c2 = st.columns(2)
@@ -271,7 +258,6 @@ if uploaded_file:
                         # Simplifica o nome da infração para o gráfico
                         if "Interjornada" in v: tipo = "Interjornada Insuficiente"
                         elif "condução contínua" in v: tipo = "Excesso Condução Contínua"
-                        elif "Refeição" in v: tipo = "Intervalo Refeição Curto"
                         else: tipo = "Outros"
                         violacoes_flat.append(tipo)
                 
