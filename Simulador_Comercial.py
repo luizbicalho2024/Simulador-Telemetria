@@ -199,16 +199,84 @@ if st.session_state["authentication_status"]:
         with tab_precos:
             st.subheader("Gestão de Preços e Taxas da Plataforma")
             pricing_config = umdb.get_pricing_config()
+            
+            # --- ÁREA DE ADIÇÃO DE NOVOS PRODUTOS (NOVA FUNCIONALIDADE) ---
+            with st.expander("➕ Adicionar Novos Produtos (PF/PJ)", expanded=False):
+                st.info("Use esta seção para criar novos produtos. Após adicionar, eles aparecerão no formulário abaixo para edição detalhada.")
+                
+                col_add_pf, col_add_pj = st.columns(2)
+                
+                # Formulário para adicionar PF
+                with col_add_pf:
+                    st.markdown("###### Novo Produto - Pessoa Física")
+                    with st.form("form_add_prod_pf", clear_on_submit=True):
+                        new_pf_name = st.text_input("Nome do Produto (Ex: Rastreador Moto)")
+                        new_pf_price = st.number_input("Preço de Venda (R$)", min_value=0.0, format="%.2f")
+                        if st.form_submit_button("Adicionar Produto PF"):
+                            if new_pf_name:
+                                current_pf = pricing_config.get("PRECOS_PF", {})
+                                if new_pf_name in current_pf:
+                                    st.warning(f"O produto '{new_pf_name}' já existe.")
+                                else:
+                                    current_pf[new_pf_name] = new_pf_price
+                                    pricing_config["PRECOS_PF"] = current_pf
+                                    if umdb.update_pricing_config(pricing_config):
+                                        st.toast(f"Produto '{new_pf_name}' adicionado!", icon="✅")
+                                        umdb.add_log(username, "Adicionou Produto PF", details={"produto": new_pf_name, "preco": new_pf_price})
+                                        st.rerun()
+                                    else:
+                                        st.error("Erro ao salvar no banco de dados.")
+                            else:
+                                st.warning("Digite o nome do produto.")
+
+                # Formulário para adicionar PJ
+                with col_add_pj:
+                    st.markdown("###### Novo Produto - Pessoa Jurídica")
+                    with st.form("form_add_prod_pj", clear_on_submit=True):
+                        new_pj_name = st.text_input("Nome do Produto (Ex: Sensor de Fadiga)")
+                        new_pj_desc = st.text_input("Descrição Curta (para a Proposta)")
+                        new_pj_price = st.number_input("Preço Base Mensal (R$)", min_value=0.0, format="%.2f", 
+                                                       help="Este preço será aplicado a todos os planos. Você poderá ajustá-los individualmente abaixo.")
+                        if st.form_submit_button("Adicionar Produto PJ"):
+                            if new_pj_name:
+                                current_plans = pricing_config.get("PLANOS_PJ", {})
+                                # Adiciona o produto em todos os planos existentes
+                                for plano, itens in current_plans.items():
+                                    if new_pj_name not in itens:
+                                        itens[new_pj_name] = new_pj_price
+                                
+                                # Atualiza descrição
+                                descricoes = pricing_config.get("PRODUTOS_PJ_DESCRICAO", {})
+                                descricoes[new_pj_name] = new_pj_desc if new_pj_desc else new_pj_name
+                                pricing_config["PRODUTOS_PJ_DESCRICAO"] = descricoes
+                                pricing_config["PLANOS_PJ"] = current_plans 
+
+                                if umdb.update_pricing_config(pricing_config):
+                                    st.toast(f"Produto '{new_pj_name}' adicionado aos planos PJ!", icon="✅")
+                                    umdb.add_log(username, "Adicionou Produto PJ", details={"produto": new_pj_name, "preco_base": new_pj_price})
+                                    st.rerun()
+                                else:
+                                    st.error("Erro ao salvar no banco de dados.")
+                            else:
+                                st.warning("Digite o nome do produto.")
+
+            st.divider()
+            
+            # --- FORMULÁRIO DE EDIÇÃO EXISTENTE ---
             with st.form("form_edit_prices"):
                 with st.expander("Simulador Pessoa Física (PF)", expanded=True):
                     pf_prices = pricing_config.get("PRECOS_PF", {})
                     col1, col2 = st.columns(2)
-                    pf_prices["GPRS / Gsm"] = col1.number_input("Preço Rastreador GPRS/GSM (PF)", value=float(pf_prices.get("GPRS / Gsm", 0.0)), format="%.2f")
-                    pf_prices["Satelital"] = col2.number_input("Preço Rastreador Satelital (PF)", value=float(pf_prices.get("Satelital", 0.0)), format="%.2f")
+                    # Loop dinâmico para garantir que novos produtos apareçam
+                    keys_pf = list(pf_prices.keys())
+                    for i, key in enumerate(keys_pf):
+                        col = col1 if i % 2 == 0 else col2
+                        pf_prices[key] = col.number_input(f"Preço {key} (PF)", value=float(pf_prices.get(key, 0.0)), format="%.2f")
                 
                 with st.expander("Simulador Licitação (Custos)", expanded=True):
                     licit_prices = pricing_config.get("PRECO_CUSTO_LICITACAO", {})
                     l_col1, l_col2, l_col3 = st.columns(3)
+                    # Mantive a estrutura fixa do licitação conforme original, mas poderia ser dinâmica também se desejar
                     licit_prices["Rastreador GPRS/GSM 2G"] = l_col1.number_input("Custo GPRS/GSM 2G", value=float(licit_prices.get("Rastreador GPRS/GSM 2G", 0.0)), format="%.2f")
                     licit_prices["Rastreador GPRS/GSM 4G"] = l_col2.number_input("Custo GPRS/GSM 4G", value=float(licit_prices.get("Rastreador GPRS/GSM 4G", 0.0)), format="%.2f")
                     licit_prices["Rastreador Satelital"] = l_col3.number_input("Custo Satelital", value=float(licit_prices.get("Rastreador Satelital", 0.0)), format="%.2f")
