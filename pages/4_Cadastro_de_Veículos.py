@@ -15,74 +15,52 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
 
 # ==============================================================================
-# FUNÇÕES AUXILIARES DE DIGITAÇÃO HUMANA
+# FUNÇÕES AUXILIARES DE DIGITAÇÃO
 # ==============================================================================
-def digitar_humanizado(driver, element_id, value):
+def preencher_campo_robusto(driver, element_id, value):
     """
-    Simula a digitação humana para não quebrar o InputMask (jQuery).
-    Limpa o campo com Backspace e digita letra por letra.
+    Tenta preencher o campo de forma robusta.
+    1. Tenta digitar normalmente (send_keys).
+    2. Se falhar ou ficar vazio, força via JavaScript.
     """
     if value and str(value).lower() != 'nan':
         value = str(value).replace('.0', '').strip()
+        
         try:
             element = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.ID, element_id)))
             
-            # Rola suavemente até o elemento
+            # Rola até o elemento
             driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", element)
-            time.sleep(0.2)
+            time.sleep(0.3)
             
-            # 1. Foca no campo
-            element.click()
-            time.sleep(0.1)
+            # --- TENTATIVA 1: Digitação Padrão (Mais segura para máscaras) ---
+            try:
+                element.click()
+                # Limpa com Backspace (melhor que .clear() para máscaras)
+                element.send_keys(Keys.CONTROL + "a")
+                element.send_keys(Keys.BACKSPACE)
+                time.sleep(0.1)
+                
+                # Digita tudo de uma vez
+                element.send_keys(value)
+                time.sleep(0.2)
+                element.send_keys(Keys.TAB)
+            except Exception as e:
+                print(f"Erro digitação padrão {element_id}: {e}")
+
+            # --- VERIFICAÇÃO E CORREÇÃO ---
+            # Se o campo estiver vazio após digitar (bug relatado), força JS
+            valor_atual = element.get_attribute("value")
             
-            # 2. Limpeza Cirúrgica (Backspace é mais seguro para máscaras)
-            current_val = element.get_attribute("value")
-            if current_val:
-                element.send_keys(Keys.END) # Vai pro final
-                # Apaga tudo + 3 vezes por segurança
-                for _ in range(len(current_val) + 3):
-                    element.send_keys(Keys.BACKSPACE)
-            
-            # 3. Digitação Lenta
-            for char in value:
-                element.send_keys(char)
-                time.sleep(0.02) # Delay imperceptível mas funcional
-            
-            # 4. Sai do campo para disparar validação (Blur)
-            element.send_keys(Keys.TAB)
-            time.sleep(0.2)
+            if not valor_atual: 
+                # --- TENTATIVA 2: Força Bruta JS (Fallback) ---
+                # Apenas define o valor, sem disparar muitos eventos para não quebrar a máscara
+                driver.execute_script("arguments[0].value = arguments[1];", element, value)
+                # Dispara apenas o evento 'input' para o angular/vue/jquery perceber a mudança
+                driver.execute_script("arguments[0].dispatchEvent(new Event('input', { bubbles: true }));", element)
             
         except Exception as e:
-            print(f"Erro ao digitar em {element_id}: {e}")
-
-def tentar_selecionar_contrato(driver):
-    """
-    Tenta selecionar o contrato se o campo estiver visível e vazio.
-    """
-    try:
-        # XPath do container do Select2 do contrato
-        SELECT2_CONTRATO = "//span[@aria-labelledby='select2-veiculo-contrato_vinculo_veiculo-container']"
-        
-        # Verifica se existe e clica
-        elementos = driver.find_elements(By.XPATH, SELECT2_CONTRATO)
-        if elementos:
-            # Verifica se já tem valor selecionado (opcional, mas bom pra evitar reset)
-            titulo = elementos[0].get_attribute("title")
-            if not titulo or "Selecione" in titulo:
-                elementos[0].click()
-                time.sleep(0.5)
-                
-                # Seleciona a primeira opção real disponível
-                OPCAO_VALIDA = "//li[contains(@class, 'select2-results__option') and not(contains(@class, 'loading'))]"
-                opcoes = WebDriverWait(driver, 3).until(EC.presence_of_all_elements_located((By.XPATH, OPCAO_VALIDA)))
-                
-                # Clica na primeira ou segunda opção (dependendo se a primeira é o placeholder)
-                if len(opcoes) > 0:
-                    # Tenta clicar na última opção (geralmente os contratos mais recentes ficam no fim ou início)
-                    # Ou simplesmente clica na segunda opção se a primeira for vazia
-                    opcoes[-1].click() 
-    except:
-        pass
+            print(f"Erro ao manipular campo {element_id}: {e}")
 
 # ==============================================================================
 # FUNÇÃO PRINCIPAL
@@ -184,24 +162,24 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
                     wait.until(EC.element_to_be_clickable((By.XPATH, xp))).click()
                 except: pass
 
-                # 3. Campos Texto (Método Humano)
-                digitar_humanizado(driver, "input_veic_placa", placa)
-                digitar_humanizado(driver, "veiculo-veic_chassi", item.get('Chassis'))
-                digitar_humanizado(driver, "veiculo-veic_renavam", item.get('Renavam'))
-                digitar_humanizado(driver, "veiculo-veic_ano", item.get('Ano'))
-                digitar_humanizado(driver, "veiculo-veic_autonomia_fabrica", item.get('Autonomia', '0'))
-                digitar_humanizado(driver, "veiculo-veic_fabricante", item.get('Marca'))
-                digitar_humanizado(driver, "veiculo-veic_modelo", item.get('Modelo'))
-                digitar_humanizado(driver, "veiculo-veic_ano_modelo", item.get('Ano Modelo'))
-                digitar_humanizado(driver, "veiculo-veic_cor", item.get('Cor'))
-                digitar_humanizado(driver, "veiculo-veic_tanque_total", item.get('Tanque de Comb'))
-                digitar_humanizado(driver, "veiculo-mes_licenciamento", item.get('Mes de Licenciamento'))
+                # 3. Campos Texto (USANDO NOVA FUNÇÃO ROBUSTA)
+                preencher_campo_robusto(driver, "input_veic_placa", placa)
+                preencher_campo_robusto(driver, "veiculo-veic_chassi", item.get('Chassis'))
+                preencher_campo_robusto(driver, "veiculo-veic_renavam", item.get('Renavam'))
+                preencher_campo_robusto(driver, "veiculo-veic_ano", item.get('Ano'))
+                preencher_campo_robusto(driver, "veiculo-veic_autonomia_fabrica", item.get('Autonomia', '0'))
+                preencher_campo_robusto(driver, "veiculo-veic_fabricante", item.get('Marca'))
+                preencher_campo_robusto(driver, "veiculo-veic_modelo", item.get('Modelo'))
+                preencher_campo_robusto(driver, "veiculo-veic_ano_modelo", item.get('Ano Modelo'))
+                preencher_campo_robusto(driver, "veiculo-veic_cor", item.get('Cor'))
+                preencher_campo_robusto(driver, "veiculo-veic_tanque_total", item.get('Tanque de Comb'))
+                preencher_campo_robusto(driver, "veiculo-mes_licenciamento", item.get('Mes de Licenciamento'))
 
-                # 4. Contrato (NOVO)
-                tentar_selecionar_contrato(driver)
+                # 4. Contrato: REMOVIDO (Não toca no campo, deixa em branco)
+                # tentar_selecionar_contrato(driver) 
 
                 # --- ENVIO ---
-                time.sleep(1) # Aguarda validações finais
+                time.sleep(1) 
                 
                 # Tenta submeter
                 try:
@@ -267,7 +245,7 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
 # UI STREAMLIT
 # ==============================================================================
 st.set_page_config(page_title="Automação Veículos", layout="wide")
-st.title("🤖 Cadastro de Veículos (Modo Compatibilidade)")
+st.title("🤖 Cadastro de Veículos (Ajustado)")
 
 try:
     path = os.path.join(os.path.dirname(__file__), '..', 'modelo_importacao - Sheet1.csv')
