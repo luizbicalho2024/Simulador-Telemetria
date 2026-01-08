@@ -1,3 +1,4 @@
+# pages/4_Cadastro_de_Veículos.py
 # -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
@@ -13,20 +14,26 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 # ==============================================================================
-# FUNÇÃO PRINCIPAL DA AUTOMAÇÃO (VERSÃO FINAL COM CORREÇÃO DE MAPEAMENTO)
+# FUNÇÃO PRINCIPAL DA AUTOMAÇÃO (VERSÃO ATUALIZADA - LAYOUT NOVO)
 # ==============================================================================
 def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
     """
-    Executa a automação de cadastro de veículos com detecção de erro de campo.
+    Executa a automação de cadastro de veículos com correções para o novo formulário.
     """
-    # --- ETAPA 1: CONFIGURAÇÕES E SELETORES ---
+    # --- CONFIGURAÇÕES E SELETORES (BASEADOS NO HTML FORNECIDO) ---
     URL_DO_SISTEMA = "https://sistema.etrac.com.br/"
     URL_BASE_CADASTRO_VEICULO = "https://sistema.etrac.com.br/index.php?r=veiculo%2Fcreate&id="
+    
+    # Seletores de Login
     ID_CAMPO_USUARIO = "loginform-username"
     ID_CAMPO_SENHA = "loginform-password"
     BOTAO_ENTRAR_XPATH = "//button[@name='login-button']"
+    
+    # Seletores do Formulário
     RADIO_PLACA_MERCOSUL_XPATH = "//input[@name='tipo_placa' and @value='2']"
     SELECT2_TIPO_VEICULO_BOX_XPATH = "//span[@aria-labelledby='select2-veiculo-veti_codigo-container']"
+    
+    # IDs dos Inputs (Confirmados no HTML)
     INPUT_PLACA_ID = "input_veic_placa"
     INPUT_CHASSI_ID = "veiculo-veic_chassi"
     INPUT_RENAVAM_ID = "veiculo-veic_renavam"
@@ -38,26 +45,33 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
     INPUT_COR_ID = "veiculo-veic_cor"
     INPUT_TANQUE_ID = "veiculo-veic_tanque_total"
     INPUT_MES_LICENCIAMENTO_ID = "veiculo-mes_licenciamento"
-    BOTAO_CADASTRAR_VEICULO_XPATH = "//div[@class='form-group align-right']//button[contains(text(), 'Cadastrar')]"
     
+    # Botão Cadastrar - XPath Genérico para encontrar dentro do grupo alinhado à direita
+    BOTAO_CADASTRAR_VEICULO_XPATH = "//div[contains(@class, 'form-group align-right')]//button[contains(text(), 'Cadastrar')]"
+    
+    # Mensagens de Retorno
     MENSAGEM_SUCESSO_XPATH = "//div[contains(@class, 'alert-success') and contains(text(), 'Veículo salvo com sucesso')]"
     MENSAGEM_ERRO_GERAL_XPATH = "//div[contains(@class, 'alert-danger')]"
     MENSAGEM_ERRO_CAMPO_XPATH = "//div[contains(@class, 'has-error')]//div[contains(@class, 'help-block')]"
 
-    # ##############################################################################
-    # CORREÇÃO APLICADA AQUI: Adicionado o espaço duplo na chave 'Cor  (*)'
-    # ##############################################################################
+    # Mapeamento Excel -> Sistema
     mapa_colunas = {
         'ID_cliente (*)': 'cliente_id', 'Cliente/Unidade': 'Nome do Cliente',
         'Segmento (*)': 'Segmento', 'Placa (*)': 'Placa', 'Chassi (*)': 'Chassis',
         'Renavam': 'Renavam', 'Ano de Fabricação (*)': 'Ano',
         'Autonomia': 'Autonomia', 'Marca (*)': 'Marca', 'Modelo (*)': 'Modelo',
-        'Ano Modelo (*)': 'Ano Modelo', 'Cor  (*)': 'Cor', # <- CORRIGIDO
+        'Ano Modelo (*)': 'Ano Modelo', 'Cor  (*)': 'Cor',
         'Tanque de Combustivel (*)': 'Tanque de Comb',
         'Mes Licenciamento (*)': 'Mes de Licenciamento'
     }
-    df_renomeado = df.rename(columns=mapa_colunas)
-    lista_de_clientes = df_renomeado.to_dict('records')
+    
+    # Renomeia colunas para facilitar acesso
+    try:
+        df_renomeado = df.rename(columns=mapa_colunas)
+        lista_de_clientes = df_renomeado.to_dict('records')
+    except Exception as e:
+        st.error(f"Erro ao processar colunas do arquivo. Verifique o modelo. Detalhes: {e}")
+        return False
 
     status_text.info("Configurando o navegador para ambiente de nuvem...")
     chrome_options = Options()
@@ -68,9 +82,14 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
     chrome_options.add_argument("--window-size=1920,1080")
 
     service = Service()
-    driver = webdriver.Chrome(service=service, options=chrome_options)
     
-    wait = WebDriverWait(driver, 15)
+    try:
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+    except Exception as e:
+        st.error(f"Erro ao iniciar o driver do Chrome. Verifique a instalação. {e}")
+        return False
+    
+    wait = WebDriverWait(driver, 20) # Aumentado timeout para segurança
     total_veiculos = len(lista_de_clientes)
 
     try:
@@ -81,7 +100,7 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
         wait.until(EC.presence_of_element_located((By.ID, ID_CAMPO_SENHA))).send_keys(senha)
         wait.until(EC.element_to_be_clickable((By.XPATH, BOTAO_ENTRAR_XPATH))).click()
         
-        status_text.info("Login realizado com sucesso. Aguardando a página principal...")
+        status_text.info("Login realizado com sucesso. Aguardando carregamento...")
         time.sleep(3)
 
         status_text.info("2/3 - Iniciando o cadastro dos veículos...")
@@ -93,41 +112,88 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
             cliente_id = cliente.get('cliente_id')
             placa_veiculo = cliente.get('Placa', 'N/A')
             
+            # Tratamento seguro para ID do cliente (remove decimais se houver)
+            try:
+                if pd.notna(cliente_id):
+                    cliente_id = str(int(float(cliente_id)))
+            except:
+                cliente_id = str(cliente_id)
+
             status_text.info(f"Cadastrando veículo {i+1}/{total_veiculos} (Placa: {placa_veiculo})...")
 
-            if not cliente_id:
-                st.warning(f"Registro para '{nome_cliente}' não possui 'ID_cliente'. Pulando...")
+            if not cliente_id or cliente_id == 'nan':
+                st.warning(f"Registro para '{nome_cliente}' não possui 'ID_cliente' válido. Pulando...")
                 continue
             
             try:
+                # Navega direto para a tela de criação do cliente
                 url_final = f"{URL_BASE_CADASTRO_VEICULO}{cliente_id}"
                 driver.get(url_final)
 
+                # 1. Seleciona Placa Mercosul (Radio Button)
                 radio_mercosul = wait.until(EC.presence_of_element_located((By.XPATH, RADIO_PLACA_MERCOSUL_XPATH)))
                 driver.execute_script("arguments[0].click();", radio_mercosul)
-                time.sleep(1)
+                time.sleep(0.5)
 
+                # 2. Seleciona Segmento (Select2)
                 segmento_veiculo = str(cliente.get('Segmento', 'Outros')).capitalize()
-                wait.until(EC.element_to_be_clickable((By.XPATH, SELECT2_TIPO_VEICULO_BOX_XPATH))).click()
+                
+                # Clica no container do Select2 para abrir as opções
+                select_tipo = wait.until(EC.element_to_be_clickable((By.XPATH, SELECT2_TIPO_VEICULO_BOX_XPATH)))
+                select_tipo.click()
+                
+                # Clica na opção desejada na lista suspensa
                 xpath_opcao_veiculo = f"//span[@class='select2-results']//li[text()='{segmento_veiculo}']"
                 wait.until(EC.element_to_be_clickable((By.XPATH, xpath_opcao_veiculo))).click()
                 
-                # Preenchimento dos campos
-                driver.find_element(By.ID, INPUT_PLACA_ID).send_keys(str(cliente.get('Placa', '')))
-                driver.find_element(By.ID, INPUT_CHASSI_ID).send_keys(str(cliente.get('Chassis', '')))
-                driver.find_element(By.ID, INPUT_RENAVAM_ID).send_keys(str(cliente.get('Renavam', '')))
-                driver.find_element(By.ID, INPUT_ANO_ID).send_keys(str(cliente.get('Ano', '')))
-                driver.find_element(By.ID, INPUT_AUTONOMIA_ID).send_keys(str(cliente.get('Autonomia', '0')))
-                driver.find_element(By.ID, INPUT_FABRICANTE_ID).send_keys(str(cliente.get('Marca', '')))
-                driver.find_element(By.ID, INPUT_MODELO_ID).send_keys(str(cliente.get('Modelo', '')))
-                driver.find_element(By.ID, INPUT_ANO_MODELO_ID).send_keys(str(cliente.get('Ano Modelo', '')))
-                driver.find_element(By.ID, INPUT_COR_ID).send_keys(str(cliente.get('Cor', '')))
-                driver.find_element(By.ID, INPUT_TANQUE_ID).send_keys(str(cliente.get('Tanque de Comb', '')))
-                driver.find_element(By.ID, INPUT_MES_LICENCIAMENTO_ID).send_keys(str(int(cliente.get('Mes de Licenciamento', ''))))
+                # 3. Preenchimento dos campos de texto
+                # Função auxiliar para preencher seguro e rolar se necessário
+                def preencher_campo(by_id, valor):
+                    if valor and str(valor).lower() != 'nan':
+                        elem = driver.find_element(By.ID, by_id)
+                        # Rola até o elemento para garantir que não está coberto
+                        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", elem)
+                        elem.clear()
+                        elem.send_keys(str(valor))
 
-                botao_cadastrar = wait.until(EC.element_to_be_clickable((By.XPATH, BOTAO_CADASTRAR_VEICULO_XPATH)))
+                preencher_campo(INPUT_PLACA_ID, cliente.get('Placa', ''))
+                preencher_campo(INPUT_CHASSI_ID, cliente.get('Chassis', ''))
+                preencher_campo(INPUT_RENAVAM_ID, cliente.get('Renavam', ''))
+                
+                # Tratamento para campos numéricos que podem vir como float do Excel (ex: 2023.0 -> 2023)
+                def formatar_inteiro(valor):
+                    try:
+                        return str(int(float(valor)))
+                    except:
+                        return str(valor)
+
+                preencher_campo(INPUT_ANO_ID, formatar_inteiro(cliente.get('Ano', '')))
+                preencher_campo(INPUT_AUTONOMIA_ID, cliente.get('Autonomia', '0'))
+                preencher_campo(INPUT_FABRICANTE_ID, cliente.get('Marca', ''))
+                preencher_campo(INPUT_MODELO_ID, cliente.get('Modelo', ''))
+                preencher_campo(INPUT_ANO_MODELO_ID, formatar_inteiro(cliente.get('Ano Modelo', '')))
+                preencher_campo(INPUT_COR_ID, cliente.get('Cor', ''))
+                preencher_campo(INPUT_TANQUE_ID, formatar_inteiro(cliente.get('Tanque de Comb', '')))
+                
+                # Mês de Licenciamento
+                mes_lic = cliente.get('Mes de Licenciamento', '')
+                if pd.notna(mes_lic):
+                    preencher_campo(INPUT_MES_LICENCIAMENTO_ID, formatar_inteiro(mes_lic))
+
+                # --- CLIQUE NO BOTÃO CADASTRAR ---
+                # Importante: Rolar até o fim da página para garantir que o botão não está oculto pelo footer
+                driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                time.sleep(1) 
+                
+                botao_cadastrar = wait.until(EC.presence_of_element_located((By.XPATH, BOTAO_CADASTRAR_VEICULO_XPATH)))
+                # Garante que o botão está visível no centro da tela
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", botao_cadastrar)
+                time.sleep(0.5)
+                
+                # Clica via JS para evitar interceptação
                 driver.execute_script("arguments[0].click();", botao_cadastrar)
                 
+                # --- VERIFICAÇÃO DE SUCESSO ---
                 try:
                     wait.until(EC.presence_of_element_located((By.XPATH, MENSAGEM_SUCESSO_XPATH)))
                     st.write(f"✅ **Confirmado:** Veículo '{placa_veiculo}' cadastrado para '{nome_cliente}'.")
@@ -140,7 +206,7 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
                             erro_geral_msg = driver.find_element(By.XPATH, MENSAGEM_ERRO_GERAL_XPATH).text
                             st.error(f"❌ **Falha no Sistema** para '{placa_veiculo}': {erro_geral_msg}")
                         except NoSuchElementException:
-                             st.warning(f"⚠️ **Sem Confirmação** para '{placa_veiculo}'. O sistema não respondeu. Verifique manualmente.")
+                             st.warning(f"⚠️ **Sem Confirmação** para '{placa_veiculo}'. Verifique se foi salvo.")
                     continue
 
             except Exception as e:
@@ -157,7 +223,7 @@ def executar_cadastro_veiculos(df, usuario, senha, progress_bar, status_text):
             driver.save_screenshot("erro_geral_automacao.png")
             st.image("erro_geral_automacao.png")
         except:
-            st.error("Não foi possível capturar a tela do erro.")
+            pass
         return False
     
     finally:
@@ -181,28 +247,35 @@ Siga os passos abaixo:
 """)
 
 try:
+    # Ajuste para garantir que o caminho do arquivo seja encontrado
     script_dir = os.path.dirname(__file__) 
+    # Tenta localizar o arquivo modelo subindo um nível
     model_file_path = os.path.join(script_dir, '..', 'modelo_importacao - Sheet1.csv')
+    
+    # Se não encontrar, tenta no diretório atual (caso a estrutura seja diferente)
+    if not os.path.exists(model_file_path):
+        model_file_path = 'modelo_importacao - Sheet1.csv'
 
     # Lê o ficheiro CSV original para um DataFrame do pandas
-    df_modelo = pd.read_csv(model_file_path)
+    if os.path.exists(model_file_path):
+        df_modelo = pd.read_csv(model_file_path)
 
-    # Cria um buffer de bytes em memória para o ficheiro Excel
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df_modelo.to_excel(writer, index=False, sheet_name='Sheet1')
-    
-    # Obtém os dados do buffer para o botão de download
-    excel_data = output.getvalue()
+        # Cria um buffer de bytes em memória para o ficheiro Excel
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df_modelo.to_excel(writer, index=False, sheet_name='Sheet1')
+        
+        excel_data = output.getvalue()
 
-    st.download_button(
-        label="📄 Baixar Modelo de Importação (XLSX)",
-        data=excel_data,
-        file_name="modelo_importacao.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
-except FileNotFoundError:
-    st.warning("Arquivo 'modelo_importacao - Sheet1.csv' não encontrado. O botão de download está desativado.")
+        st.download_button(
+            label="📄 Baixar Modelo de Importação (XLSX)",
+            data=excel_data,
+            file_name="modelo_importacao.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+    else:
+        st.warning("⚠️ Arquivo de modelo não encontrado no servidor.")
+        
 except Exception as e:
     st.error(f"Ocorreu um erro ao gerar o modelo XLSX: {e}")
 
@@ -220,11 +293,14 @@ if uploaded_file:
         else:
             df = pd.read_excel(uploaded_file, skiprows=1)
         
-        df.dropna(subset=['ID_cliente (*)'], inplace=True)
-        df['ID_cliente (*)'] = df['ID_cliente (*)'].astype(int)
-
+        # Remove linhas vazias baseadas na coluna obrigatória
+        if 'ID_cliente (*)' in df.columns:
+            df.dropna(subset=['ID_cliente (*)'], inplace=True)
+            # Remove possíveis .0 de IDs que vieram como float
+            df['ID_cliente (*)'] = df['ID_cliente (*)'].astype(str).str.replace(r'\.0$', '', regex=True)
+        
         st.success("Arquivo carregado e processado com sucesso!")
-        st.dataframe(df)
+        st.dataframe(df.head())
 
         st.divider()
 
