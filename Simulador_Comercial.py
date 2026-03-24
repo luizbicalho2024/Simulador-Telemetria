@@ -201,10 +201,10 @@ if st.session_state["authentication_status"]:
             pricing_config = umdb.get_pricing_config()
             
             # --- ÁREA DE ADIÇÃO DE NOVOS PRODUTOS (NOVA FUNCIONALIDADE) ---
-            with st.expander("➕ Adicionar Novos Produtos (PF/PJ)", expanded=False):
+            with st.expander("➕ Adicionar Novos Produtos (PF/PJ/Licitação)", expanded=False):
                 st.info("Use esta seção para criar novos produtos. Após adicionar, eles aparecerão no formulário abaixo para edição detalhada.")
                 
-                col_add_pf, col_add_pj = st.columns(2)
+                col_add_pf, col_add_pj, col_add_licit = st.columns(3)
                 
                 # Formulário para adicionar PF
                 with col_add_pf:
@@ -259,6 +259,29 @@ if st.session_state["authentication_status"]:
                                     st.error("Erro ao salvar no banco de dados.")
                             else:
                                 st.warning("Digite o nome do produto.")
+                                
+                # Formulário para adicionar Licitação
+                with col_add_licit:
+                    st.markdown("###### Novo Produto - Licitação")
+                    with st.form("form_add_prod_licit", clear_on_submit=True):
+                        new_licit_name = st.text_input("Nome do Produto (Ex: RFID)")
+                        new_licit_price = st.number_input("Custo da Licitação (R$)", min_value=0.0, format="%.2f")
+                        if st.form_submit_button("Adicionar Produto Licitação"):
+                            if new_licit_name:
+                                current_licit = pricing_config.get("PRECO_CUSTO_LICITACAO", {})
+                                if new_licit_name in current_licit:
+                                    st.warning(f"O produto '{new_licit_name}' já existe.")
+                                else:
+                                    current_licit[new_licit_name] = new_licit_price
+                                    pricing_config["PRECO_CUSTO_LICITACAO"] = current_licit
+                                    if umdb.update_pricing_config(pricing_config):
+                                        st.toast(f"Produto '{new_licit_name}' adicionado!", icon="✅")
+                                        umdb.add_log(username, "Adicionou Produto Licitação", details={"produto": new_licit_name, "preco": new_licit_price})
+                                        st.rerun()
+                                    else:
+                                        st.error("Erro ao salvar no banco de dados.")
+                            else:
+                                st.warning("Digite o nome do produto.")
 
             st.divider()
             
@@ -267,7 +290,6 @@ if st.session_state["authentication_status"]:
                 with st.expander("Simulador Pessoa Física (PF)", expanded=True):
                     pf_prices = pricing_config.get("PRECOS_PF", {})
                     col1, col2 = st.columns(2)
-                    # Loop dinâmico para garantir que novos produtos apareçam
                     keys_pf = list(pf_prices.keys())
                     for i, key in enumerate(keys_pf):
                         col = col1 if i % 2 == 0 else col2
@@ -276,12 +298,11 @@ if st.session_state["authentication_status"]:
                 with st.expander("Simulador Licitação (Custos)", expanded=True):
                     licit_prices = pricing_config.get("PRECO_CUSTO_LICITACAO", {})
                     l_col1, l_col2, l_col3 = st.columns(3)
-                    # Mantive a estrutura fixa do licitação conforme original, mas poderia ser dinâmica também se desejar
-                    licit_prices["Rastreador GPRS/GSM 2G"] = l_col1.number_input("Custo GPRS/GSM 2G", value=float(licit_prices.get("Rastreador GPRS/GSM 2G", 0.0)), format="%.2f")
-                    licit_prices["Rastreador GPRS/GSM 4G"] = l_col2.number_input("Custo GPRS/GSM 4G", value=float(licit_prices.get("Rastreador GPRS/GSM 4G", 0.0)), format="%.2f")
-                    licit_prices["Rastreador Satelital"] = l_col3.number_input("Custo Satelital", value=float(licit_prices.get("Rastreador Satelital", 0.0)), format="%.2f")
-                    licit_prices["Telemetria/CAN"] = l_col1.number_input("Custo Telemetria/CAN", value=float(licit_prices.get("Telemetria/CAN", 0.0)), format="%.2f")
-                    licit_prices["RFID - ID Motorista"] = l_col2.number_input("Custo RFID", value=float(licit_prices.get("RFID - ID Motorista", 0.0)), format="%.2f")
+                    # Loop dinâmico! Garante que novos produtos criados acima apareçam na Licitação
+                    keys_licit = list(licit_prices.keys())
+                    for i, key in enumerate(keys_licit):
+                        col_l = [l_col1, l_col2, l_col3][i % 3]
+                        licit_prices[key] = col_l.number_input(f"Custo {key}", value=float(licit_prices.get(key, 0.0)), format="%.2f", key=f"licit_edit_{i}")
 
                 with st.expander("Simulador Pessoa Jurídica (PJ)", expanded=True):
                     pj_plans = pricing_config.get("PLANOS_PJ", {})
