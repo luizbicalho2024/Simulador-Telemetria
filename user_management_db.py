@@ -267,7 +267,6 @@ def update_pricing_config(new_config: dict[str, Any]) -> bool:
         return False
 
 
-@st.cache_data(ttl=300, show_spinner=False)
 def get_system_settings() -> dict[str, Any]:
     collection = get_collection("system_settings")
     if collection is not None:
@@ -289,29 +288,63 @@ def update_system_settings(settings: dict[str, Any]) -> bool:
             {"$set": normalized, "$currentDate": {"updated_at": True}},
             upsert=True,
         )
-        get_system_settings.clear()
         return True
     except PyMongoError:
         log.exception("Falha ao atualizar identidade visual.")
         return False
 
 
-def update_system_logo(raw_bytes: bytes, mime: str, filename: str) -> bool:
-    settings = get_system_settings()
+def _update_logo(
+    raw_bytes: bytes,
+    mime: str,
+    filename: str,
+    *,
+    sidebar: bool,
+) -> bool:
+    if not raw_bytes:
+        return False
+
+    settings = normalize_branding(get_system_settings())
+    prefix = "sidebar_logo" if sidebar else "logo"
     settings.update(
         {
-            "logo_base64": base64.b64encode(raw_bytes).decode("ascii"),
-            "logo_mime": mime,
-            "logo_filename": filename,
+            f"{prefix}_base64": base64.b64encode(raw_bytes).decode("ascii"),
+            f"{prefix}_mime": str(mime or "image/png"),
+            f"{prefix}_filename": str(filename or "logo.png")[:255],
+        }
+    )
+    return update_system_settings(settings)
+
+
+def update_system_logo(raw_bytes: bytes, mime: str, filename: str) -> bool:
+    """Atualiza a logo principal usada no login e no conteúdo do sistema."""
+    return _update_logo(raw_bytes, mime, filename, sidebar=False)
+
+
+def update_sidebar_logo(raw_bytes: bytes, mime: str, filename: str) -> bool:
+    """Atualiza exclusivamente a logo exibida na barra lateral."""
+    return _update_logo(raw_bytes, mime, filename, sidebar=True)
+
+
+def _reset_logo(*, sidebar: bool) -> bool:
+    settings = normalize_branding(get_system_settings())
+    prefix = "sidebar_logo" if sidebar else "logo"
+    settings.update(
+        {
+            f"{prefix}_base64": None,
+            f"{prefix}_mime": None,
+            f"{prefix}_filename": None,
         }
     )
     return update_system_settings(settings)
 
 
 def reset_system_logo() -> bool:
-    settings = get_system_settings()
-    settings.update({"logo_base64": None, "logo_mime": None, "logo_filename": None})
-    return update_system_settings(settings)
+    return _reset_logo(sidebar=False)
+
+
+def reset_sidebar_logo() -> bool:
+    return _reset_logo(sidebar=True)
 
 
 def add_log(user: str, action: str, details: Any = None) -> bool:

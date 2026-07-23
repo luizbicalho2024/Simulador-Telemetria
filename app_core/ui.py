@@ -2,15 +2,12 @@ from __future__ import annotations
 
 import base64
 import html
-import io
 from pathlib import Path
 from typing import Any
 
 import streamlit as st
-from PIL import Image
 
 from app_core.settings import (
-    contrast_ratio,
     get_default_branding,
     normalize_branding,
     resolve_branding_colors,
@@ -44,83 +41,57 @@ def get_branding() -> dict[str, Any]:
         return get_default_branding()
 
 
-def get_logo_bytes(branding: dict[str, Any] | None = None) -> bytes | None:
-    branding = branding or get_branding()
-    encoded = branding.get("logo_base64")
+def _logo_storage_fields(*, sidebar: bool) -> tuple[str, str, str]:
+    if sidebar:
+        return (
+            "sidebar_logo_base64",
+            "sidebar_logo_mime",
+            "sidebar_logo_filename",
+        )
+    return "logo_base64", "logo_mime", "logo_filename"
+
+
+def get_logo_bytes(
+    branding: dict[str, Any] | None = None,
+    *,
+    sidebar: bool = False,
+) -> bytes | None:
+    """Retorna a logo adequada ao contexto sem adicionar fundos artificiais.
+
+    A sidebar possui uma imagem independente. Enquanto ela não for cadastrada,
+    o sistema reutiliza a logo principal para manter compatibilidade com os
+    dados já existentes no MongoDB.
+    """
+    branding = normalize_branding(branding or get_branding())
+    base64_field, _, _ = _logo_storage_fields(sidebar=sidebar)
+    encoded = branding.get(base64_field)
+
+    if sidebar and not encoded:
+        encoded = branding.get("logo_base64")
+
     if encoded:
         try:
-            return base64.b64decode(encoded)
+            return base64.b64decode(encoded, validate=True)
         except Exception:
             pass
+
     try:
         return DEFAULT_LOGO.read_bytes()
     except OSError:
         return None
 
 
-def _logo_average_color(raw_logo: bytes) -> str | None:
-    """Calcula uma cor média aproximada ignorando pixels transparentes."""
-    try:
-        with Image.open(io.BytesIO(raw_logo)) as source:
-            image = source.convert("RGBA")
-            image.thumbnail((128, 128), Image.Resampling.LANCZOS)
-            red_total = green_total = blue_total = weight_total = 0.0
-            for red, green, blue, alpha in image.getdata():
-                if alpha < 24:
-                    continue
-                weight = alpha / 255
-                red_total += red * weight
-                green_total += green * weight
-                blue_total += blue * weight
-                weight_total += weight
-            if weight_total <= 0:
-                return None
-            return "#{:02X}{:02X}{:02X}".format(
-                round(red_total / weight_total),
-                round(green_total / weight_total),
-                round(blue_total / weight_total),
-            )
-    except Exception:
-        return None
-
-
-def _resolve_logo_panel(
-    raw_logo: bytes,
-    branding: dict[str, Any],
+def get_logo_mime(
+    branding: dict[str, Any] | None = None,
     *,
-    sidebar: bool,
-) -> tuple[str, int, int, bool]:
-    mode = branding.get("logo_background_mode", "auto")
-    padding = int(branding.get("logo_padding", 12))
-    radius = int(branding.get("logo_border_radius", 12))
-
-    if mode == "transparent":
-        return "transparent", 0, 0, False
-
-    if mode == "custom":
-        return str(branding.get("logo_background_color", "#FFFFFF")), padding, radius, True
-
-    context_background = (
-        branding["sidebar_background_color"]
-        if sidebar
-        else branding["background_color"]
-    )
-    average = _logo_average_color(raw_logo)
-    if average and contrast_ratio(average, context_background) >= 2.35:
-        return "transparent", 0, 0, False
-
-    candidates = [
-        branding["surface_color"],
-        branding["secondary_color"],
-        branding["sidebar_background_color"],
-        "#FFFFFF",
-        "#111827",
-    ]
-    if average:
-        background = max(candidates, key=lambda candidate: contrast_ratio(average, candidate))
-    else:
-        background = branding["surface_color"]
-    return background, padding, radius, True
+    sidebar: bool = False,
+) -> str:
+    branding = normalize_branding(branding or get_branding())
+    _, mime_field, _ = _logo_storage_fields(sidebar=sidebar)
+    mime = branding.get(mime_field)
+    if sidebar and not branding.get("sidebar_logo_base64"):
+        mime = branding.get("logo_mime")
+    return str(mime or "image/png")
 
 
 def apply_branding(branding: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -440,35 +411,23 @@ def render_logo(
     max_width: int = 250,
     branding: dict[str, Any] | None = None,
 ) -> None:
+    """Renderiza a logo principal ou a logo da sidebar com transparência real."""
     branding = normalize_branding(branding or get_branding())
-    logo = get_logo_bytes(branding)
+    logo = get_logo_bytes(branding, sidebar=sidebar)
     if not logo:
         return
 
-    background, padding, radius, has_panel = _resolve_logo_panel(
-        logo,
-        branding,
-        sidebar=sidebar,
-    )
-    mime = str(branding.get("logo_mime") or "image/png")
+    mime = get_logo_mime(branding, sidebar=sidebar)
     encoded = base64.b64encode(logo).decode("ascii")
-    border = (
-        "1px solid color-mix(in srgb, var(--app-muted) 22%, transparent)"
-        if has_panel and not sidebar
-        else "none"
-    )
     panel_class = "app-logo-shell--sidebar" if sidebar else "app-logo-shell--content"
     safe_width = max(80, min(int(max_width), 700))
+    alt = "Logomarca da barra lateral" if sidebar else "Logomarca principal do sistema"
 
     markup = f"""
     <div class="app-logo-shell {panel_class}"
-         style="background:{html.escape(background)};
-                padding:{padding}px;
-                border-radius:{radius}px;
-                border:{border};
-                width:min(100%, {safe_width}px);">
+         style="width:min(100%, {safe_width}px);">
       <img src="data:{html.escape(mime)};base64,{encoded}"
-           alt="Logomarca do sistema"
+           alt="{html.escape(alt)}"
            style="max-width:{safe_width}px;" />
     </div>
     """

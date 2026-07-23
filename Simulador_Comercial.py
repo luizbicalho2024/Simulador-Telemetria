@@ -9,7 +9,7 @@ from PIL import Image, ImageOps
 
 import user_management_db as db
 from app_core.auth import LOGIN_FIELDS, build_authenticator, clear_auth_state
-from app_core.settings import branding_contrast_errors, get_default_branding
+from app_core.settings import branding_contrast_errors, get_default_branding, normalize_branding
 from app_core.ui import apply_branding, configure_page, money, render_hero, render_logo, render_sidebar
 
 configure_page("Simulador de Telemetria")
@@ -377,7 +377,9 @@ if st.session_state.get("role") == "admin":
                 st.error("Não foi possível salvar os preços.")
 
     with tab_branding:
-        current = db.get_system_settings()
+        # A normalização nesta camada impede KeyError mesmo quando o MongoDB
+        # ainda contém um documento criado por versões anteriores do sistema.
+        current = normalize_branding(db.get_system_settings())
         flash = st.session_state.pop("branding_flash", None)
         if flash:
             level = flash.get("level", "success")
@@ -386,15 +388,138 @@ if st.session_state.get("role") == "admin":
             for detail in flash.get("details", []):
                 st.caption(detail)
 
+        st.markdown("#### Logomarcas")
+        st.caption(
+            "Cadastre imagens diferentes para cada contexto. As logos são exibidas "
+            "com transparência, sem painel ou fundo artificial."
+        )
+
+        main_logo_col, sidebar_logo_col = st.columns(2)
+
+        with main_logo_col:
+            st.markdown("##### Logo principal e login")
+            st.caption("Usada na tela de login, página inicial e áreas de conteúdo.")
+            render_logo(max_width=320, branding=current)
+
+            uploaded_main_logo = st.file_uploader(
+                "Enviar logo principal",
+                type=["png", "jpg", "jpeg", "webp"],
+                key="main_logo_uploader",
+                help="Recomendado: PNG ou WebP transparente, largura de até 1200 px.",
+            )
+            if uploaded_main_logo:
+                try:
+                    if uploaded_main_logo.size > 5_000_000:
+                        raise ValueError("O arquivo original deve possuir no máximo 5 MB.")
+                    image = Image.open(uploaded_main_logo)
+                    if image.width * image.height > 20_000_000:
+                        raise ValueError("A imagem possui resolução excessiva. Use no máximo 20 megapixels.")
+                    image = ImageOps.exif_transpose(image).convert("RGBA")
+                    image.thumbnail((1200, 500), Image.Resampling.LANCZOS)
+                    buffer = io.BytesIO()
+                    image.save(buffer, format="PNG", optimize=True)
+                    optimized = buffer.getvalue()
+                    if len(optimized) > 2_000_000:
+                        st.error("A imagem otimizada ainda excede 2 MB.")
+                    elif st.button(
+                        "Aplicar logo principal",
+                        type="primary",
+                        width="stretch",
+                        key="apply_main_logo",
+                    ):
+                        if db.update_system_logo(optimized, "image/png", uploaded_main_logo.name):
+                            db.add_log(username, "Atualizou a logo principal")
+                            st.session_state["branding_flash"] = {
+                                "level": "success",
+                                "message": "Logo principal e de login atualizada.",
+                            }
+                            st.rerun()
+                        else:
+                            st.error("Não foi possível salvar a logo principal.")
+                except Exception as exc:
+                    st.error(f"Arquivo de imagem inválido: {exc}")
+
+            if current.get("logo_base64") and st.button(
+                "Restaurar logo principal padrão",
+                width="stretch",
+                key="reset_main_logo",
+            ):
+                if db.reset_system_logo():
+                    db.add_log(username, "Restaurou a logo principal padrão")
+                    st.session_state["branding_flash"] = {
+                        "level": "success",
+                        "message": "Logo principal padrão restaurada.",
+                    }
+                    st.rerun()
+
+        with sidebar_logo_col:
+            st.markdown("##### Logo da sidebar")
+            st.caption(
+                "Usada somente na barra lateral. Envie uma versão clara quando a sidebar for escura."
+            )
+            render_logo(sidebar=True, max_width=260, branding=current)
+
+            if not current.get("sidebar_logo_base64"):
+                st.info("Nenhuma logo específica cadastrada; a sidebar está reutilizando a logo principal.")
+
+            uploaded_sidebar_logo = st.file_uploader(
+                "Enviar logo da sidebar",
+                type=["png", "jpg", "jpeg", "webp"],
+                key="sidebar_logo_uploader",
+                help="Recomendado: PNG ou WebP transparente, adequado à cor da sidebar.",
+            )
+            if uploaded_sidebar_logo:
+                try:
+                    if uploaded_sidebar_logo.size > 5_000_000:
+                        raise ValueError("O arquivo original deve possuir no máximo 5 MB.")
+                    image = Image.open(uploaded_sidebar_logo)
+                    if image.width * image.height > 20_000_000:
+                        raise ValueError("A imagem possui resolução excessiva. Use no máximo 20 megapixels.")
+                    image = ImageOps.exif_transpose(image).convert("RGBA")
+                    image.thumbnail((1200, 500), Image.Resampling.LANCZOS)
+                    buffer = io.BytesIO()
+                    image.save(buffer, format="PNG", optimize=True)
+                    optimized = buffer.getvalue()
+                    if len(optimized) > 2_000_000:
+                        st.error("A imagem otimizada ainda excede 2 MB.")
+                    elif st.button(
+                        "Aplicar logo da sidebar",
+                        type="primary",
+                        width="stretch",
+                        key="apply_sidebar_logo",
+                    ):
+                        if db.update_sidebar_logo(optimized, "image/png", uploaded_sidebar_logo.name):
+                            db.add_log(username, "Atualizou a logo da sidebar")
+                            st.session_state["branding_flash"] = {
+                                "level": "success",
+                                "message": "Logo da sidebar atualizada.",
+                            }
+                            st.rerun()
+                        else:
+                            st.error("Não foi possível salvar a logo da sidebar.")
+                except Exception as exc:
+                    st.error(f"Arquivo de imagem inválido: {exc}")
+
+            if current.get("sidebar_logo_base64") and st.button(
+                "Remover logo específica da sidebar",
+                width="stretch",
+                key="reset_sidebar_logo",
+            ):
+                if db.reset_sidebar_logo():
+                    db.add_log(username, "Removeu a logo específica da sidebar")
+                    st.session_state["branding_flash"] = {
+                        "level": "success",
+                        "message": "A sidebar voltou a usar a logo principal.",
+                    }
+                    st.rerun()
+
+        st.markdown("---")
         preview_col, config_col = st.columns([1, 1.45])
 
         with preview_col:
-            st.markdown("#### Pré-visualização")
-            st.caption("A logomarca recebe um fundo automático quando o arquivo não possui contraste suficiente.")
-            render_logo(max_width=320, branding=current)
+            st.markdown("#### Pré-visualização das cores")
             st.markdown(f"### {current['system_name']}")
             st.caption(current["system_subtitle"])
-
             st.markdown(
                 f"""
                 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem;margin-top:1rem;">
@@ -403,54 +528,14 @@ if st.session_state.get("role") == "admin":
                     <div title="Destaque" style="height:64px;border-radius:10px;background:{current['accent_color']};border:1px solid rgba(15,23,42,.08);"></div>
                 </div>
                 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem;margin-top:.6rem;">
-                    <div title="Sidebar" style="height:48px;border-radius:10px;background:{current['sidebar_background_color']};border:1px solid rgba(15,23,42,.08);"></div>
-                    <div title="Hover da sidebar" style="height:48px;border-radius:10px;background:{current['sidebar_hover_color']};border:1px solid rgba(15,23,42,.08);"></div>
-                    <div title="Item ativo da sidebar" style="height:48px;border-radius:10px;background:{current['sidebar_active_color']};border:1px solid rgba(15,23,42,.08);"></div>
+                    <div title="Sidebar" style="height:48px;border-radius:10px;background:{current.get('sidebar_background_color', current['secondary_color'])};border:1px solid rgba(15,23,42,.08);"></div>
+                    <div title="Hover da sidebar" style="height:48px;border-radius:10px;background:{current.get('sidebar_hover_color', current['primary_color'])};border:1px solid rgba(15,23,42,.08);"></div>
+                    <div title="Item ativo da sidebar" style="height:48px;border-radius:10px;background:{current.get('sidebar_active_color', current['primary_color'])};border:1px solid rgba(15,23,42,.08);"></div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
             st.caption("Linha superior: primária, secundária e destaque. Linha inferior: sidebar, hover e item ativo.")
-
-            uploaded_logo = st.file_uploader(
-                "Nova logomarca",
-                type=["png", "jpg", "jpeg", "webp"],
-                help="Recomendado: PNG ou WebP com transparência e largura de até 1200 px.",
-            )
-            if uploaded_logo:
-                try:
-                    if uploaded_logo.size > 5_000_000:
-                        raise ValueError("O arquivo original deve possuir no máximo 5 MB.")
-                    image = Image.open(uploaded_logo)
-                    if image.width * image.height > 20_000_000:
-                        raise ValueError("A imagem possui resolução excessiva. Use no máximo 20 megapixels.")
-                    image = ImageOps.exif_transpose(image).convert("RGBA")
-                    image.thumbnail((1200, 500), Image.Resampling.LANCZOS)
-                    buffer = io.BytesIO()
-                    image.save(buffer, format="PNG", optimize=True)
-                    if len(buffer.getvalue()) > 2_000_000:
-                        st.error("A imagem otimizada ainda excede 2 MB.")
-                    elif st.button("Aplicar nova logomarca", type="primary", width="stretch"):
-                        if db.update_system_logo(buffer.getvalue(), "image/png", uploaded_logo.name):
-                            db.add_log(username, "Atualizou a logomarca")
-                            st.session_state["branding_flash"] = {
-                                "level": "success",
-                                "message": "Logomarca atualizada.",
-                            }
-                            st.rerun()
-                        else:
-                            st.error("Não foi possível salvar a logomarca.")
-                except Exception as exc:
-                    st.error(f"Arquivo de imagem inválido: {exc}")
-
-            if current.get("logo_base64") and st.button("Restaurar logomarca padrão", width="stretch"):
-                if db.reset_system_logo():
-                    db.add_log(username, "Restaurou a logomarca padrão")
-                    st.session_state["branding_flash"] = {
-                        "level": "success",
-                        "message": "Logomarca padrão restaurada.",
-                    }
-                    st.rerun()
 
         with config_col:
             with st.form("branding_form"):
@@ -480,62 +565,29 @@ if st.session_state.get("role") == "admin":
                     sidebar_1, sidebar_2, sidebar_3 = st.columns(3)
                     sidebar_background = sidebar_1.color_picker(
                         "Fundo da sidebar",
-                        current["sidebar_background_color"],
+                        current.get("sidebar_background_color", current["secondary_color"]),
                     )
                     sidebar_text = sidebar_2.color_picker(
                         "Texto da sidebar",
-                        current["sidebar_text_color"],
+                        current.get("sidebar_text_color", "#F8FAFC"),
                     )
                     sidebar_muted = sidebar_3.color_picker(
                         "Texto secundário da sidebar",
-                        current["sidebar_muted_color"],
+                        current.get("sidebar_muted_color", "#CBD5E1"),
                     )
 
                     sidebar_4, sidebar_5, sidebar_6 = st.columns(3)
                     sidebar_hover = sidebar_4.color_picker(
                         "Hover da sidebar",
-                        current["sidebar_hover_color"],
+                        current.get("sidebar_hover_color", current["primary_color"]),
                     )
                     sidebar_active = sidebar_5.color_picker(
                         "Item ativo da sidebar",
-                        current["sidebar_active_color"],
+                        current.get("sidebar_active_color", current["primary_color"]),
                     )
                     sidebar_active_text = sidebar_6.color_picker(
                         "Texto do item ativo",
-                        current["sidebar_active_text_color"],
-                    )
-
-                with st.expander("Apresentação da logomarca", expanded=True):
-                    logo_mode_labels = {
-                        "auto": "Automático — cria fundo somente quando necessário",
-                        "transparent": "Sempre transparente",
-                        "custom": "Usar sempre um fundo personalizado",
-                    }
-                    mode_values = list(logo_mode_labels)
-                    current_mode = current.get("logo_background_mode", "auto")
-                    logo_background_mode = st.selectbox(
-                        "Tratamento do fundo",
-                        mode_values,
-                        index=mode_values.index(current_mode) if current_mode in mode_values else 0,
-                        format_func=lambda value: logo_mode_labels[value],
-                    )
-                    logo_background_color = st.color_picker(
-                        "Cor personalizada do fundo da logomarca",
-                        current.get("logo_background_color", "#FFFFFF"),
-                        help="Utilizada quando o tratamento do fundo estiver em modo personalizado.",
-                    )
-                    logo_size_1, logo_size_2 = st.columns(2)
-                    logo_padding = logo_size_1.slider(
-                        "Espaçamento interno",
-                        min_value=0,
-                        max_value=40,
-                        value=int(current.get("logo_padding", 12)),
-                    )
-                    logo_border_radius = logo_size_2.slider(
-                        "Arredondamento",
-                        min_value=0,
-                        max_value=40,
-                        value=int(current.get("logo_border_radius", 12)),
+                        current.get("sidebar_active_text_color", "#FFFFFF"),
                     )
 
                 save_branding = st.form_submit_button(
@@ -545,7 +597,7 @@ if st.session_state.get("role") == "admin":
                 )
 
             if save_branding:
-                updated = dict(current)
+                updated = normalize_branding(current)
                 updated.update(
                     {
                         "system_name": system_name,
@@ -565,10 +617,6 @@ if st.session_state.get("role") == "admin":
                         "sidebar_active_color": sidebar_active,
                         "sidebar_active_text_color": sidebar_active_text,
                         "auto_contrast": auto_contrast,
-                        "logo_background_mode": logo_background_mode,
-                        "logo_background_color": logo_background_color,
-                        "logo_padding": logo_padding,
-                        "logo_border_radius": logo_border_radius,
                     }
                 )
                 contrast_warnings = branding_contrast_errors(updated)
@@ -590,13 +638,15 @@ if st.session_state.get("role") == "admin":
 
             if st.button("Restaurar todas as cores padrão", width="stretch"):
                 defaults = get_default_branding()
-                defaults.update(
-                    {
-                        "logo_base64": current.get("logo_base64"),
-                        "logo_mime": current.get("logo_mime"),
-                        "logo_filename": current.get("logo_filename"),
-                    }
-                )
+                for field in (
+                    "logo_base64",
+                    "logo_mime",
+                    "logo_filename",
+                    "sidebar_logo_base64",
+                    "sidebar_logo_mime",
+                    "sidebar_logo_filename",
+                ):
+                    defaults[field] = current.get(field)
                 if db.update_system_settings(defaults):
                     db.add_log(username, "Restaurou a identidade visual padrão")
                     st.session_state["branding_flash"] = {

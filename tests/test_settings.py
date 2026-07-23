@@ -63,3 +63,15 @@ def test_previous_branding_migrates_sidebar_from_existing_colors():
     assert branding["sidebar_background_color"] == "#2D2926"
     assert branding["sidebar_hover_color"] == "#FF5C1A"
     assert branding["sidebar_active_color"] == "#FF5C1A"
+
+def test_branding_supports_independent_sidebar_logo():
+    branding = normalize_branding({"logo_base64": "MAIN", "sidebar_logo_base64": "SIDE"})
+    assert branding["logo_base64"] == "MAIN"
+    assert branding["sidebar_logo_base64"] == "SIDE"
+
+
+def test_old_branding_document_receives_sidebar_defaults():
+    branding = normalize_branding({"secondary_color": "#112233", "primary_color": "#445566"})
+    assert branding["sidebar_background_color"] == "#112233"
+    assert branding["sidebar_hover_color"] == "#445566"
+    assert "sidebar_logo_base64" in branding

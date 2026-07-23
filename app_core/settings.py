@@ -26,9 +26,14 @@ DEFAULT_BRANDING: dict[str, Any] = {
     "logo_background_color": "#FFFFFF",
     "logo_padding": 12,
     "logo_border_radius": 12,
+    # Logomarca principal: páginas, área de login e pré-visualização administrativa.
     "logo_base64": None,
     "logo_mime": None,
     "logo_filename": None,
+    # Logomarca específica da barra lateral. Quando ausente, usa a principal.
+    "sidebar_logo_base64": None,
+    "sidebar_logo_mime": None,
+    "sidebar_logo_filename": None,
     "footer_text": "Uso interno",
 }
 
