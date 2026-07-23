@@ -272,7 +272,22 @@ if st.session_state.get("role") == "admin":
 
     with tab_prices:
         pricing = db.get_pricing_config()
-        st.caption("As alterações são aplicadas imediatamente aos simuladores.")
+        st.caption(
+            "As alterações são aplicadas imediatamente aos simuladores. "
+            "Os custos PJ são internos e nunca aparecem na proposta enviada ao cliente."
+        )
+
+        missing_costs = [
+            f"{plan} / {product}"
+            for plan, products in pricing.get("PLANOS_PJ", {}).items()
+            for product in products
+            if float(pricing.get("CUSTOS_PJ", {}).get(plan, {}).get(product, 0) or 0) <= 0
+        ]
+        if missing_costs:
+            st.warning(
+                f"Existem {len(missing_costs)} combinações de produto e prazo sem custo mensal cadastrado. "
+                "A margem do Simulador PJ ficará pendente para esses itens."
+            )
 
         add_pf, add_pj, add_bid = st.columns(3)
         with add_pf:
@@ -293,14 +308,36 @@ if st.session_state.get("role") == "admin":
                 st.markdown("#### Novo produto PJ")
                 pj_name = st.text_input("Nome do produto")
                 pj_description = st.text_input("Descrição comercial")
-                pj_price = st.number_input("Preço mensal base", min_value=0.0, step=10.0, format="%.2f")
+                pj_price = st.number_input(
+                    "Preço mensal inicial",
+                    min_value=0.0,
+                    step=10.0,
+                    format="%.2f",
+                )
+                pj_cost = st.number_input(
+                    "Custo mensal inicial",
+                    min_value=0.0,
+                    step=10.0,
+                    format="%.2f",
+                    help="Custo unitário mensal por veículo usado no cálculo de margem.",
+                )
                 pj_submit = st.form_submit_button("Adicionar produto", width="stretch")
             if pj_submit and pj_name.strip():
-                for plan_products in pricing.setdefault("PLANOS_PJ", {}).values():
-                    plan_products[pj_name.strip()] = pj_price
-                pricing.setdefault("PRODUTOS_PJ_DESCRICAO", {})[pj_name.strip()] = pj_description.strip() or pj_name.strip()
+                product_name = pj_name.strip()
+                plans_config = pricing.setdefault("PLANOS_PJ", {})
+                costs_config = pricing.setdefault("CUSTOS_PJ", {})
+                for plan_name, plan_products in plans_config.items():
+                    plan_products[product_name] = pj_price
+                    costs_config.setdefault(plan_name, {})[product_name] = pj_cost
+                pricing.setdefault("PRODUTOS_PJ_DESCRICAO", {})[product_name] = (
+                    pj_description.strip() or product_name
+                )
                 if db.update_pricing_config(pricing):
-                    db.add_log(username, "Adicionou produto PJ", {"produto": pj_name, "preco": pj_price})
+                    db.add_log(
+                        username,
+                        "Adicionou produto PJ",
+                        {"produto": product_name, "preco": pj_price, "custo": pj_cost},
+                    )
                     st.success("Produto PJ adicionado.")
                     st.rerun()
 
@@ -348,33 +385,75 @@ if st.session_state.get("role") == "admin":
                         key=f"price_bid_{index}",
                     )
 
-            pj_plans = {plan: dict(products) for plan, products in pricing.get("PLANOS_PJ", {}).items()}
-            with st.expander("Pessoa jurídica", expanded=False):
-                for plan, products in pj_plans.items():
-                    st.markdown(f"**{plan}**")
-                    plan_columns = st.columns(3)
-                    for index, item in enumerate(list(products)):
-                        products[item] = plan_columns[index % 3].number_input(
-                            item,
+            pj_plans = {
+                plan: dict(products)
+                for plan, products in pricing.get("PLANOS_PJ", {}).items()
+            }
+            pj_costs = {
+                plan: dict(pricing.get("CUSTOS_PJ", {}).get(plan, {}))
+                for plan in pj_plans
+            }
+            with st.expander("Pessoa jurídica — preços, custos e margens", expanded=True):
+                st.caption(
+                    "Preço e custo são mensais, unitários e específicos por prazo contratual. "
+                    "A margem é calculada sobre o preço de venda."
+                )
+                for plan_index, (plan, products) in enumerate(pj_plans.items()):
+                    st.markdown(f"##### {plan}")
+                    header_name, header_sale, header_cost = st.columns([1.7, 1, 1])
+                    header_name.markdown("**Produto**")
+                    header_sale.markdown("**Preço mensal**")
+                    header_cost.markdown("**Custo mensal**")
+                    plan_costs = pj_costs.setdefault(plan, {})
+
+                    for product_index, item in enumerate(list(products)):
+                        name_col, sale_col, cost_col = st.columns([1.7, 1, 1])
+                        name_col.markdown(f"**{item}**")
+                        sale_value = sale_col.number_input(
+                            f"Preço {item} {plan}",
                             value=float(products[item]),
                             min_value=0.0,
                             format="%.2f",
-                            key=f"price_pj_{plan}_{index}",
+                            key=f"price_pj_{plan_index}_{product_index}",
+                            label_visibility="collapsed",
                         )
+                        cost_value = cost_col.number_input(
+                            f"Custo {item} {plan}",
+                            value=float(plan_costs.get(item, 0.0) or 0.0),
+                            min_value=0.0,
+                            format="%.2f",
+                            key=f"cost_pj_{plan_index}_{product_index}",
+                            label_visibility="collapsed",
+                        )
+                        products[item] = sale_value
+                        plan_costs[item] = cost_value
 
-            save_prices = st.form_submit_button("Salvar preços", type="primary", width="stretch")
+                        if sale_value > 0 and cost_value > 0:
+                            margin_value = sale_value - cost_value
+                            margin_percent = (margin_value / sale_value) * 100
+                            name_col.caption(
+                                f"Margem padrão: {money(margin_value)} ({margin_percent:.2f}%)"
+                            )
+                        elif cost_value <= 0:
+                            name_col.caption("Margem pendente: informe o custo mensal.")
+                        else:
+                            name_col.caption("Preço zerado: margem indisponível.")
+                    st.markdown("---")
+
+            save_prices = st.form_submit_button("Salvar preços e custos", type="primary", width="stretch")
 
         if save_prices:
             pricing["PRECOS_PF"] = pf_prices
             pricing["PRECO_CUSTO_LICITACAO"] = bid_prices
             pricing["PLANOS_PJ"] = pj_plans
+            pricing["CUSTOS_PJ"] = pj_costs
             pricing["AMORTIZACAO_HARDWARE_MESES"] = amortization
             if db.update_pricing_config(pricing):
-                db.add_log(username, "Atualizou preços e produtos")
-                st.success("Preços atualizados.")
+                db.add_log(username, "Atualizou preços, custos e margens")
+                st.success("Preços e custos atualizados.")
                 st.rerun()
             else:
-                st.error("Não foi possível salvar os preços.")
+                st.error("Não foi possível salvar os preços e custos.")
 
     with tab_branding:
         # A normalização nesta camada impede KeyError mesmo quando o MongoDB

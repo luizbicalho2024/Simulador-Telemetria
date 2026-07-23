@@ -16,7 +16,7 @@ from pymongo.database import Database
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
 from app_core.settings import get_default_branding, normalize_branding
-from config import get_default_pricing
+from config import get_default_pricing, normalize_pricing_config
 
 log = logging.getLogger("SimuladorApp.database")
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -244,15 +244,15 @@ def get_pricing_config() -> dict[str, Any]:
     if collection is not None:
         config = collection.find_one({"_id": "global_prices"})
         if config:
-            return config
-    return get_default_pricing()
+            return normalize_pricing_config(config)
+    return normalize_pricing_config(get_default_pricing())
 
 
 def update_pricing_config(new_config: dict[str, Any]) -> bool:
     collection = get_collection("pricing_config")
     if collection is None:
         return False
-    clean_config = dict(new_config)
+    clean_config = normalize_pricing_config(new_config)
     clean_config.pop("_id", None)
     try:
         collection.update_one(

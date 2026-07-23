@@ -56,12 +56,7 @@ def get_logo_bytes(
     *,
     sidebar: bool = False,
 ) -> bytes | None:
-    """Retorna a logo adequada ao contexto sem adicionar fundos artificiais.
-
-    A sidebar possui uma imagem independente. Enquanto ela não for cadastrada,
-    o sistema reutiliza a logo principal para manter compatibilidade com os
-    dados já existentes no MongoDB.
-    """
+    """Retorna a logo adequada ao contexto, mantendo transparência real."""
     branding = normalize_branding(branding or get_branding())
     base64_field, _, _ = _logo_storage_fields(sidebar=sidebar)
     encoded = branding.get(base64_field)
@@ -94,6 +89,84 @@ def get_logo_mime(
     return str(mime or "image/png")
 
 
+def _hex_to_rgb(value: str) -> tuple[int, int, int]:
+    normalized = str(value or "#000000").strip().lstrip("#")
+    if len(normalized) != 6:
+        normalized = "000000"
+    try:
+        return tuple(int(normalized[index:index + 2], 16) for index in (0, 2, 4))
+    except ValueError:
+        return 0, 0, 0
+
+
+def _mix_hex(first: str, second: str, first_weight: float) -> str:
+    weight = max(0.0, min(float(first_weight), 1.0))
+    first_rgb = _hex_to_rgb(first)
+    second_rgb = _hex_to_rgb(second)
+    mixed = tuple(
+        round(channel_1 * weight + channel_2 * (1 - weight))
+        for channel_1, channel_2 in zip(first_rgb, second_rgb)
+    )
+    return "#{:02X}{:02X}{:02X}".format(*mixed)
+
+
+def plotly_color_sequence(branding: dict[str, Any] | None = None) -> list[str]:
+    branding = normalize_branding(branding or get_branding())
+    primary = branding["primary_color"]
+    accent = branding["accent_color"]
+    secondary = branding["secondary_color"]
+    surface = branding["surface_color"]
+    return [
+        primary,
+        accent,
+        secondary,
+        _mix_hex(primary, surface, 0.68),
+        _mix_hex(accent, surface, 0.68),
+        _mix_hex(secondary, surface, 0.68),
+    ]
+
+
+def style_plotly_figure(fig: Any, branding: dict[str, Any] | None = None) -> Any:
+    """Aplica a identidade visual às figuras Plotly sem manter azul padrão."""
+    branding = normalize_branding(branding or get_branding())
+    resolved = resolve_branding_colors(branding)
+    grid_color = _mix_hex(branding["muted_color"], branding["background_color"], 0.24)
+    border_color = _mix_hex(branding["muted_color"], branding["surface_color"], 0.38)
+
+    fig.update_layout(
+        paper_bgcolor=branding["background_color"],
+        plot_bgcolor=branding["background_color"],
+        font={"color": resolved["text"]},
+        title_font={"color": resolved["text"]},
+        legend={
+            "font": {"color": resolved["text"]},
+            "bgcolor": "rgba(0,0,0,0)",
+        },
+        hoverlabel={
+            "bgcolor": branding["surface_color"],
+            "font_color": resolved["surface_text"],
+            "bordercolor": border_color,
+        },
+    )
+    fig.update_xaxes(
+        color=resolved["muted"],
+        title_font_color=resolved["muted"],
+        tickfont_color=resolved["muted"],
+        gridcolor=grid_color,
+        linecolor=border_color,
+        zerolinecolor=border_color,
+    )
+    fig.update_yaxes(
+        color=resolved["muted"],
+        title_font_color=resolved["muted"],
+        tickfont_color=resolved["muted"],
+        gridcolor=grid_color,
+        linecolor=border_color,
+        zerolinecolor=border_color,
+    )
+    return fig
+
+
 def apply_branding(branding: dict[str, Any] | None = None) -> dict[str, Any]:
     branding = normalize_branding(branding or get_branding())
     resolved = resolve_branding_colors(branding)
@@ -120,7 +193,10 @@ def apply_branding(branding: dict[str, Any] | None = None) -> dict[str, Any]:
         --app-sidebar-hover-text: {resolved['sidebar_hover_text']};
         --app-sidebar-active: {branding['sidebar_active_color']};
         --app-sidebar-active-text: {resolved['sidebar_active_text']};
-        --app-border: color-mix(in srgb, {resolved['surface_muted']} 24%, transparent);
+        --app-border: color-mix(in srgb, var(--app-surface-muted) 34%, var(--app-surface));
+        --app-input-border: color-mix(in srgb, var(--app-text) 40%, var(--app-surface));
+        --app-input-hover-border: color-mix(in srgb, var(--app-primary) 72%, var(--app-text));
+        --app-focus-ring: color-mix(in srgb, var(--app-primary) 24%, transparent);
       }}
 
       html, body, [data-testid="stAppViewContainer"], .stApp {{
@@ -193,7 +269,7 @@ def apply_branding(branding: dict[str, Any] | None = None) -> dict[str, Any]:
         min-height: 2.55rem;
         border-radius: 10px;
         background: color-mix(in srgb, var(--app-primary) 22%, transparent) !important;
-        border: 1px solid color-mix(in srgb, var(--app-sidebar-text) 22%, transparent) !important;
+        border: 1px solid color-mix(in srgb, var(--app-sidebar-text) 28%, transparent) !important;
         color: var(--app-sidebar-text) !important;
         font-weight: 700;
       }}
@@ -238,12 +314,17 @@ def apply_branding(branding: dict[str, Any] | None = None) -> dict[str, Any]:
       [data-testid="stMetric"] {{
         padding: 1rem 1.1rem;
         box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+        min-width: 0;
       }}
 
       [data-testid="stMetricLabel"] p {{ color: var(--app-surface-muted); }}
       [data-testid="stMetricValue"] {{
         color: var(--app-surface-text);
         font-weight: 750;
+        font-size: clamp(1.45rem, 2vw, 2rem);
+        line-height: 1.15;
+        white-space: normal;
+        overflow-wrap: anywhere;
       }}
 
       .stButton > button,
@@ -275,24 +356,101 @@ def apply_branding(branding: dict[str, Any] | None = None) -> dict[str, Any]:
       .stButton > button[kind="primary"]:hover,
       .stDownloadButton > button[kind="primary"]:hover,
       [data-testid="stFormSubmitButton"] > button[kind="primary"]:hover {{
-        background: color-mix(in srgb, var(--app-primary) 86%, black) !important;
+        background: color-mix(in srgb, var(--app-primary) 84%, black) !important;
         color: var(--app-on-primary) !important;
+      }}
+
+      /* Contornos visíveis para todos os campos editáveis. */
+      div[data-baseweb="input"],
+      div[data-baseweb="textarea"],
+      div[data-baseweb="select"] > div,
+      [data-testid="stFileUploaderDropzone"],
+      [data-testid="stDateInput"] div[data-baseweb="input"],
+      [data-testid="stTimeInput"] div[data-baseweb="input"] {{
+        background: var(--app-surface) !important;
+        border: 1.5px solid var(--app-input-border) !important;
+        border-radius: 10px !important;
+        box-shadow: none !important;
+        transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+      }}
+
+      div[data-baseweb="input"]:hover,
+      div[data-baseweb="textarea"]:hover,
+      div[data-baseweb="select"] > div:hover,
+      [data-testid="stFileUploaderDropzone"]:hover {{
+        border-color: var(--app-input-hover-border) !important;
+      }}
+
+      div[data-baseweb="input"]:focus-within,
+      div[data-baseweb="textarea"]:focus-within,
+      div[data-baseweb="select"] > div:focus-within,
+      [data-testid="stFileUploaderDropzone"]:focus-within {{
+        border-color: var(--app-primary) !important;
+        box-shadow: 0 0 0 3px var(--app-focus-ring) !important;
       }}
 
       .stTextInput input,
       .stNumberInput input,
       .stTextArea textarea,
-      div[data-baseweb="select"] > div {{
-        border-radius: 10px;
-        background: var(--app-surface);
-        color: var(--app-surface-text);
+      [data-testid="stDateInput"] input,
+      [data-testid="stTimeInput"] input,
+      div[data-baseweb="select"] input {{
+        background: transparent !important;
+        color: var(--app-surface-text) !important;
       }}
 
-      .stTextInput input:focus,
-      .stNumberInput input:focus,
-      .stTextArea textarea:focus {{
+      input::placeholder,
+      textarea::placeholder {{
+        color: var(--app-surface-muted) !important;
+        opacity: .8 !important;
+      }}
+
+      div[data-baseweb="select"] svg,
+      div[data-baseweb="input"] svg {{
+        color: var(--app-surface-muted) !important;
+        fill: currentColor !important;
+      }}
+
+      /* Multiselect, calendário e seleções usam a cor corporativa. */
+      [data-baseweb="tag"] {{
+        background: var(--app-primary) !important;
+        color: var(--app-on-primary) !important;
+        border: 1px solid var(--app-primary) !important;
+      }}
+
+      [data-baseweb="tag"] span,
+      [data-baseweb="tag"] svg {{
+        color: var(--app-on-primary) !important;
+        fill: var(--app-on-primary) !important;
+      }}
+
+      [data-baseweb="menu"] {{
+        background: var(--app-surface) !important;
+        color: var(--app-surface-text) !important;
+        border: 1px solid var(--app-input-border) !important;
+      }}
+
+      [role="option"] {{
+        color: var(--app-surface-text) !important;
+      }}
+
+      [role="option"]:hover,
+      [role="option"][aria-selected="true"] {{
+        background: color-mix(in srgb, var(--app-primary) 18%, var(--app-surface)) !important;
+        color: var(--app-surface-text) !important;
+      }}
+
+      [data-baseweb="calendar"] [aria-selected="true"],
+      [data-baseweb="calendar"] button[aria-pressed="true"] {{
+        background: var(--app-primary) !important;
+        color: var(--app-on-primary) !important;
+      }}
+
+      [data-testid="stCheckbox"] input:checked + div,
+      [data-testid="stToggle"] input:checked + div,
+      [data-testid="stRadio"] input:checked + div {{
+        background-color: var(--app-primary) !important;
         border-color: var(--app-primary) !important;
-        box-shadow: 0 0 0 1px var(--app-primary) !important;
       }}
 
       div[data-baseweb="tab-highlight"] {{ background-color: var(--app-primary); }}
@@ -300,6 +458,10 @@ def apply_branding(branding: dict[str, Any] | None = None) -> dict[str, Any]:
 
       [data-testid="stProgress"] > div > div > div,
       [data-testid="stSlider"] [role="slider"] {{
+        background-color: var(--app-primary) !important;
+      }}
+
+      [data-testid="stSlider"] [data-testid="stTickBar"] > div {{
         background-color: var(--app-primary) !important;
       }}
 
@@ -322,17 +484,12 @@ def apply_branding(branding: dict[str, Any] | None = None) -> dict[str, Any]:
         object-fit: contain;
       }}
 
-      .app-logo-shell--sidebar {{
-        margin: .2rem 0 1rem;
-      }}
-
-      .app-logo-shell--content {{
-        margin: .25rem 0 1rem;
-      }}
+      .app-logo-shell--sidebar {{ margin: .2rem 0 1rem; }}
+      .app-logo-shell--content {{ margin: .25rem 0 1rem; }}
 
       .app-session-card {{
-        border: 1px solid color-mix(in srgb, var(--app-sidebar-text) 15%, transparent);
-        background: color-mix(in srgb, var(--app-sidebar-text) 6%, transparent);
+        border: 1px solid color-mix(in srgb, var(--app-sidebar-text) 18%, transparent);
+        background: color-mix(in srgb, var(--app-sidebar-text) 7%, transparent);
         border-radius: 12px;
         padding: .8rem .9rem;
         margin: .55rem 0 .65rem;
@@ -411,7 +568,7 @@ def render_logo(
     max_width: int = 250,
     branding: dict[str, Any] | None = None,
 ) -> None:
-    """Renderiza a logo principal ou a logo da sidebar com transparência real."""
+    """Renderiza a logo principal ou da sidebar sem fundo artificial."""
     branding = normalize_branding(branding or get_branding())
     logo = get_logo_bytes(branding, sidebar=sidebar)
     if not logo:
@@ -424,8 +581,7 @@ def render_logo(
     alt = "Logomarca da barra lateral" if sidebar else "Logomarca principal do sistema"
 
     markup = f"""
-    <div class="app-logo-shell {panel_class}"
-         style="width:min(100%, {safe_width}px);">
+    <div class="app-logo-shell {panel_class}" style="width:min(100%, {safe_width}px);">
       <img src="data:{html.escape(mime)};base64,{encoded}"
            alt="{html.escape(alt)}"
            style="max-width:{safe_width}px;" />
@@ -470,23 +626,10 @@ def render_sidebar(*, current_page: str | None = None, include_logout: bool = Tr
             unsafe_allow_html=True,
         )
 
-        # O logout fica imediatamente abaixo da sessão, permanecendo visível
-        # mesmo quando a lista de páginas é longa.
         if include_logout:
-            try:
-                from app_core.auth import build_authenticator
+            from app_core.auth import render_logout_button
 
-                authenticator, _ = build_authenticator()
-                logout_key = "sidebar_logout"
-                if current_page:
-                    normalized_page = "".join(
-                        character if character.isalnum() else "_"
-                        for character in str(current_page)
-                    )
-                    logout_key = f"sidebar_logout_{normalized_page}"
-                authenticator.logout("Sair da plataforma", "sidebar", key=logout_key)
-            except Exception:
-                st.sidebar.caption("Não foi possível carregar o encerramento de sessão.")
+            render_logout_button(key="global_sidebar_logout")
 
         st.sidebar.markdown("---")
         st.sidebar.caption("Navegação")
