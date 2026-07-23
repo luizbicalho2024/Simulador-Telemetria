@@ -1,295 +1,528 @@
-# user_management_db.py
-import streamlit as st
+from __future__ import annotations
+
+import base64
+import logging
+import re
+from datetime import datetime, time
+from typing import Any, Iterable
+
 import pymongo
+import streamlit as st
 from bson import ObjectId
 from passlib.context import CryptContext
-from datetime import datetime, time
+from pymongo import ASCENDING, DESCENDING, UpdateOne
+from pymongo.collection import Collection
+from pymongo.database import Database
+from pymongo.errors import DuplicateKeyError, PyMongoError
+
+from app_core.settings import get_default_branding, normalize_branding
 from config import get_default_pricing
 
-# --- 1. CONFIGURAÇÃO DE SEGURANÇA E CONEXÃO ---
+log = logging.getLogger("SimuladorApp.database")
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+DB_NAME = "simulador_db"
 
-@st.cache_resource(show_spinner="A ligar à base de dados...")
-def get_mongo_client():
-    try:
-        client = pymongo.MongoClient(st.secrets["MONGO_CONNECTION_STRING"])
-        client.admin.command('ping')
-        return client
-    except Exception as e:
-        print(f"CRITICAL: Erro de conexão com o MongoDB: {e}")
+
+def _secret(*names: str, default: Any = None) -> Any:
+    for name in names:
+        try:
+            value = st.secrets.get(name)
+        except Exception:
+            value = None
+        if value not in (None, ""):
+            return value
+    return default
+
+
+@st.cache_resource(show_spinner="Conectando ao banco de dados...")
+def get_mongo_client() -> pymongo.MongoClient | None:
+    connection_string = _secret("MONGO_CONNECTION_STRING", "mongo_connection_string")
+    if not connection_string:
+        log.error("MONGO_CONNECTION_STRING não foi configurada.")
         return None
 
-@st.cache_resource
-def get_collection(collection_name: str):
-    client = get_mongo_client()
-    if client is not None:
-        db = client["simulador_db"]
-        return db[collection_name]
-    return None
+    try:
+        client = pymongo.MongoClient(
+            connection_string,
+            serverSelectionTimeoutMS=8_000,
+            connectTimeoutMS=8_000,
+            socketTimeoutMS=20_000,
+            maxPoolSize=20,
+            minPoolSize=0,
+            retryWrites=True,
+            appname="simulador-telemetria",
+        )
+        client.admin.command("ping")
+        return client
+    except PyMongoError:
+        log.exception("Falha ao conectar ao MongoDB.")
+        return None
 
-def get_users_collection():
+
+@st.cache_resource
+def get_database() -> Database | None:
+    client = get_mongo_client()
+    if client is None:
+        return None
+    return client[DB_NAME]
+
+
+@st.cache_resource
+def get_collection(collection_name: str) -> Collection | None:
+    database = get_database()
+    return database[collection_name] if database is not None else None
+
+
+@st.cache_resource
+def initialize_database() -> bool:
+    database = get_database()
+    if database is None:
+        return False
+
+    try:
+        database.users.create_index([("username", ASCENDING)], unique=True, name="uq_users_username")
+        database.users.create_index([("email", ASCENDING)], sparse=True, name="ix_users_email")
+        database.activity_logs.create_index([("timestamp", DESCENDING)], name="ix_logs_timestamp")
+        database.activity_logs.create_index([("user", ASCENDING), ("timestamp", DESCENDING)], name="ix_logs_user_timestamp")
+        database.proposals.create_index([("data_geracao", DESCENDING)], name="ix_proposals_date")
+        database.proposals.create_index(
+            [("empresa", ASCENDING), ("consultor", ASCENDING), ("tipo", ASCENDING), ("data_geracao", DESCENDING)],
+            name="ix_proposals_lookup",
+        )
+        database.billing_history.create_index([("data_geracao", DESCENDING)], name="ix_billing_date")
+        database.fipe_vehicles.create_index(
+            [("codigoFipe", ASCENDING), ("anoModelo", ASCENDING), ("combustivel", ASCENDING)],
+            unique=True,
+            sparse=True,
+            name="uq_fipe_vehicle",
+        )
+        database.system_settings.create_index([("_id", ASCENDING)], unique=True, name="uq_system_settings")
+        return True
+    except PyMongoError:
+        log.exception("Falha ao criar índices do MongoDB.")
+        return False
+
+
+def get_users_collection() -> Collection | None:
     return get_collection("users")
 
-# --- 2. FUNÇÕES DE GESTÃO DE SENHAS ---
-def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
 
-def get_password_hash(password):
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except (ValueError, TypeError):
+        return False
+
+
+def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
-# --- 3. FUNÇÕES DE GESTÃO DE UTILIZADORES ---
-def fetch_all_users_for_auth():
+
+def fetch_all_users_for_auth() -> dict[str, dict[str, dict[str, str]]]:
     users_collection = get_users_collection()
-    credentials = {"usernames": {}}
-    if users_collection is not None:
-        for user in users_collection.find({}, {"_id": 0}):
-            username = user.get("username")
-            if username:
-                credentials["usernames"][username] = {
-                    "name": user.get("name"), "email": user.get("email"),
-                    "password": user.get("hashed_password"), "role": user.get("role")
-                }
+    credentials: dict[str, dict[str, dict[str, str]]] = {"usernames": {}}
+    if users_collection is None:
+        return credentials
+
+    projection = {"_id": 0, "username": 1, "name": 1, "email": 1, "hashed_password": 1, "role": 1, "active": 1}
+    for user in users_collection.find({"active": {"$ne": False}}, projection):
+        username = str(user.get("username") or "").strip().lower()
+        hashed_password = user.get("hashed_password")
+        if username and hashed_password:
+            credentials["usernames"][username] = {
+                "name": str(user.get("name") or username),
+                "email": str(user.get("email") or ""),
+                "password": str(hashed_password),
+                "role": str(user.get("role") or "user"),
+            }
     return credentials
 
-def add_user(username, name, email, password, role):
+
+def add_user(username: str, name: str, email: str, password: str, role: str) -> bool:
     users_collection = get_users_collection()
-    if users_collection is None: return False
-    if users_collection.find_one({"username": username}):
-        st.warning(f"O nome de utilizador '{username}' já existe.")
+    if users_collection is None:
         return False
-    users_collection.insert_one({
-        "username": username, "name": name, "email": email,
-        "hashed_password": get_password_hash(password), "role": role
-    })
-    return True
 
-def get_user_role(username):
+    username = username.strip().lower()
+    email = email.strip().lower()
+    name = name.strip()
+    role = role if role in {"admin", "user"} else "user"
+    if not username or not name or not email or len(password) < 8:
+        return False
+
+    try:
+        users_collection.insert_one(
+            {
+                "username": username,
+                "name": name,
+                "email": email,
+                "hashed_password": get_password_hash(password),
+                "role": role,
+                "active": True,
+                "created_at": datetime.now(),
+                "updated_at": datetime.now(),
+            }
+        )
+        return True
+    except DuplicateKeyError:
+        return False
+    except PyMongoError:
+        log.exception("Falha ao cadastrar usuário.")
+        return False
+
+
+def get_user_role(username: str) -> str | None:
     users_collection = get_users_collection()
-    if users_collection is not None:
-        user_data = users_collection.find_one({"username": username})
-        return user_data.get("role") if user_data else None
-    return None
+    if users_collection is None:
+        return None
+    user = users_collection.find_one({"username": username.strip().lower()}, {"role": 1, "active": 1})
+    if not user or user.get("active") is False:
+        return None
+    return str(user.get("role") or "user")
 
-def update_user_password(username, new_password):
+
+def update_user_password(username: str, new_password: str) -> bool:
     users_collection = get_users_collection()
-    if users_collection is None: return False
-    new_hashed_password = get_password_hash(new_password)
-    result = users_collection.update_one({"username": username}, {"$set": {"hashed_password": new_hashed_password}})
-    return result.modified_count > 0
+    if users_collection is None or len(new_password) < 8:
+        return False
+    result = users_collection.update_one(
+        {"username": username.strip().lower()},
+        {"$set": {"hashed_password": get_password_hash(new_password), "updated_at": datetime.now()}},
+    )
+    return result.matched_count > 0
 
-def reset_user_password_by_admin(username: str, new_password: str):
+
+def reset_user_password_by_admin(username: str, new_password: str) -> bool:
     return update_user_password(username, new_password)
 
-def update_user_details(username, name, email, role):
-    users_collection = get_users_collection()
-    if users_collection is None: return False
-    result = users_collection.update_one({"username": username}, {"$set": {"name": name, "email": email, "role": role}})
-    return result.modified_count > 0
 
-def delete_user(username):
+def update_user_details(username: str, name: str, email: str, role: str, active: bool = True) -> bool:
     users_collection = get_users_collection()
-    if users_collection is None: return False
-    if get_user_role(username) == "admin" and users_collection.count_documents({"role": "admin"}) <= 1:
-        st.error("Não é possível excluir o único administrador.")
+    if users_collection is None:
         return False
-    result = users_collection.delete_one({"username": username})
-    return result.deleted_count > 0
+    role = role if role in {"admin", "user"} else "user"
+    result = users_collection.update_one(
+        {"username": username.strip().lower()},
+        {
+            "$set": {
+                "name": name.strip(),
+                "email": email.strip().lower(),
+                "role": role,
+                "active": bool(active),
+                "updated_at": datetime.now(),
+            }
+        },
+    )
+    return result.matched_count > 0
 
-def get_all_users_for_admin_display():
+
+def delete_user(username: str) -> bool:
     users_collection = get_users_collection()
-    if users_collection is not None:
-        return list(users_collection.find({}, {"_id": 0, "hashed_password": 0}))
-    return []
+    if users_collection is None:
+        return False
 
-# --- 4. FUNÇÕES PARA GESTÃO DE PREÇOS ---
-@st.cache_data(ttl=300)
-def get_pricing_config():
-    pricing_collection = get_collection("pricing_config")
-    if pricing_collection is not None:
-        config = pricing_collection.find_one({"_id": "global_prices"})
+    normalized = username.strip().lower()
+    user = users_collection.find_one({"username": normalized}, {"role": 1})
+    if not user:
+        return False
+    if user.get("role") == "admin" and users_collection.count_documents({"role": "admin", "active": {"$ne": False}}) <= 1:
+        return False
+    return users_collection.delete_one({"username": normalized}).deleted_count > 0
+
+
+def get_all_users_for_admin_display() -> list[dict[str, Any]]:
+    users_collection = get_users_collection()
+    if users_collection is None:
+        return []
+    projection = {"_id": 0, "hashed_password": 0}
+    return list(users_collection.find({}, projection).sort("name", ASCENDING))
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def get_pricing_config() -> dict[str, Any]:
+    collection = get_collection("pricing_config")
+    if collection is not None:
+        config = collection.find_one({"_id": "global_prices"})
         if config:
             return config
     return get_default_pricing()
 
-def update_pricing_config(new_config: dict):
-    pricing_collection = get_collection("pricing_config")
-    if pricing_collection is not None:
-        try:
-            new_config.pop('_id', None)
-            pricing_collection.update_one(
-                {"_id": "global_prices"}, {"$set": new_config}, upsert=True
-            )
-            st.cache_data.clear()
-            return True
-        except Exception as e:
-            print(f"ERROR: Falha ao atualizar preços: {e}")
-            return False
-    return False
 
-# --- 5. FUNÇÕES PARA DASHBOARD, LOGS E FATURAMENTO ---
-def add_log(user: str, action: str, details: dict = None):
-    logs_collection = get_collection("activity_logs")
-    if logs_collection is not None:
-        try:
-            log_entry = {
-                "timestamp": datetime.now(), "user": user,
-                "action": action, "details": details if details is not None else {}
-            }
-            logs_collection.insert_one(log_entry)
-            return True
-        except Exception as e:
-            print(f"ERROR: Falha ao registar log: {e}")
-            return False
-    return False
-
-def get_all_logs():
-    logs_collection = get_collection("activity_logs")
-    if logs_collection is not None:
-        return list(logs_collection.find({}).sort("timestamp", -1))
-    return []
-
-def upsert_proposal(proposal_data: dict):
-    """
-    Atualiza uma proposta existente ou insere uma nova (upsert).
-    """
-    proposals_collection = get_collection("proposals")
-    if proposals_collection is not None:
-        try:
-            today_start = datetime.combine(datetime.now().date(), time.min)
-            today_end = datetime.combine(datetime.now().date(), time.max)
-
-            query_filter = {
-                "empresa": proposal_data.get("empresa"),
-                "consultor": proposal_data.get("consultor"),
-                "tipo": proposal_data.get("tipo"),
-                "data_geracao": {"$gte": today_start, "$lt": today_end}
-            }
-
-            update_data = {
-                "$set": {
-                    "valor_total": proposal_data.get("valor_total"),
-                    "data_geracao": datetime.now()
-                },
-                "$setOnInsert": {
-                    "empresa": proposal_data.get("empresa"),
-                    "consultor": proposal_data.get("consultor"),
-                    "tipo": proposal_data.get("tipo"),
-                }
-            }
-            
-            result = proposals_collection.update_one(query_filter, update_data, upsert=True)
-            
-            if result.upserted_id is not None:
-                st.toast("Nova proposta registrada no dashboard!", icon="📊")
-            else:
-                st.toast("Proposta de hoje foi atualizada no dashboard!", icon="🔄")
-                
-            return True
-        except Exception as e:
-            print(f"ERROR: Falha ao fazer upsert da proposta: {e}")
-            return False
-    return False
-
-def get_all_proposals():
-    proposals_collection = get_collection("proposals")
-    if proposals_collection is not None:
-        return proposals_collection.find({}).sort("data_geracao", -1)
-    return []
-
-def delete_proposal(proposal_id: str):
-    proposals_collection = get_collection("proposals")
-    if proposals_collection is not None:
-        try:
-            result = proposals_collection.delete_one({"_id": ObjectId(proposal_id)})
-            if result.deleted_count > 0:
-                add_log(st.session_state["username"], "Excluiu Proposta", details={"id_proposta": proposal_id})
-                st.toast("Proposta excluída com sucesso!", icon="🗑️")
-            return result.deleted_count > 0
-        except Exception as e:
-            print(f"ERROR: Falha ao excluir proposta (ID: {proposal_id}): {e}")
-            return False
-    return False
-
-def log_faturamento(faturamento_data: dict):
-    history_collection = get_collection("billing_history")
-    if history_collection is not None:
-        try:
-            faturamento_data["data_geracao"] = datetime.now()
-            faturamento_data["gerado_por"] = st.session_state.get("name", "N/A")
-            history_collection.insert_one(faturamento_data)
-            add_log(
-                st.session_state["username"], 
-                "Exportou e Salvou Faturamento", 
-                details={"cliente": faturamento_data.get('cliente'), "valor": f"R$ {faturamento_data.get('valor_total'):,.2f}"}
-            )
-            st.toast("Histórico de faturamento salvo com sucesso!", icon="💾")
-            return True
-        except Exception as e:
-            print(f"ERROR: Falha ao registar histórico de faturamento: {e}")
-            return False
-    return False
-
-def get_billing_history():
-    history_collection = get_collection("billing_history")
-    if history_collection is not None:
-        return list(history_collection.find({}).sort("data_geracao", -1))
-    return []
-
-def delete_billing_history(history_id: str):
-    history_collection = get_collection("billing_history")
-    if history_collection is not None:
-        try:
-            result = history_collection.delete_one({"_id": ObjectId(history_id)})
-            if result.deleted_count > 0:
-                add_log(st.session_state["username"], "Excluiu Histórico de Faturamento", details={"id_registo": history_id})
-                st.toast("Registo de histórico excluído com sucesso!", icon="🗑️")
-            return result.deleted_count > 0
-        except Exception as e:
-            print(f"ERROR: Falha ao excluir histórico de faturamento (ID: {history_id}): {e}")
-            return False
-    return False
-def get_fipe_collection():
-    """Retorna a coleção de veículos da FIPE."""
-    return get_collection("fipe_vehicles")
-
-def save_fipe_data(vehicle_data_list: list):
-    """
-    Salva uma lista de dados de veículos da FIPE no banco de dados.
-    Usa o 'codigoFipe' e 'anoModelo' como chave única para evitar duplicatas.
-    """
-    fipe_collection = get_fipe_collection()
-    if fipe_collection is None: return False
-    
+def update_pricing_config(new_config: dict[str, Any]) -> bool:
+    collection = get_collection("pricing_config")
+    if collection is None:
+        return False
+    clean_config = dict(new_config)
+    clean_config.pop("_id", None)
     try:
-        for vehicle in vehicle_data_list:
-            # Chave de busca única para cada variação de modelo/ano
-            query = {
-                "codigoFipe": vehicle.get("codigoFipe"),
-                "anoModelo": vehicle.get("anoModelo")
-            }
-            # O operador $set garante que o documento seja atualizado se já existir
-            update = {"$set": vehicle}
-            fipe_collection.update_one(query, update, upsert=True)
+        collection.update_one(
+            {"_id": "global_prices"},
+            {"$set": clean_config, "$currentDate": {"updated_at": True}},
+            upsert=True,
+        )
+        get_pricing_config.clear()
         return True
-    except Exception as e:
-        print(f"ERROR: Falha ao salvar dados da FIPE: {e}")
+    except PyMongoError:
+        log.exception("Falha ao atualizar preços.")
         return False
 
-def search_vehicle_in_db(model_name: str):
-    """
-    Busca por veículos no banco de dados local cujo modelo contenha o termo pesquisado.
-    """
-    fipe_collection = get_fipe_collection()
-    if fipe_collection is None: return []
-    
+
+@st.cache_data(ttl=300, show_spinner=False)
+def get_system_settings() -> dict[str, Any]:
+    collection = get_collection("system_settings")
+    if collection is not None:
+        settings = collection.find_one({"_id": "global_branding"})
+        if settings:
+            return normalize_branding(settings)
+    return get_default_branding()
+
+
+def update_system_settings(settings: dict[str, Any]) -> bool:
+    collection = get_collection("system_settings")
+    if collection is None:
+        return False
+    normalized = normalize_branding(settings)
+    normalized.pop("_id", None)
     try:
-        # Usando regex para fazer uma busca "case-insensitive" (não diferencia maiúsculas/minúsculas)
-        # O 'i' no final da regex é o que ativa a busca case-insensitive
-        regex_query = {"$regex": model_name, "$options": "i"}
-        
-        # Busca no campo 'modelo' usando a regex
-        results = fipe_collection.find({"modelo": regex_query}).sort("anoModelo", -1)
-        return list(results)
-    except Exception as e:
-        print(f"ERROR: Falha ao buscar veículo no DB: {e}")
+        collection.update_one(
+            {"_id": "global_branding"},
+            {"$set": normalized, "$currentDate": {"updated_at": True}},
+            upsert=True,
+        )
+        get_system_settings.clear()
+        return True
+    except PyMongoError:
+        log.exception("Falha ao atualizar identidade visual.")
+        return False
+
+
+def update_system_logo(raw_bytes: bytes, mime: str, filename: str) -> bool:
+    settings = get_system_settings()
+    settings.update(
+        {
+            "logo_base64": base64.b64encode(raw_bytes).decode("ascii"),
+            "logo_mime": mime,
+            "logo_filename": filename,
+        }
+    )
+    return update_system_settings(settings)
+
+
+def reset_system_logo() -> bool:
+    settings = get_system_settings()
+    settings.update({"logo_base64": None, "logo_mime": None, "logo_filename": None})
+    return update_system_settings(settings)
+
+
+def add_log(user: str, action: str, details: Any = None) -> bool:
+    collection = get_collection("activity_logs")
+    if collection is None:
+        return False
+    try:
+        collection.insert_one(
+            {
+                "timestamp": datetime.now(),
+                "user": str(user or "sistema"),
+                "action": str(action),
+                "details": details if details is not None else {},
+            }
+        )
+        return True
+    except PyMongoError:
+        log.exception("Falha ao registrar log.")
+        return False
+
+
+def get_all_logs(limit: int = 2_000) -> list[dict[str, Any]]:
+    collection = get_collection("activity_logs")
+    if collection is None:
         return []
+    safe_limit = max(1, min(int(limit), 10_000))
+    return list(collection.find({}).sort("timestamp", DESCENDING).limit(safe_limit))
+
+
+def upsert_proposal(proposal_data: dict[str, Any]) -> bool:
+    collection = get_collection("proposals")
+    if collection is None:
+        return False
+    try:
+        now = datetime.now()
+        day_start = datetime.combine(now.date(), time.min)
+        day_end = datetime.combine(now.date(), time.max)
+        query = {
+            "empresa": str(proposal_data.get("empresa") or "").strip(),
+            "consultor": str(proposal_data.get("consultor") or "").strip(),
+            "tipo": str(proposal_data.get("tipo") or "").strip(),
+            "data_geracao": {"$gte": day_start, "$lte": day_end},
+        }
+        collection.update_one(
+            query,
+            {
+                "$set": {
+                    "valor_total": float(proposal_data.get("valor_total") or 0),
+                    "data_geracao": now,
+                    "updated_at": now,
+                },
+                "$setOnInsert": {
+                    "empresa": query["empresa"],
+                    "consultor": query["consultor"],
+                    "tipo": query["tipo"],
+                    "created_at": now,
+                },
+            },
+            upsert=True,
+        )
+        return True
+    except (PyMongoError, TypeError, ValueError):
+        log.exception("Falha ao salvar proposta.")
+        return False
+
+
+# Compatibilidade com versões anteriores do projeto.
+def log_proposal(proposal_data: dict[str, Any]) -> bool:
+    return upsert_proposal(proposal_data)
+
+
+def get_all_proposals(limit: int = 5_000) -> list[dict[str, Any]]:
+    collection = get_collection("proposals")
+    if collection is None:
+        return []
+    safe_limit = max(1, min(int(limit), 20_000))
+    return list(collection.find({}).sort("data_geracao", DESCENDING).limit(safe_limit))
+
+
+def get_recent_proposals(limit: int = 10) -> list[dict[str, Any]]:
+    return get_all_proposals(limit=limit)
+
+
+def delete_proposal(proposal_id: str) -> bool:
+    collection = get_collection("proposals")
+    if collection is None:
+        return False
+    try:
+        return collection.delete_one({"_id": ObjectId(proposal_id)}).deleted_count > 0
+    except (PyMongoError, ValueError):
+        log.exception("Falha ao excluir proposta.")
+        return False
+
+
+def get_dashboard_summary() -> dict[str, Any]:
+    collection = get_collection("proposals")
+    users = get_users_collection()
+    if collection is None:
+        return {"total_proposals": 0, "total_value": 0.0, "active_users": 0, "last_proposal": None}
+
+    pipeline = [
+        {
+            "$group": {
+                "_id": None,
+                "total_proposals": {"$sum": 1},
+                "total_value": {"$sum": "$valor_total"},
+                "last_proposal": {"$max": "$data_geracao"},
+            }
+        }
+    ]
+    aggregated = list(collection.aggregate(pipeline))
+    summary = aggregated[0] if aggregated else {}
+    return {
+        "total_proposals": int(summary.get("total_proposals", 0)),
+        "total_value": float(summary.get("total_value", 0.0)),
+        "active_users": users.count_documents({"active": {"$ne": False}}) if users is not None else 0,
+        "last_proposal": summary.get("last_proposal"),
+    }
+
+
+def log_faturamento(faturamento_data: dict[str, Any]) -> bool:
+    collection = get_collection("billing_history")
+    if collection is None:
+        return False
+    try:
+        document = dict(faturamento_data)
+        document["data_geracao"] = datetime.now()
+        document["gerado_por"] = st.session_state.get("name", "N/A")
+        collection.insert_one(document)
+        add_log(
+            st.session_state.get("username", "sistema"),
+            "Exportou e salvou faturamento",
+            {"cliente": document.get("cliente"), "valor": document.get("valor_total")},
+        )
+        return True
+    except PyMongoError:
+        log.exception("Falha ao salvar histórico de faturamento.")
+        return False
+
+
+def get_billing_history(limit: int = 5_000) -> list[dict[str, Any]]:
+    collection = get_collection("billing_history")
+    if collection is None:
+        return []
+    return list(collection.find({}).sort("data_geracao", DESCENDING).limit(max(1, min(limit, 20_000))))
+
+
+def delete_billing_history(history_id: str) -> bool:
+    collection = get_collection("billing_history")
+    if collection is None:
+        return False
+    try:
+        return collection.delete_one({"_id": ObjectId(history_id)}).deleted_count > 0
+    except (PyMongoError, ValueError):
+        log.exception("Falha ao excluir histórico de faturamento.")
+        return False
+
+
+def get_fipe_collection() -> Collection | None:
+    return get_collection("fipe_vehicles")
+
+
+def save_fipe_data(vehicle_data_list: Iterable[dict[str, Any]]) -> bool:
+    collection = get_fipe_collection()
+    if collection is None:
+        return False
+
+    operations: list[UpdateOne] = []
+    for source in vehicle_data_list:
+        vehicle = dict(source)
+        code = vehicle.get("codigoFipe") or vehicle.get("CodigoFipe")
+        year = vehicle.get("anoModelo") or vehicle.get("AnoModelo")
+        fuel = vehicle.get("combustivel") or vehicle.get("Combustivel") or ""
+        if not code or year is None:
+            continue
+        vehicle.update(
+            {
+                "codigoFipe": code,
+                "anoModelo": year,
+                "combustivel": fuel,
+                "modelo": vehicle.get("modelo") or vehicle.get("Modelo") or "",
+                "marca": vehicle.get("marca") or vehicle.get("Marca") or "",
+                "valor": vehicle.get("valor") or vehicle.get("Valor") or "",
+                "mesReferencia": vehicle.get("mesReferencia") or vehicle.get("MesReferencia") or "",
+                "updated_at": datetime.now(),
+            }
+        )
+        operations.append(
+            UpdateOne(
+                {"codigoFipe": code, "anoModelo": year, "combustivel": fuel},
+                {"$set": vehicle},
+                upsert=True,
+            )
+        )
+
+    if not operations:
+        return False
+    try:
+        collection.bulk_write(operations, ordered=False)
+        return True
+    except PyMongoError:
+        log.exception("Falha ao salvar dados FIPE.")
+        return False
+
+
+def search_vehicle_in_db(model_name: str, limit: int = 200) -> list[dict[str, Any]]:
+    collection = get_fipe_collection()
+    if collection is None:
+        return []
+    term = re.escape(model_name.strip())
+    if not term:
+        return []
+    query = {"modelo": {"$regex": term, "$options": "i"}}
+    return list(collection.find(query).sort("anoModelo", DESCENDING).limit(max(1, min(limit, 1_000))))

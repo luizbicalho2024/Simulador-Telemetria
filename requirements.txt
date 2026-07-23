@@ -1,45 +1,22 @@
-# --- Core do Streamlit ---
-streamlit>=1.33.0
-streamlit-authenticator>=0.3.2
-streamlit-option-menu
-streamlit_extras
+streamlit==1.56.0
+streamlit-authenticator==0.3.3
 
-# --- Autenticação e Segurança (Versões Fixadas para Compatibilidade) ---
+pymongo[srv]>=4.6,<5.0
 passlib==1.7.4
-bcrypt==3.2.0
+bcrypt==3.2.2
 
-# --- Base de Dados ---
-pymongo[srv]>=4.6.0
+pandas>=2.1,<3.0
+openpyxl>=3.1,<4.0
+XlsxWriter>=3.2,<4.0
 
-# --- Manipulação de Dados e Planilhas ---
-pandas
-numpy
-openpyxl
-XlsxWriter
-xlrd
+python-docx>=1.1,<2.0
+fpdf2>=2.8,<3.0
+Pillow>=10.4,<13.0
 
-# --- Geração de Documentos e Relatórios ---
-python-docx
-docxtpl
-fpdf2
+requests>=2.31,<3.0
+twilio>=9.0,<10.0
 
-# --- APIs, Web e Comunicação ---
-requests
-twilio
+plotly>=5.24,<7.0
+folium>=0.17,<1.0
+streamlit-folium>=0.23,<1.0
 
-# --- Automação Web (Robô) ---
-selenium
-webdriver-manager
-
-# --- Visualização e Mapas ---
-plotly
-folium
-streamlit-folium
-Pillow
-
-# --- Processamento de HTML/XML ---
-html5lib
-lxml
-
-# --- Testes (Opcional) ---
-pytest

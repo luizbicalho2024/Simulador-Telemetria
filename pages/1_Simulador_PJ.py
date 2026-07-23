@@ -1,145 +1,188 @@
-# pages/1_Simulador_PJ.py
+from __future__ import annotations
+
 import io
 from datetime import datetime
 from decimal import Decimal
+from pathlib import Path
+
+import docx
 import streamlit as st
-import docx # Usando a biblioteca python-docx
-import user_management_db as umdb
 
-# --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
-st.set_page_config(layout="wide", page_title="Simulador Pessoa Jurídica", page_icon="imgs/v-c.png")
+import user_management_db as db
+from app_core.auth import require_auth
+from app_core.ui import apply_branding, configure_page, money, render_hero, render_sidebar
 
-if not st.session_state.get("authentication_status"):
-    st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
+configure_page("Simulador Pessoa Jurídica")
+apply_branding()
+require_auth()
+render_sidebar()
+render_hero("Simulador de venda — Pessoa Jurídica", "Configure a frota, o prazo contratual e os serviços para gerar a proposta comercial.")
+
+ROOT = Path(__file__).resolve().parents[1]
+TEMPLATE_PATH = ROOT / "assets" / "templates" / "proposta_comercial_verdio.docx"
+
+pricing_config = db.get_pricing_config()
+plans = {
+    plan: {product: Decimal(str(value)) for product, value in products.items()}
+    for plan, products in pricing_config.get("PLANOS_PJ", {}).items()
+}
+descriptions = pricing_config.get("PRODUTOS_PJ_DESCRICAO", {})
+
+if "pj_results" not in st.session_state:
+    st.session_state.pj_results = None
+
+
+def replace_in_paragraph(paragraph, replacements: dict[str, str]) -> None:
+    full_text = paragraph.text
+    if not any(token in full_text for token in replacements):
+        return
+    updated = full_text
+    for token, value in replacements.items():
+        updated = updated.replace(token, value)
+    if paragraph.runs:
+        paragraph.runs[0].text = updated
+        for run in paragraph.runs[1:]:
+            run.text = ""
+    else:
+        paragraph.text = updated
+
+
+@st.cache_data(show_spinner=False)
+def generate_proposal(context: dict) -> bytes:
+    if not TEMPLATE_PATH.exists():
+        raise FileNotFoundError(f"Template não encontrado: {TEMPLATE_PATH}")
+
+    document = docx.Document(str(TEMPLATE_PATH))
+    replacements = {
+        "{{" + key + "}}": str(value)
+        for key, value in context.items()
+        if key != "itens_proposta"
+    }
+
+    for paragraph in document.paragraphs:
+        replace_in_paragraph(paragraph, replacements)
+    for table in document.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for paragraph in cell.paragraphs:
+                    replace_in_paragraph(paragraph, replacements)
+
+    if document.tables:
+        product_table = document.tables[0]
+        for item in context.get("itens_proposta", []):
+            cells = product_table.add_row().cells
+            if len(cells) >= 3:
+                cells[0].text = item["nome"]
+                cells[1].text = item["descricao"]
+                cells[2].text = item["preco"]
+
+    output = io.BytesIO()
+    document.save(output)
+    return output.getvalue()
+
+
+if not plans:
+    st.warning("Não há planos PJ configurados. Solicite ao administrador a inclusão dos preços.")
     st.stop()
 
-# --- 2. CARREGAMENTO DE PREÇOS E ESTADO ---
-pricing_config = umdb.get_pricing_config()
-PLANOS_PJ = {k: {p: Decimal(str(v)) for p, v in val.items()} for k, val in pricing_config.get("PLANOS_PJ", {}).items()}
-PRODUTOS_PJ_DESCRICAO = pricing_config.get("PRODUTOS_PJ_DESCRICAO", {})
+with st.form("pj_simulation"):
+    config_col, client_col = st.columns([1, 1.4])
+    with config_col:
+        st.markdown("#### Configuração comercial")
+        vehicle_count = st.number_input("Quantidade de veículos", min_value=1, value=1, step=1)
+        contract_term = st.selectbox("Prazo do contrato", list(plans))
+        st.caption("Os valores abaixo são mensais e unitários.")
 
-if 'pj_results' not in st.session_state:
-    st.session_state.pj_results = {}
+    with client_col:
+        st.markdown("#### Dados da proposta")
+        company = st.text_input("Empresa")
+        responsible = st.text_input("Responsável")
+        validity_days = st.number_input("Validade da proposta (dias)", min_value=1, max_value=90, value=15)
 
-# --- 3. NOVA FUNÇÃO PARA GERAR O DOCX ---
-@st.cache_data
-def gerar_proposta_docx_programaticamente(context):
-    """
-    Gera uma proposta DOCX preenchendo placeholders e construindo a tabela dinamicamente.
-    """
-    try:
-        doc = docx.Document("Proposta Comercial e Intenção - Verdio.docx")
+    st.markdown("#### Produtos e serviços")
+    selected: dict[str, Decimal] = {}
+    product_columns = st.columns(2)
+    for index, (product, price) in enumerate(plans[contract_term].items()):
+        label = f"{product} — {money(price)} por veículo/mês"
+        if product_columns[index % 2].toggle(label, key=f"pj_product_{contract_term}_{index}"):
+            selected[product] = price
 
-        # Substitui placeholders de texto simples (parágrafos e tabelas)
-        for key, value in context.items():
-            placeholder = "{{" + key + "}}"
-            for paragraph in doc.paragraphs:
-                if placeholder in paragraph.text:
-                    paragraph.text = paragraph.text.replace(placeholder, str(value))
-            for table in doc.tables:
-                for row in table.rows:
-                    for cell in row.cells:
-                        if placeholder in cell.text:
-                            cell.text = cell.text.replace(placeholder, str(value))
+    submitted = st.form_submit_button("Calcular e registrar proposta", type="primary", width="stretch")
 
-        # Assumimos que a tabela de produtos é a primeira tabela do documento.
-        # Se houver outra tabela antes, este índice pode precisar de ser ajustado (ex: doc.tables[1])
-        tabela_produtos = doc.tables[0]
+if submitted:
+    if not company.strip() or not responsible.strip():
+        st.warning("Informe a empresa e o responsável.")
+    elif not selected:
+        st.warning("Selecione pelo menos um produto ou serviço.")
+    else:
+        monthly_per_vehicle = sum(selected.values(), Decimal("0"))
+        monthly_fleet = monthly_per_vehicle * Decimal(vehicle_count)
+        months = Decimal(contract_term.split()[0])
+        contract_total = monthly_fleet * months
+        validity_date = datetime.now().date().toordinal() + int(validity_days)
+        validity_label = datetime.fromordinal(validity_date).strftime("%d/%m/%Y")
 
-        # Adiciona os produtos selecionados à tabela
-        for item in context.get('itens_proposta', []):
-            row_cells = tabela_produtos.add_row().cells
-            row_cells[0].text = item.get('nome', '')
-            row_cells[1].text = item.get('desc', '')
-            row_cells[2].text = item.get('preco', '')
-
-        # Salva o documento em memória
-        buffer = io.BytesIO()
-        doc.save(buffer)
-        buffer.seek(0)
-        return buffer
-    except Exception as e:
-        st.error(f"Erro ao gerar o documento DOCX: {e}")
-        st.info("Verifique se o ficheiro 'Proposta Comercial e Intenção - Verdio.docx' está na pasta raiz e se a tabela de produtos tem apenas o cabeçalho.")
-        return None
-
-# --- 4. INTERFACE ---
-st.sidebar.image("imgs/v-c.png", width=120)
-if st.sidebar.button("🧹 Limpar Campos e Simulação", use_container_width=True, key="pj_clear"):
-    keys_to_clear = [k for k in st.session_state if k.startswith("pj_")]
-    for k in keys_to_clear: del st.session_state[k]
-    st.session_state.pj_results = {}
-    st.toast("Campos limpos!", icon="✨"); st.rerun()
-
-try:
-    st.image("imgs/logo.png", width=250)
-except: pass
-
-st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador de Venda - Pessoa Jurídica</h1>", unsafe_allow_html=True)
-st.write(f"Usuário: {st.session_state.get('name', 'N/A')} ({st.session_state.get('username', 'N/A')})")
-st.write(f"Nível de Acesso: {st.session_state.get('role', 'Indefinido').capitalize()}")
-st.markdown("---")
-
-# --- 5. FORMULÁRIO DE SIMULAÇÃO ---
-with st.form("form_simulacao_pj"):
-    st.sidebar.header("📝 Configurações PJ")
-    qtd_veiculos = st.sidebar.number_input("Quantidade de Veículos 🚗", min_value=1, value=1, step=1, key="pj_qtd")
-    tempo_contrato = st.sidebar.selectbox("Tempo de Contrato ⏳", list(PLANOS_PJ.keys()), key="pj_contrato")
-    
-    st.subheader("📄 Informações da Proposta")
-    empresa = st.text_input("Nome da Empresa", key="pj_empresa")
-    responsavel = st.text_input("Nome do Responsável", key="pj_responsavel")
-    
-    st.markdown("### 🛠️ Selecione os Produtos:")
-    produtos_selecionados = {}
-    col_a, col_b = st.columns(2)
-    for i, (produto, preco) in enumerate(PLANOS_PJ.get(tempo_contrato, {}).items()):
-        target_col = col_a if i % 2 == 0 else col_b
-        if target_col.toggle(f"{produto} - R$ {preco:,.2f}", key=f"pj_toggle_{produto.replace(' ', '_')}"):
-            produtos_selecionados[produto] = preco
-
-    submitted = st.form_submit_button("Simular e Registrar Proposta")
-
-    if submitted:
-        if not all([empresa, responsavel, produtos_selecionados]):
-            st.warning("Preencha todos os campos e selecione pelo menos um produto.")
-        else:
-            soma_mensal_veiculo = sum(produtos_selecionados.values())
-            valor_mensal_frota = soma_mensal_veiculo * Decimal(qtd_veiculos)
-            meses_contrato = int(tempo_contrato.split()[0])
-            valor_total_contrato = valor_mensal_frota * Decimal(meses_contrato)
-            
-            st.session_state.pj_results = {
-                'soma_mensal_veiculo': soma_mensal_veiculo,
-                'valor_mensal_frota': valor_mensal_frota,
-                'valor_total_contrato': valor_total_contrato,
-                'context': {
-                    'NOME_EMPRESA': empresa, 'NOME_RESPONSAVEL': responsavel, 
-                    'NOME_CONSULTOR': st.session_state.get('name', ''), 'DATA_VALIDADE': datetime.today().strftime("%d/%m/%Y"),
-                    'QTD_VEICULOS': str(qtd_veiculos), 'TEMPO_CONTRATO': tempo_contrato, 
-                    'VALOR_MENSAL_FROTA': f"R$ {valor_mensal_frota:,.2f}", 'VALOR_TOTAL_CONTRATO': f"R$ {valor_total_contrato:,.2f}",
-                    'itens_proposta': [{'nome': k, 'desc': PRODUTOS_PJ_DESCRICAO.get(k, ''), 'preco': f"R$ {v:,.2f}"} for k, v in produtos_selecionados.items()],
-                    'SOMA_TOTAL_MENSAL_VEICULO': f"R$ {soma_mensal_veiculo:,.2f}"
+        context = {
+            "NOME_EMPRESA": company.strip(),
+            "NOME_RESPONSAVEL": responsible.strip(),
+            "NOME_CONSULTOR": st.session_state.get("name", ""),
+            "DATA_VALIDADE": validity_label,
+            "QTD_VEICULOS": str(vehicle_count),
+            "TEMPO_CONTRATO": contract_term,
+            "VALOR_MENSAL_FROTA": money(monthly_fleet),
+            "VALOR_TOTAL_CONTRATO": money(contract_total),
+            "SOMA_TOTAL_MENSAL_VEICULO": money(monthly_per_vehicle),
+            "itens_proposta": [
+                {
+                    "nome": product,
+                    "descricao": descriptions.get(product, product),
+                    "preco": money(price),
                 }
+                for product, price in selected.items()
+            ],
+        }
+        st.session_state.pj_results = {
+            "monthly_per_vehicle": monthly_per_vehicle,
+            "monthly_fleet": monthly_fleet,
+            "contract_total": contract_total,
+            "context": context,
+        }
+        db.upsert_proposal(
+            {
+                "tipo": "PJ",
+                "empresa": company.strip(),
+                "consultor": st.session_state.get("name", "N/A"),
+                "valor_total": float(contract_total),
             }
-            
-            proposal_log_data = {"tipo": "PJ", "empresa": empresa, "consultor": st.session_state.get('name', 'N/A'), "valor_total": float(valor_total_contrato)}
-            umdb.upsert_proposal(proposal_log_data)
-            umdb.add_log(st.session_state["username"], "Simulou/Registrou Proposta PJ", details={"empresa": empresa, "valor": f"R$ {valor_total_contrato:,.2f}"})
-
-# --- 6. EXIBIÇÃO DOS RESULTADOS E DOWNLOAD ---
-if st.session_state.pj_results:
-    res = st.session_state.pj_results
-    st.markdown("---")
-    st.subheader("Resultados da Simulação")
-    st.success(f"**Valor Mensal por Veículo:** R$ {res['soma_mensal_veiculo']:,.2f}")
-    st.info(f"**Valor Mensal Total (Frota):** R$ {res['valor_mensal_frota']:,.2f}")
-    st.info(f"**Valor Total do Contrato:** R$ {res['valor_total_contrato']:,.2f}")
-
-    docx_buffer = gerar_proposta_docx_programaticamente(res['context'])
-    if docx_buffer:
-        st.download_button(
-            label="📥 Baixar Proposta (.docx)", data=docx_buffer,
-            file_name=f"Proposta_{res['context']['NOME_EMPRESA'].replace(' ', '_')}.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
+        db.add_log(
+            st.session_state.get("username", "sistema"),
+            "Simulou proposta PJ",
+            {"empresa": company.strip(), "veiculos": vehicle_count, "valor_total": float(contract_total)},
+        )
+        st.success("Proposta calculada e registrada.")
+
+result = st.session_state.get("pj_results")
+if result:
+    st.markdown("### Resultado")
+    metric_1, metric_2, metric_3 = st.columns(3)
+    metric_1.metric("Mensal por veículo", money(result["monthly_per_vehicle"]))
+    metric_2.metric("Mensal da frota", money(result["monthly_fleet"]))
+    metric_3.metric("Valor do contrato", money(result["contract_total"]))
+
+    try:
+        document_bytes = generate_proposal(result["context"])
+        safe_company = "_".join(result["context"]["NOME_EMPRESA"].split())
+        st.download_button(
+            "Baixar proposta em DOCX",
+            data=document_bytes,
+            file_name=f"Proposta_{safe_company}.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            type="primary",
+        )
+    except Exception as exc:
+        st.error(f"Não foi possível gerar o documento: {exc}")
+
+if st.button("Limpar simulação"):
+    st.session_state.pj_results = None
+    st.rerun()

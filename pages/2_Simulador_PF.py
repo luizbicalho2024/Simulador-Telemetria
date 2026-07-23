@@ -1,114 +1,111 @@
-# pages/2_Simulador_PF.py
-from decimal import Decimal, ROUND_DOWN
+from __future__ import annotations
+
+from decimal import Decimal, ROUND_HALF_UP
+
 import streamlit as st
-import user_management_db as umdb
 
-st.set_page_config(layout="wide", page_title="Simulador Pessoa Física", page_icon="imgs/v-c.png")
-if not st.session_state.get("authentication_status"):
-    st.error("🔒 Acesso Negado!"); st.stop()
+import user_management_db as db
+from app_core.auth import require_auth
+from app_core.ui import apply_branding, configure_page, money, render_hero, render_sidebar
 
-# --- 1. CARREGAMENTO DE PREÇOS E ESTADO ---
-pricing_config = umdb.get_pricing_config()
-PRECOS_PF = {k: Decimal(str(v)) for k, v in pricing_config.get("PRECOS_PF", {}).items()}
-TAXAS_PARCELAMENTO_PF = {str(k): Decimal(str(v)) for k, v in pricing_config.get("TAXAS_PARCELAMENTO_PF", {}).items()}
+configure_page("Simulador Pessoa Física")
+apply_branding()
+require_auth()
+render_sidebar()
+render_hero("Simulador de venda — Pessoa Física", "Calcule desconto, parcelamento e valor final para o cliente.")
 
-if 'pf_results' not in st.session_state:
-    st.session_state.pf_results = {}
+pricing = db.get_pricing_config()
+prices = {name: Decimal(str(value)) for name, value in pricing.get("PRECOS_PF", {}).items()}
+installment_rates = {str(term): Decimal(str(rate)) for term, rate in pricing.get("TAXAS_PARCELAMENTO_PF", {}).items()}
 
-# --- 2. INTERFACE ---
-st.sidebar.image("imgs/v-c.png", width=120)
-if st.sidebar.button("🧹 Limpar Campos", use_container_width=True, key="pf_clear"):
-    keys_to_clear = [k for k in st.session_state if k.startswith("pf_")]
-    for k in keys_to_clear: del st.session_state[k]
-    st.session_state.pf_results = {}
-    st.toast("Campos limpos!", icon="✨"); st.rerun()
+if "pf_results" not in st.session_state:
+    st.session_state.pf_results = None
 
-try:
-    st.image("imgs/logo.png", width=250)
-except: pass
+if not prices:
+    st.warning("Não há produtos PF configurados.")
+    st.stop()
 
-st.markdown("<h1 style='text-align: center; color: #54A033;'>Simulador de Venda - Pessoa Física</h1>", unsafe_allow_html=True)
-st.markdown("---")
-st.write(f"Usuário: {st.session_state.get('name', 'N/A')} ({st.session_state.get('username', 'N/A')})")
-st.write(f"Nível de Acesso: {st.session_state.get('role', 'Indefinido').capitalize()}")
-st.markdown("---")
+with st.form("pf_simulation"):
+    product_col, payment_col = st.columns(2)
+    with product_col:
+        st.markdown("#### Produto e cliente")
+        customer = st.text_input("Nome do cliente")
+        product = st.selectbox("Produto", list(prices))
+        base_price = prices[product]
+        st.metric("Preço base", money(base_price))
 
-# --- 3. CONFIGURAÇÕES INTERATIVAS (FORA DO FORMULÁRIO) ---
-st.sidebar.header("📝 Configurações PF")
-modelo = st.sidebar.selectbox("Tipo de Rastreador 📡", list(PRECOS_PF.keys()), key="pf_modelo")
-preco_base = PRECOS_PF.get(modelo, Decimal("0"))
-st.markdown(f"#### Valor Anual à Vista (Base): R$ {preco_base:,.2f}")
+    with payment_col:
+        st.markdown("#### Condições de pagamento")
+        discount_percent = st.number_input("Desconto (%)", min_value=0.0, max_value=100.0, value=0.0, step=0.5)
+        installment_enabled = st.toggle("Venda parcelada")
+        installments = st.selectbox(
+            "Quantidade de parcelas",
+            list(installment_rates),
+            disabled=not installment_enabled,
+            format_func=lambda value: f"{value} parcelas",
+        )
 
-st.markdown("#### Opções de Pagamento")
+    submitted = st.form_submit_button("Calcular e registrar", type="primary", width="stretch")
 
-# Desconto
-col1, col2 = st.columns([1, 3])
-desconto_ativo = col1.checkbox("Aplicar Desconto", key="pf_desconto_check")
-if desconto_ativo:
-    percent_desconto = col2.number_input("Percentual de Desconto (%)", min_value=0.0, max_value=100.0, step=1.0, format="%.2f", key="pf_desconto_percent")
-else:
-    percent_desconto = 0.0
+if submitted:
+    if not customer.strip():
+        st.warning("Informe o nome do cliente.")
+    else:
+        discount = (base_price * Decimal(str(discount_percent)) / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        discounted_price = (base_price - discount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
-# Parcelamento
-parcelamento_ativo = st.checkbox("Ativar Parcelamento", key="pf_parcela_check")
-if parcelamento_ativo:
-    num_parcelas_str = st.selectbox("Quantidade de Parcelas:", list(TAXAS_PARCELAMENTO_PF.keys()), key="pf_num_parcelas")
-else:
-    num_parcelas_str = "0"
+        total = discounted_price
+        installment_value = None
+        applied_rate = Decimal("0")
+        if installment_enabled:
+            applied_rate = installment_rates.get(installments, Decimal("0"))
+            total = (discounted_price * (Decimal("1") + applied_rate)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            installment_value = (total / Decimal(installments)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
-
-# --- 4. FORMULÁRIO PARA AÇÃO FINAL ---
-with st.form("form_simulacao_pf"):
-    st.subheader("Informações do Cliente")
-    nome_cliente = st.text_input("Nome do Cliente", key="pf_nome_cliente")
-    
-    submitted = st.form_submit_button("Simular e Registrar")
-
-    if submitted:
-        if not nome_cliente:
-            st.warning("Por favor, insira o nome do cliente.")
-        else:
-            preco_final = preco_base
-            if desconto_ativo and percent_desconto > 0:
-                desconto = (preco_base * (Decimal(str(percent_desconto)) / 100)).quantize(Decimal('0.01'), ROUND_DOWN)
-                preco_final = preco_base - desconto
-            
-            valor_proposta = preco_final
-            
-            resultados = {
-                "preco_final": preco_final,
-                "parcelamento_ativo": parcelamento_ativo,
-                "valor_proposta": valor_proposta
+        st.session_state.pf_results = {
+            "customer": customer.strip(),
+            "product": product,
+            "base_price": base_price,
+            "discount": discount,
+            "discounted_price": discounted_price,
+            "installment_enabled": installment_enabled,
+            "installments": int(installments) if installment_enabled else 1,
+            "installment_value": installment_value,
+            "applied_rate": applied_rate,
+            "total": total,
+        }
+        db.upsert_proposal(
+            {
+                "tipo": "PF",
+                "empresa": customer.strip(),
+                "consultor": st.session_state.get("name", "N/A"),
+                "valor_total": float(total),
             }
-            
-            if parcelamento_ativo:
-                taxa_juros = TAXAS_PARCELAMENTO_PF.get(num_parcelas_str, Decimal("0"))
-                num_parcelas = int(num_parcelas_str)
-                valor_com_juros = preco_final * (Decimal(1) + taxa_juros)
-                valor_parcela = (valor_com_juros / Decimal(num_parcelas)).quantize(Decimal('0.01'), ROUND_DOWN)
-                total_parcelado = valor_parcela * Decimal(num_parcelas)
-                valor_proposta = total_parcelado
-                
-                resultados.update({
-                    "num_parcelas": num_parcelas,
-                    "valor_parcela": valor_parcela,
-                    "total_parcelado": total_parcelado,
-                    "valor_proposta": valor_proposta
-                })
+        )
+        db.add_log(
+            st.session_state.get("username", "sistema"),
+            "Simulou proposta PF",
+            {"cliente": customer.strip(), "produto": product, "valor_total": float(total)},
+        )
+        st.success("Simulação registrada no dashboard.")
 
-            st.session_state.pf_results = resultados
-            
-            umdb.add_log(st.session_state["username"], "Simulou/Registrou Proposta PF", f"Cliente: {nome_cliente}, Valor: R$ {valor_proposta:,.2f}")
-            umdb.log_proposal({"tipo": "PF", "empresa": nome_cliente, "consultor": st.session_state.get('name', 'N/A'), "valor_total": float(valor_proposta)})
-            st.toast("Proposta registrada no dashboard!", icon="📊")
+result = st.session_state.get("pf_results")
+if result:
+    st.markdown("### Resultado")
+    cols = st.columns(4)
+    cols[0].metric("Preço base", money(result["base_price"]))
+    cols[1].metric("Desconto", money(result["discount"]))
+    cols[2].metric("Após desconto", money(result["discounted_price"]))
+    cols[3].metric("Total da proposta", money(result["total"]))
 
-# --- 5. EXIBIÇÃO DOS RESULTADOS ---
-if st.session_state.pf_results:
-    res = st.session_state.pf_results
-    st.markdown("---")
-    st.subheader("Resultados da Simulação")
-    st.info(f"**Valor Final (com desconto):** R$ {res['preco_final']:,.2f}")
-    
-    if res["parcelamento_ativo"]:
-        st.success(f"**Parcelado em {res['num_parcelas']}x de R$ {res['valor_parcela']:,.2f}**")
-        st.markdown(f"##### Valor Total Parcelado: R$ {res['total_parcelado']:,.2f}")
+    if result["installment_enabled"]:
+        st.info(
+            f"Pagamento em {result['installments']} parcelas de {money(result['installment_value'])}. "
+            f"Taxa aplicada: {float(result['applied_rate']) * 100:.2f}%."
+        )
+    else:
+        st.info("Pagamento à vista.")
+
+if st.button("Limpar simulação"):
+    st.session_state.pf_results = None
+    st.rerun()

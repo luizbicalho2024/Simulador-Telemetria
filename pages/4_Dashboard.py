@@ -1,110 +1,119 @@
-# pages/Dashboard.py
-import streamlit as st
-import pandas as pd
-import user_management_db as umdb
+from __future__ import annotations
 
-# --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
-st.set_page_config(
-    layout="wide",
-    page_title="Dashboard de Análises",
-    page_icon="📊"
+import pandas as pd
+import plotly.express as px
+import streamlit as st
+
+import user_management_db as db
+from app_core.auth import require_auth
+from app_core.ui import apply_branding, configure_page, money, render_hero, render_sidebar
+
+configure_page("Dashboard de Propostas")
+branding = apply_branding()
+require_auth()
+render_sidebar()
+render_hero("Dashboard de propostas", "Acompanhe volume, valor, perfil de venda e desempenho por consultor.")
+
+proposals = db.get_all_proposals()
+if not proposals:
+    st.info("Ainda não há propostas registradas.")
+    st.stop()
+
+df = pd.DataFrame(proposals)
+df["_id"] = df["_id"].astype(str)
+df["data_geracao"] = pd.to_datetime(df["data_geracao"], errors="coerce")
+df["valor_total"] = pd.to_numeric(df["valor_total"], errors="coerce").fillna(0.0)
+df = df.dropna(subset=["data_geracao"])
+df["mes"] = df["data_geracao"].dt.to_period("M").astype(str)
+
+with st.expander("Filtros", expanded=False):
+    filter_1, filter_2, filter_3 = st.columns(3)
+    consultants = sorted(df["consultor"].dropna().astype(str).unique().tolist())
+    types = sorted(df["tipo"].dropna().astype(str).unique().tolist())
+    selected_consultants = filter_1.multiselect("Consultores", consultants, default=consultants)
+    selected_types = filter_2.multiselect("Tipos", types, default=types)
+    min_date = df["data_geracao"].min().date()
+    max_date = df["data_geracao"].max().date()
+    selected_dates = filter_3.date_input("Período", value=(min_date, max_date), min_value=min_date, max_value=max_date)
+
+filtered = df[df["consultor"].isin(selected_consultants) & df["tipo"].isin(selected_types)].copy()
+if isinstance(selected_dates, tuple) and len(selected_dates) == 2:
+    start_date, end_date = selected_dates
+    filtered = filtered[
+        (filtered["data_geracao"].dt.date >= start_date)
+        & (filtered["data_geracao"].dt.date <= end_date)
+    ]
+
+if filtered.empty:
+    st.warning("Nenhuma proposta corresponde aos filtros selecionados.")
+    st.stop()
+
+average_ticket = filtered["valor_total"].mean()
+top_consultant = filtered.groupby("consultor")["valor_total"].sum().sort_values(ascending=False).index[0]
+metric_1, metric_2, metric_3, metric_4 = st.columns(4)
+metric_1.metric("Propostas", len(filtered))
+metric_2.metric("Valor total", money(filtered["valor_total"].sum()))
+metric_3.metric("Ticket médio", money(average_ticket))
+metric_4.metric("Consultor líder", top_consultant)
+
+chart_1, chart_2 = st.columns(2)
+with chart_1:
+    monthly = filtered.groupby("mes", as_index=False)["valor_total"].sum()
+    fig_monthly = px.bar(monthly, x="mes", y="valor_total", title="Valor por mês")
+    fig_monthly.update_traces(marker_color=branding["primary_color"])
+    fig_monthly.update_layout(xaxis_title="Mês", yaxis_title="Valor", margin=dict(l=10, r=10, t=50, b=10))
+    st.plotly_chart(fig_monthly, width="stretch")
+
+with chart_2:
+    by_type = filtered.groupby("tipo", as_index=False)["valor_total"].sum()
+    fig_type = px.pie(by_type, names="tipo", values="valor_total", hole=0.55, title="Participação por tipo")
+    fig_type.update_layout(margin=dict(l=10, r=10, t=50, b=10), legend_title_text="Tipo")
+    st.plotly_chart(fig_type, width="stretch")
+
+consultant_summary = (
+    filtered.groupby("consultor", as_index=False)
+    .agg(Propostas=("_id", "count"), Valor_total=("valor_total", "sum"), Ticket_medio=("valor_total", "mean"))
+    .sort_values("Valor_total", ascending=False)
+)
+st.markdown("### Desempenho por consultor")
+st.dataframe(
+    consultant_summary,
+    width="stretch",
+    hide_index=True,
+    column_config={
+        "consultor": "Consultor",
+        "Propostas": "Propostas",
+        "Valor_total": st.column_config.NumberColumn("Valor total", format="R$ %.2f"),
+        "Ticket_medio": st.column_config.NumberColumn("Ticket médio", format="R$ %.2f"),
+    },
 )
 
-if not st.session_state.get("authentication_status"):
-    st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
-    st.stop()
-
-# --- 2. INTERFACE DA PÁGINA ---
-st.sidebar.image("imgs/v-c.png", width=120)
-st.sidebar.title(f"Olá, {st.session_state.get('name', 'N/A')}! 👋")
-st.sidebar.markdown("---")
-
-st.title("📊 Dashboard de Propostas")
-st.markdown("Análise das propostas comerciais geradas pela plataforma.")
-
-proposals_cursor = umdb.get_all_proposals()
-proposals_data = list(proposals_cursor)
-
-if not proposals_data:
-    st.info("Ainda não há propostas registadas para exibir no dashboard.")
-    st.stop()
-
-df = pd.DataFrame(proposals_data)
-
-if '_id' in df.columns:
-    df['_id'] = df['_id'].astype(str)
-
-if 'data_geracao' in df.columns:
-    df['data_geracao'] = pd.to_datetime(df['data_geracao'])
-    df['mes_ano'] = df['data_geracao'].dt.to_period('M').astype(str)
-else:
-    st.error("Os dados das propostas não contêm a coluna 'data_geracao'.")
-    st.stop()
-
-# --- 3. MÉTRICAS E GRÁFICOS ---
-total_propostas = len(df)
-valor_total_gerado = df['valor_total'].sum()
-propostas_por_consultor = df['consultor'].value_counts()
-
-col1, col2 = st.columns(2)
-col1.metric("Total de Propostas Geradas", f"{total_propostas}")
-col2.metric("Valor Total em Propostas", f"R$ {valor_total_gerado:,.2f}")
-
-st.markdown("---")
-st.subheader("Valor de Propostas por Mês")
-valor_por_mes = df.groupby('mes_ano')['valor_total'].sum()
-if not valor_por_mes.empty:
-    st.bar_chart(valor_por_mes)
-
-st.subheader("Propostas por Consultor")
-if not propostas_por_consultor.empty:
-    st.bar_chart(propostas_por_consultor)
-
-# --- 4. TABELA DE DADOS E GESTÃO PARA ADMINS ---
-st.markdown("---")
-st.subheader("Histórico de Propostas Registadas")
-
-cols_to_show = ['data_geracao', 'consultor', 'empresa', 'tipo', 'valor_total']
+st.markdown("### Histórico")
 st.dataframe(
-    df[cols_to_show],
+    filtered[["data_geracao", "consultor", "empresa", "tipo", "valor_total"]].sort_values("data_geracao", ascending=False),
+    width="stretch",
+    hide_index=True,
     column_config={
         "data_geracao": st.column_config.DatetimeColumn("Data", format="DD/MM/YYYY HH:mm"),
         "consultor": "Consultor",
-        "empresa": "Empresa/Licitação",
+        "empresa": "Cliente ou órgão",
         "tipo": "Tipo",
-        "valor_total": st.column_config.NumberColumn("Valor (R$)", format="R$ %.2f"),
+        "valor_total": st.column_config.NumberColumn("Valor", format="R$ %.2f"),
     },
-    hide_index=True,
-    use_container_width=True
 )
 
-# Apenas administradores veem a secção de exclusão
 if st.session_state.get("role") == "admin":
-    with st.expander("🗑️ Excluir Proposta Registada"):
-        
-        # Cria uma lista de opções legíveis para o selectbox
-        options_map = {
-            f"{row['empresa']} - {row['data_geracao'].strftime('%d/%m/%Y')} (R$ {row['valor_total']:.2f})": row['_id']
-            for index, row in df.iterrows()
+    with st.expander("Excluir proposta"):
+        options = {
+            f"{row['empresa']} — {row['tipo']} — {row['data_geracao'].strftime('%d/%m/%Y %H:%M')} — {money(row['valor_total'])}": row["_id"]
+            for _, row in filtered.iterrows()
         }
-        
-        # Verifica se há propostas para excluir
-        if not options_map:
-            st.warning("Não há propostas para excluir.")
-        else:
-            option_keys = list(options_map.keys())
-            selected_option = st.selectbox(
-                "Selecione a proposta que deseja excluir:",
-                options=option_keys,
-                index=None, # Nenhum selecionado por defeito
-                placeholder="Escolha uma proposta..."
-            )
-
-            if selected_option:
-                proposal_id_to_delete = options_map[selected_option]
-                if st.button(f"Confirmar Exclusão de '{selected_option}'", type="primary"):
-                    if umdb.delete_proposal(proposal_id_to_delete):
-                        st.toast("Proposta excluída com sucesso! A página será recarregada.", icon="🗑️")
-                        st.rerun()
-                    else:
-                        st.error("Falha ao excluir a proposta.")
+        selected = st.selectbox("Proposta", list(options), index=None, placeholder="Selecione uma proposta")
+        confirmation = st.checkbox("Confirmo a exclusão permanente")
+        if st.button("Excluir proposta", type="primary", disabled=not selected or not confirmation):
+            if db.delete_proposal(options[selected]):
+                db.add_log(st.session_state.get("username", "sistema"), "Excluiu proposta", {"proposta": options[selected]})
+                st.success("Proposta excluída.")
+                st.rerun()
+            else:
+                st.error("Não foi possível excluir a proposta.")

@@ -1,22 +1,24 @@
-# pages/Pesquisa_de_Mercado.py
-import streamlit as st
-import pandas as pd
-import plotly.graph_objects as go
-import plotly.express as px
+from __future__ import annotations
+
+import html
 import re
+
 import folium
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+import streamlit as st
 from streamlit_folium import st_folium
 
-# --- 1. CONFIGURAÇÃO E AUTENTICAÇÃO ---
-st.set_page_config(
-    layout="wide",
-    page_title="Pesquisa de Mercado",
-    page_icon="imgs/v-c.png"
-)
+from app_core.auth import require_auth
+from app_core.ui import apply_branding, configure_page, render_hero, render_sidebar
 
-if not st.session_state.get("authentication_status"):
-    st.error("🔒 Acesso Negado! Por favor, faça login para visualizar esta página.")
-    st.stop()
+configure_page("Pesquisa de Mercado")
+branding = apply_branding()
+require_auth()
+render_sidebar()
+render_hero("Pesquisa de mercado e concorrentes", "Compare referências de preço, funcionalidades e presença regional.")
+st.warning("Os dados desta página são uma base interna de referência e podem ficar desatualizados. Valide preços e ofertas antes de utilizá-los em decisões comerciais.")
 
 # --- 2. DADOS CENTRALIZADOS (COM COORDENADAS PARA O MAPA) ---
 MARKET_DATA = {
@@ -41,24 +43,24 @@ MARKET_DATA = {
         {'Empresa': 'Impacto Rast.', 'Instalação (GPRS)': 'R$ 0,00', 'Mensalidade (GPRS)': 'R$ 45,00', 'Instalação (Satelital)': '–', 'Mensalidade (Satelital)': '–'},
     ],
     "funcionalidades_nacionais": [
-        {'Empresa': 'VERDIO (Rovema)', 'Telemetria (CAN)': '✅ Sim', 'Vídeo': '✅ Sim', 'Sensor de Fadiga': '✅ Sim', 'Controle de Jornada': '✅ Sim', 'Roteirizador': '✅ Sim', 'Com. Satelital': '✅ Sim', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
-        {'Empresa': 'Sascar', 'Telemetria (CAN)': '✅ Sim', 'Vídeo': '✅ Sim', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '✅ Sim', 'Roteirizador': '✅ Sim', 'Com. Satelital': '✅ Sim', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
-        {'Empresa': 'Omnilink', 'Telemetria (CAN)': '✅ Sim', 'Vídeo': '✅ Sim', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '✅ Sim', 'Roteirizador': '✅ Sim', 'Com. Satelital': '✅ Sim', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
-        {'Empresa': 'Onixsat', 'Telemetria (CAN)': '✅ Sim', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '✅ Sim', 'Roteirizador': '❌ Não', 'Com. Satelital': '✅ Sim', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
-        {'Empresa': 'Veltec', 'Telemetria (CAN)': '✅ Sim', 'Vídeo': '✅ Sim', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '✅ Sim', 'Roteirizador': '✅ Sim', 'Com. Satelital': '❌ Não', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
-        {'Empresa': 'Positron', 'Telemetria (CAN)': '✅ Sim', 'Vídeo': '❔ Opcional', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '✅ Sim', 'Roteirizador': '✅ Sim', 'Com. Satelital': '✅ Sim', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
-        {'Empresa': 'Autotrac', 'Telemetria (CAN)': '❌ Não', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '✅ Sim', 'Com. Satelital': '❌ Não', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
-        {'Empresa': 'Maxtrack', 'Telemetria (CAN)': '✅ Sim', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '✅ Sim', 'Com. Satelital': '❌ Não', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
+        {'Empresa': 'VERDIO (Rovema)', 'Telemetria (CAN)': 'Sim', 'Vídeo': 'Sim', 'Sensor de Fadiga': 'Sim', 'Controle de Jornada': 'Sim', 'Roteirizador': 'Sim', 'Com. Satelital': 'Sim', 'Suporte 24h': 'Sim', 'App de Gestão': 'Sim'},
+        {'Empresa': 'Sascar', 'Telemetria (CAN)': 'Sim', 'Vídeo': 'Sim', 'Sensor de Fadiga': 'Não', 'Controle de Jornada': 'Sim', 'Roteirizador': 'Sim', 'Com. Satelital': 'Sim', 'Suporte 24h': 'Sim', 'App de Gestão': 'Sim'},
+        {'Empresa': 'Omnilink', 'Telemetria (CAN)': 'Sim', 'Vídeo': 'Sim', 'Sensor de Fadiga': 'Não', 'Controle de Jornada': 'Sim', 'Roteirizador': 'Sim', 'Com. Satelital': 'Sim', 'Suporte 24h': 'Sim', 'App de Gestão': 'Sim'},
+        {'Empresa': 'Onixsat', 'Telemetria (CAN)': 'Sim', 'Vídeo': 'Não', 'Sensor de Fadiga': 'Não', 'Controle de Jornada': 'Sim', 'Roteirizador': 'Não', 'Com. Satelital': 'Sim', 'Suporte 24h': 'Sim', 'App de Gestão': 'Sim'},
+        {'Empresa': 'Veltec', 'Telemetria (CAN)': 'Sim', 'Vídeo': 'Sim', 'Sensor de Fadiga': 'Não', 'Controle de Jornada': 'Sim', 'Roteirizador': 'Sim', 'Com. Satelital': 'Não', 'Suporte 24h': 'Sim', 'App de Gestão': 'Sim'},
+        {'Empresa': 'Positron', 'Telemetria (CAN)': 'Sim', 'Vídeo': 'Opcional', 'Sensor de Fadiga': 'Não', 'Controle de Jornada': 'Sim', 'Roteirizador': 'Sim', 'Com. Satelital': 'Sim', 'Suporte 24h': 'Sim', 'App de Gestão': 'Sim'},
+        {'Empresa': 'Autotrac', 'Telemetria (CAN)': 'Não', 'Vídeo': 'Não', 'Sensor de Fadiga': 'Não', 'Controle de Jornada': 'Não', 'Roteirizador': 'Sim', 'Com. Satelital': 'Não', 'Suporte 24h': 'Sim', 'App de Gestão': 'Sim'},
+        {'Empresa': 'Maxtrack', 'Telemetria (CAN)': 'Sim', 'Vídeo': 'Não', 'Sensor de Fadiga': 'Não', 'Controle de Jornada': 'Não', 'Roteirizador': 'Sim', 'Com. Satelital': 'Não', 'Suporte 24h': 'Sim', 'App de Gestão': 'Sim'},
     ],
     "funcionalidades_regionais": [
-        {'Empresa': 'VERDIO (Rovema)', 'Telemetria (CAN)': '✅ Sim', 'Vídeo': '✅ Sim', 'Sensor de Fadiga': '✅ Sim', 'Controle de Jornada': '✅ Sim', 'Roteirizador': '✅ Sim', 'Com. Satelital': '✅ Sim', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
-        {'Empresa': 'Elite Rastro', 'Telemetria (CAN)': '✅ Sim', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '❌ Não', 'Com. Satelital': '✅ Sim', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
-        {'Empresa': 'NJ Rastreamento', 'Telemetria (CAN)': '✅ Sim', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '❌ Não', 'Com. Satelital': '✅ Sim', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
-        {'Empresa': 'TK Rastreadores', 'Telemetria (CAN)': '✅ Sim', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '✅ Sim', 'Com. Satelital': '✅ Sim', 'Suporte 24h': '❔ Comercial', 'App de Gestão': '✅ Sim'},
-        {'Empresa': 'vtrackrastreamento', 'Telemetria (CAN)': '✅ Sim', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '❌ Não', 'Com. Satelital': '❌ Não', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
-        {'Empresa': 'rastrek', 'Telemetria (CAN)': '❔ Parcial', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '❌ Não', 'Com. Satelital': '✅ Sim', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
-        {'Empresa': 'Pro Lion', 'Telemetria (CAN)': '❌ Não', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '❌ Não', 'Com. Satelital': '❌ Não', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
-        {'Empresa': 'Impacto Rast.', 'Telemetria (CAN)': '❌ Não', 'Vídeo': '❌ Não', 'Sensor de Fadiga': '❌ Não', 'Controle de Jornada': '❌ Não', 'Roteirizador': '❌ Não', 'Com. Satelital': '❌ Não', 'Suporte 24h': '✅ Sim', 'App de Gestão': '✅ Sim'},
+        {'Empresa': 'VERDIO (Rovema)', 'Telemetria (CAN)': 'Sim', 'Vídeo': 'Sim', 'Sensor de Fadiga': 'Sim', 'Controle de Jornada': 'Sim', 'Roteirizador': 'Sim', 'Com. Satelital': 'Sim', 'Suporte 24h': 'Sim', 'App de Gestão': 'Sim'},
+        {'Empresa': 'Elite Rastro', 'Telemetria (CAN)': 'Sim', 'Vídeo': 'Não', 'Sensor de Fadiga': 'Não', 'Controle de Jornada': 'Não', 'Roteirizador': 'Não', 'Com. Satelital': 'Sim', 'Suporte 24h': 'Sim', 'App de Gestão': 'Sim'},
+        {'Empresa': 'NJ Rastreamento', 'Telemetria (CAN)': 'Sim', 'Vídeo': 'Não', 'Sensor de Fadiga': 'Não', 'Controle de Jornada': 'Não', 'Roteirizador': 'Não', 'Com. Satelital': 'Sim', 'Suporte 24h': 'Sim', 'App de Gestão': 'Sim'},
+        {'Empresa': 'TK Rastreadores', 'Telemetria (CAN)': 'Sim', 'Vídeo': 'Não', 'Sensor de Fadiga': 'Não', 'Controle de Jornada': 'Não', 'Roteirizador': 'Sim', 'Com. Satelital': 'Sim', 'Suporte 24h': 'Comercial', 'App de Gestão': 'Sim'},
+        {'Empresa': 'vtrackrastreamento', 'Telemetria (CAN)': 'Sim', 'Vídeo': 'Não', 'Sensor de Fadiga': 'Não', 'Controle de Jornada': 'Não', 'Roteirizador': 'Não', 'Com. Satelital': 'Não', 'Suporte 24h': 'Sim', 'App de Gestão': 'Sim'},
+        {'Empresa': 'rastrek', 'Telemetria (CAN)': 'Parcial', 'Vídeo': 'Não', 'Sensor de Fadiga': 'Não', 'Controle de Jornada': 'Não', 'Roteirizador': 'Não', 'Com. Satelital': 'Sim', 'Suporte 24h': 'Sim', 'App de Gestão': 'Sim'},
+        {'Empresa': 'Pro Lion', 'Telemetria (CAN)': 'Não', 'Vídeo': 'Não', 'Sensor de Fadiga': 'Não', 'Controle de Jornada': 'Não', 'Roteirizador': 'Não', 'Com. Satelital': 'Não', 'Suporte 24h': 'Sim', 'App de Gestão': 'Sim'},
+        {'Empresa': 'Impacto Rast.', 'Telemetria (CAN)': 'Não', 'Vídeo': 'Não', 'Sensor de Fadiga': 'Não', 'Controle de Jornada': 'Não', 'Roteirizador': 'Não', 'Com. Satelital': 'Não', 'Suporte 24h': 'Sim', 'App de Gestão': 'Sim'},
     ],
     "localizacoes_regionais": [
         {"Empresa": "VERDIO (CSC Rovema)", "lat": -8.75242, "lon": -63.90317, "cor": "green"},
@@ -87,18 +89,6 @@ df_prices_all['Merge_Key'] = df_prices_all['Empresa'].str.replace(r'\s*\(.*\)', 
 # Junta os dados de localização com os de preço para o mapa
 df_mapa = pd.merge(df_localizacoes, df_prices_all, on='Merge_Key', how='left', suffixes=('', '_price'))
 
-# --- 4. INTERFACE DA PÁGINA ---
-st.sidebar.image("imgs/v-c.png", width=120)
-st.sidebar.title(f"Olá, {st.session_state.get('name', 'N/A')}! 👋")
-st.sidebar.markdown("---")
-
-try:
-    st.image("imgs/logo.png", width=250)
-except: pass
-
-st.markdown("<h1 style='text-align: center; color: #006494;'>Pesquisa de Mercado e Concorrentes</h1>", unsafe_allow_html=True)
-st.markdown("---")
-
 # --- SEÇÃO MERCADO-ALVO E DIFERENCIAIS ---
 st.subheader("Nosso Mercado-Alvo")
 st.markdown("""
@@ -110,24 +100,24 @@ st.markdown("""
 st.markdown("---")
 
 st.subheader("Nossos Diferenciais Competitivos")
-st.info("📊 **Gestão Financeira Integrada (ROI Claro):** Transformamos dados operacionais em indicadores financeiros.")
-st.info("👮‍♂️ **Segurança Jurídica e Compliance:** Integramos a gestão da Lei do Motorista com o sensor de fadiga.")
-st.info("💡 **Inovação Acessível:** Oferecemos tecnologias de ponta como parte do nosso pacote padrão.")
+st.info("**Gestão Financeira Integrada (ROI Claro):** Transformamos dados operacionais em indicadores financeiros.")
+st.info("**Segurança Jurídica e Compliance:** Integramos a gestão da Lei do Motorista com o sensor de fadiga.")
+st.info("**Inovação Acessível:** Oferecemos tecnologias de ponta como parte do nosso pacote padrão.")
 st.markdown("---")
 
 # --- 5. EXIBIÇÃO DAS TABELAS ---
 st.subheader("Análise de Preços")
 with st.expander("Comparativo de Preços - Concorrentes Nacionais", expanded=True):
-    st.dataframe(df_preco_nacionais, hide_index=True, use_container_width=True)
+    st.dataframe(df_preco_nacionais, hide_index=True, width="stretch")
 with st.expander("Comparativo de Preços - Concorrentes Regionais", expanded=True):
-    st.dataframe(df_preco_regionais, hide_index=True, use_container_width=True)
+    st.dataframe(df_preco_regionais, hide_index=True, width="stretch")
 
 st.markdown("---")
 st.subheader("Análise de Funcionalidades")
 with st.expander("Comparativo de Funcionalidades - Concorrentes Nacionais", expanded=True):
-    st.dataframe(df_funci_nacionais, hide_index=True, use_container_width=True)
+    st.dataframe(df_funci_nacionais, hide_index=True, width="stretch")
 with st.expander("Comparativo de Funcionalidades - Concorrentes Regionais", expanded=True):
-    st.dataframe(df_funci_regionais, hide_index=True, use_container_width=True)
+    st.dataframe(df_funci_regionais, hide_index=True, width="stretch")
 
 st.markdown("---")
 
@@ -137,7 +127,7 @@ st.subheader("Visualização e Inteligência de Mercado (BI)")
 # --- GRÁFICO 1: PONTUAÇÃO DE FUNCIONALIDADES ---
 st.markdown("##### Pontuação Total de Funcionalidades")
 df_func_all = pd.concat([df_funci_nacionais, df_funci_regionais]).drop_duplicates(subset=['Empresa']).reset_index(drop=True)
-score_map = {'✅ Sim': 1.0, '❔ Opcional': 0.5, '❔ Parcial': 0.5, '❌ Não': 0.0, '❔ Comercial': 0.0}
+score_map = {'Sim': 1.0, 'Opcional': 0.5, 'Parcial': 0.5, 'Não': 0.0, 'Comercial': 0.0}
 features_to_score = ['Telemetria (CAN)', 'Vídeo', 'Sensor de Fadiga', 'Controle de Jornada', 'Roteirizador', 'Com. Satelital', 'Suporte 24h', 'App de Gestão']
 
 for feature in features_to_score:
@@ -149,13 +139,13 @@ df_func_all_sorted = df_func_all.sort_values('Pontuação Total', ascending=True
 
 fig_score = go.Figure(go.Bar(
     y=df_func_all_sorted['Empresa'], x=df_func_all_sorted['Pontuação Total'],
-    orientation='h', marker=dict(color=df_func_all_sorted['Pontuação Total'], colorscale='Greens')
+    orientation='h', marker=dict(color=df_func_all_sorted['Pontuação Total'], colorscale=[[0, branding['background_color']], [1, branding['accent_color']]])
 ))
 fig_score.update_layout(
     title='Ranking de Concorrentes por Pontuação de Funcionalidades',
     xaxis_title='Pontuação Total (Soma das Funcionalidades)', yaxis_title=None, height=600
 )
-st.plotly_chart(fig_score, use_container_width=True)
+st.plotly_chart(fig_score, width="stretch")
 
 # --- GRÁFICO 2: CUSTO-BENEFÍCIO (GPRS) ---
 st.markdown("##### Análise de Custo-Benefício (GPRS)")
@@ -178,7 +168,7 @@ unique_companies = df_bi['Empresa'].unique()
 color_palette = px.colors.qualitative.Plotly
 color_map = {company: color_palette[i % len(color_palette)] for i, company in enumerate(unique_companies)}
 if 'VERDIO (Referência)' in color_map:
-    color_map['VERDIO (Referência)'] = '#2ca02c'
+    color_map['VERDIO (Referência)'] = branding['accent_color']
 
 df_bi['color'] = df_bi['Empresa'].map(color_map)
 df_bi['size'] = df_bi['Pontuação Total'].apply(lambda y: y * 4 + 15)
@@ -197,7 +187,7 @@ fig_bubble_bi.update_layout(
     yaxis_title="Pontuação Total de Funcionalidades",
     height=600, legend_title_text='Concorrentes'
 )
-st.plotly_chart(fig_bubble_bi, use_container_width=True)
+st.plotly_chart(fig_bubble_bi, width="stretch")
 
 # --- GRÁFICO 3: COMPARATIVO DE CUSTOS - SATELITAL ---
 st.markdown("##### Análise de Custos - Comunicação Satelital")
@@ -208,18 +198,18 @@ df_satelital = df_prices_all.dropna(subset=['Mensalidade_Satelital_Num'])
 fig_satelital = go.Figure()
 fig_satelital.add_trace(go.Bar(
     x=df_satelital['Empresa'], y=df_satelital['Instalacao_Satelital_Num'],
-    name='Custo de Instalação (R$)', marker_color='indianred'
+    name='Custo de Instalação (R$)', marker_color=branding['secondary_color']
 ))
 fig_satelital.add_trace(go.Bar(
     x=df_satelital['Empresa'], y=df_satelital['Mensalidade_Satelital_Num'],
-    name='Custo da Mensalidade (R$)', marker_color='lightsalmon'
+    name='Custo da Mensalidade (R$)', marker_color=branding['accent_color']
 ))
 fig_satelital.update_layout(
     title='Comparativo de Custos - Rastreadores via Satélite',
     xaxis_title='Empresa', yaxis_title='Valor (R$)', barmode='group',
     legend_title_text='Tipo de Custo', height=500
 )
-st.plotly_chart(fig_satelital, use_container_width=True)
+st.plotly_chart(fig_satelital, width="stretch")
 
 # --- 7. MAPA DE CONCORRENTES REGIONAIS ---
 st.markdown("---")
@@ -231,18 +221,29 @@ zoom_level = 13
 
 mapa = folium.Map(location=porto_velho_centro, zoom_start=zoom_level)
 
-for index, row in df_mapa.iterrows():
+for _, row in df_mapa.iterrows():
+    company = html.escape(str(row["Empresa"]))
+    monthly_gprs = html.escape(str(row.get("Mensalidade (GPRS)", "N/A")))
+    monthly_satellite = html.escape(str(row.get("Mensalidade (Satelital)", "N/A")))
+    is_reference = "VERDIO" in company.upper()
+    marker_color = branding["accent_color"] if is_reference else branding["primary_color"]
     popup_html = f"""
-    <b>{row['Empresa']}</b><br>
+    <b>{company}</b><br>
     <hr style='margin: 4px 0;'>
-    <b>Mensalidade GPRS:</b> {row.get('Mensalidade (GPRS)', 'N/A')}<br>
-    <b>Mensalidade Satelital:</b> {row.get('Mensalidade (Satelital)', 'N/A')}
+    <b>Mensalidade GPRS:</b> {monthly_gprs}<br>
+    <b>Mensalidade Satelital:</b> {monthly_satellite}
     """
-    
-    folium.Marker(
-        location=[row['lat'], row['lon']],
+
+    folium.CircleMarker(
+        location=[row["lat"], row["lon"]],
+        radius=9 if is_reference else 7,
+        color=marker_color,
+        weight=2,
+        fill=True,
+        fill_color=marker_color,
+        fill_opacity=0.86,
+        tooltip=company,
         popup=folium.Popup(popup_html, max_width=300),
-        icon=folium.Icon(color=row['cor'], icon='building', prefix='fa')
     ).add_to(mapa)
 
 st_folium(mapa, use_container_width=True, height=500)

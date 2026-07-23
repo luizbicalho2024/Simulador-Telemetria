@@ -1,332 +1,540 @@
-# Simulador_Comercial.py
-import streamlit as st
+from __future__ import annotations
+
+import io
+from datetime import datetime
+
 import pandas as pd
-import user_management_db as umdb
-import streamlit_authenticator as stauth
+import streamlit as st
+from PIL import Image, ImageOps
 
-# --- 1. CONFIGURAÇÃO INICIAL DA PÁGINA ---
-st.set_page_config(
-    page_title="Simulador Telemetria",
-    layout="wide",
-    page_icon="imgs/v-c.png"
-)
+import user_management_db as db
+from app_core.auth import LOGIN_FIELDS, build_authenticator, clear_auth_state
+from app_core.settings import branding_contrast_errors, get_default_branding
+from app_core.ui import apply_branding, configure_page, money, render_hero, render_logo, render_sidebar
 
+configure_page("Simulador de Telemetria")
+branding = apply_branding()
+
+
+def render_connection_error() -> None:
+    render_logo(max_width=260)
+    render_hero("Não foi possível iniciar a plataforma", "A conexão com o banco de dados não foi estabelecida.")
+    st.error("Verifique o Secret MONGO_CONNECTION_STRING e a liberação de rede no MongoDB Atlas.")
+    st.code(
+        'MONGO_CONNECTION_STRING = "mongodb+srv://USUARIO:SENHA@cluster.mongodb.net/?retryWrites=true&w=majority"',
+        language="toml",
+    )
+    st.stop()
+
+
+if db.get_mongo_client() is None:
+    render_connection_error()
+
+db.initialize_database()
 try:
-    st.image("imgs/logo.png", width=250)
-except Exception:
-    pass
-
-# --- 2. VERIFICAÇÃO DA CONEXÃO ---
-if not umdb.get_mongo_client():
-    st.error("🚨 FALHA CRÍTICA NA CONEXÃO COM A BASE DE DADOS.")
-    st.info("Verifique os 'Secrets' e as permissões de IP no MongoDB Atlas.")
+    authenticator, credentials = build_authenticator()
+except RuntimeError as exc:
+    render_logo(max_width=260)
+    render_hero("Configuração de segurança incompleta", "Revise os Secrets da aplicação no Streamlit Cloud.")
+    st.error(str(exc))
+    st.code('AUTH_COOKIE_KEY = "USE_UMA_CHAVE_ALEATORIA_COM_PELO_MENOS_32_CARACTERES"', language="toml")
     st.stop()
 
-# --- 3. CONFIGURAÇÃO DO AUTENTICADOR ---
-credentials = umdb.fetch_all_users_for_auth()
-authenticator = stauth.Authenticate(
-    credentials,
-    st.secrets["AUTH_COOKIE_NAME"],
-    st.secrets["AUTH_COOKIE_KEY"],
-    cookie_expiry_days=st.secrets.get("AUTH_COOKIE_EXPIRY_DAYS", 30),
-    preauthorized=None
-)
 
-# --- 4. LÓGICA PRINCIPAL ---
-
-# A. Criação do primeiro admin
 if not credentials.get("usernames"):
-    st.title("🚀 Bem-vindo ao Simulador de Telemetria!")
-    st.subheader("Configuração Inicial: Crie a sua Conta de Administrador")
-    with st.form("form_criar_primeiro_admin"):
-        name = st.text_input("Nome Completo")
-        username = st.text_input("Nome de Utilizador (login)")
-        email = st.text_input("Email")
-        password = st.text_input("Senha", type="password")
-        if st.form_submit_button("✨ Criar Administrador"):
-            if all([name, username, email, password]):
-                if umdb.add_user(username, name, email, password, "admin"):
-                    umdb.add_log(username, "Criação de Conta", "Primeiro administrador criado.")
-                    st.toast("Conta de administrador criada! A página será recarregada.", icon="🎉")
-                    st.rerun()
+    left, center, right = st.columns([1, 1.25, 1])
+    with center:
+        render_logo(max_width=260)
+        st.markdown("## Configuração inicial")
+        st.caption("Crie a primeira conta administrativa da plataforma.")
+        with st.form("first_admin_form", clear_on_submit=False):
+            name = st.text_input("Nome completo")
+            username = st.text_input("Usuário de acesso")
+            email = st.text_input("E-mail")
+            password = st.text_input("Senha", type="password", help="Use pelo menos 8 caracteres.")
+            confirmation = st.text_input("Confirmar senha", type="password")
+            submitted = st.form_submit_button("Criar administrador", type="primary", width="stretch")
+
+        if submitted:
+            if not all([name.strip(), username.strip(), email.strip(), password, confirmation]):
+                st.warning("Preencha todos os campos.")
+            elif password != confirmation:
+                st.warning("A confirmação de senha não corresponde.")
+            elif len(password) < 8:
+                st.warning("A senha deve possuir pelo menos 8 caracteres.")
+            elif db.add_user(username, name, email, password, "admin"):
+                db.add_log(username.strip().lower(), "Criou o primeiro administrador")
+                st.success("Administrador criado. A página será recarregada.")
+                st.rerun()
             else:
-                st.warning("Por favor, preencha todos os campos.")
+                st.error("Não foi possível criar o administrador. Verifique os dados informados.")
     st.stop()
 
-# B. Processo de Login
-authenticator.login(location='main')
+
+if st.session_state.get("authentication_status") is True:
+    authenticator.login(location="unrendered", key="main_cookie_login", max_login_attempts=5)
+else:
+    login_left, login_center, login_right = st.columns([1, 1.15, 1])
+    with login_center:
+        render_logo(max_width=260)
+        st.markdown("## Acesso à plataforma")
+        st.caption(branding.get("system_subtitle", ""))
+        authenticator.login(location="main", fields=LOGIN_FIELDS, key="main_login", max_login_attempts=5)
 
 if "logged_in_log" not in st.session_state:
     st.session_state.logged_in_log = False
-if st.session_state["authentication_status"] and not st.session_state.logged_in_log:
-    umdb.add_log(st.session_state["username"], "Login bem-sucedido")
-    st.session_state.logged_in_log = True
-elif not st.session_state["authentication_status"]:
+
+if st.session_state.get("authentication_status"):
+    username = str(st.session_state.get("username") or "").strip().lower()
+    current_role = db.get_user_role(username)
+    if current_role is None:
+        clear_auth_state()
+        st.error("A conta está inativa ou não existe mais.")
+        st.stop()
+    st.session_state["username"] = username
+    st.session_state["role"] = current_role
+    if not st.session_state.logged_in_log:
+        db.add_log(username, "Login realizado")
+        st.session_state.logged_in_log = True
+elif st.session_state.get("authentication_status") is False:
     st.session_state.logged_in_log = False
+    st.error("Usuário ou senha inválidos.")
+    st.stop()
+else:
+    st.stop()
 
-if st.session_state["authentication_status"]:
-    # --- PÓS-LOGIN ---
-    name = st.session_state["name"]
-    username = st.session_state["username"]
-    st.session_state.role = umdb.get_user_role(username)
 
-    st.sidebar.image("imgs/v-c.png", width=120)
-    st.sidebar.title(f"Olá, {name}! 👋")
-    authenticator.logout("Sair", "sidebar")
-    st.sidebar.markdown("---")
+render_sidebar(include_logout=True)
+render_hero(
+    branding["system_name"],
+    f"Bem-vindo, {st.session_state.get('name', 'usuário')}. Acesse os simuladores e ferramentas pelo menu lateral.",
+)
 
-    if st.session_state.role == "user":
-        with st.sidebar.expander("Minha Conta"):
-            with st.form("form_alterar_senha_user", clear_on_submit=True):
-                current_pwd = st.text_input("Senha Atual", type="password", key="user_curr_pwd")
-                new_pwd = st.text_input("Nova Senha", type="password", key="user_new_pwd")
-                if st.form_submit_button("Salvar Nova Senha"):
-                    user_hash = credentials["usernames"][username]["password"]
-                    if umdb.verify_password(current_pwd, user_hash):
-                        if umdb.update_user_password(username, new_pwd):
-                            umdb.add_log(username, "Alterou a própria senha")
-                            st.toast("Senha alterada com sucesso!", icon="✅")
-                        else:
-                            st.error("Ocorreu um erro ao alterar a senha.")
-                    else:
-                        st.error("A sua senha atual está incorreta.")
+summary = db.get_dashboard_summary()
+last_proposal = summary.get("last_proposal")
+last_proposal_label = last_proposal.strftime("%d/%m/%Y %H:%M") if isinstance(last_proposal, datetime) else "Sem registros"
 
-    st.header("Página Principal")
-    st.write("Navegue pelas ferramentas no menu lateral.")
+k1, k2, k3, k4 = st.columns(4)
+k1.metric("Propostas registradas", summary["total_proposals"])
+k2.metric("Valor total simulado", money(summary["total_value"]))
+k3.metric("Usuários ativos", summary["active_users"])
+k4.metric("Última proposta", last_proposal_label)
 
-    if st.session_state.role == "admin":
-        st.markdown("---")
-        st.subheader("Painel de Administração")
-        
-        tab_ver, tab_cad, tab_edit, tab_del, tab_reset, tab_precos = st.tabs([
-            "👁️ Utilizadores", "➕ Cadastrar", "✏️ Editar", "🗑️ Excluir", "🔑 Resetar Senha", "⚙️ Gerir Preços"
-        ])
+st.markdown("### Acessos rápidos")
+quick_1, quick_2, quick_3, quick_4 = st.columns(4)
+with quick_1:
+    st.markdown('<div class="app-card"><div class="app-card-title">Pessoa jurídica</div><div class="app-card-value">Proposta PJ</div><p class="app-muted">Planos, produtos e geração de documento comercial.</p></div>', unsafe_allow_html=True)
+    st.page_link("pages/1_Simulador_PJ.py", label="Abrir simulador PJ", width="stretch")
+with quick_2:
+    st.markdown('<div class="app-card"><div class="app-card-title">Pessoa física</div><div class="app-card-value">Proposta PF</div><p class="app-muted">Descontos, parcelamento e valor final da venda.</p></div>', unsafe_allow_html=True)
+    st.page_link("pages/2_Simulador_PF.py", label="Abrir simulador PF", width="stretch")
+with quick_3:
+    st.markdown('<div class="app-card"><div class="app-card-title">Editais</div><div class="app-card-value">Licitações</div><p class="app-muted">Custos, amortização, serviços e margem comercial.</p></div>', unsafe_allow_html=True)
+    st.page_link("pages/3_Simulador_Licitacao.py", label="Abrir simulador", width="stretch")
+with quick_4:
+    st.markdown('<div class="app-card"><div class="app-card-title">Gestão</div><div class="app-card-value">Dashboard</div><p class="app-muted">Indicadores e histórico consolidado de propostas.</p></div>', unsafe_allow_html=True)
+    st.page_link("pages/4_Dashboard.py", label="Abrir dashboard", width="stretch")
 
-        with tab_ver:
-            st.markdown("##### Pesquisar Utilizador")
-            search_query = st.text_input("Pesquisar por nome ou username:", key="admin_search")
-            all_users = umdb.get_all_users_for_admin_display()
-            if search_query:
-                search_query = search_query.lower()
-                filtered_users = [
-                    user for user in all_users 
-                    if search_query in user.get('name', '').lower() or search_query in user.get('username', '').lower()
+recent = db.get_recent_proposals(limit=8)
+if recent:
+    st.markdown("### Atividade comercial recente")
+    recent_df = pd.DataFrame(recent)
+    if "_id" in recent_df.columns:
+        recent_df.drop(columns=["_id"], inplace=True)
+    display_columns = [column for column in ["data_geracao", "tipo", "empresa", "consultor", "valor_total"] if column in recent_df.columns]
+    st.dataframe(
+        recent_df[display_columns],
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "data_geracao": st.column_config.DatetimeColumn("Data", format="DD/MM/YYYY HH:mm"),
+            "tipo": "Tipo",
+            "empresa": "Cliente ou órgão",
+            "consultor": "Consultor",
+            "valor_total": st.column_config.NumberColumn("Valor", format="R$ %.2f"),
+        },
+    )
+
+
+if st.session_state.get("role") == "admin":
+    st.markdown("---")
+    st.markdown("## Administração")
+    tab_users, tab_prices, tab_branding, tab_account, tab_status = st.tabs(
+        ["Usuários", "Preços e produtos", "Identidade visual", "Conta e senha", "Ambiente"]
+    )
+
+    with tab_users:
+        users = db.get_all_users_for_admin_display()
+        overview_col, create_col = st.columns([1.4, 1])
+
+        with overview_col:
+            st.markdown("#### Usuários cadastrados")
+            search = st.text_input("Pesquisar usuário", placeholder="Nome, login ou e-mail")
+            filtered = users
+            if search.strip():
+                term = search.strip().lower()
+                filtered = [
+                    user
+                    for user in users
+                    if term in str(user.get("name", "")).lower()
+                    or term in str(user.get("username", "")).lower()
+                    or term in str(user.get("email", "")).lower()
                 ]
-                st.dataframe(filtered_users, use_container_width=True, hide_index=True)
+            if filtered:
+                st.dataframe(
+                    pd.DataFrame(filtered),
+                    width="stretch",
+                    hide_index=True,
+                    column_config={
+                        "username": "Usuário",
+                        "name": "Nome",
+                        "email": "E-mail",
+                        "role": "Perfil",
+                        "active": "Ativo",
+                        "created_at": st.column_config.DatetimeColumn("Criado em", format="DD/MM/YYYY HH:mm"),
+                        "updated_at": st.column_config.DatetimeColumn("Atualizado em", format="DD/MM/YYYY HH:mm"),
+                    },
+                )
             else:
-                st.dataframe(all_users, use_container_width=True, hide_index=True)
+                st.info("Nenhum usuário encontrado.")
 
-        with tab_cad:
-            with st.form("form_cadastrar", clear_on_submit=True):
-                st.subheader("Cadastrar Novo Utilizador")
-                uname = st.text_input("Nome de Utilizador")
-                nome_completo = st.text_input("Nome Completo")
-                mail = st.text_input("Email")
-                pwd = st.text_input("Senha", type="password")
-                role = st.selectbox("Papel", ["user", "admin"], format_func=str.capitalize)
-                if st.form_submit_button("Cadastrar Utilizador"):
-                    if all([uname, nome_completo, mail, pwd, role]):
-                        if umdb.add_user(uname, nome_completo, mail, pwd, role):
-                            log_details = {"utilizador_criado": uname, "nome": nome_completo, "email": mail, "papel": role}
-                            umdb.add_log(username, "Criou Utilizador", details=log_details)
-                            st.toast(f"Utilizador '{uname}' criado.", icon="➕")
-                            st.rerun()
+        with create_col:
+            st.markdown("#### Novo usuário")
+            with st.form("create_user", clear_on_submit=True):
+                new_name = st.text_input("Nome completo")
+                new_username = st.text_input("Usuário")
+                new_email = st.text_input("E-mail")
+                new_password = st.text_input("Senha inicial", type="password")
+                new_role = st.selectbox("Perfil", ["user", "admin"], format_func=lambda value: "Usuário" if value == "user" else "Administrador")
+                create_user = st.form_submit_button("Cadastrar usuário", type="primary", width="stretch")
+            if create_user:
+                if len(new_password) < 8:
+                    st.warning("A senha inicial deve possuir pelo menos 8 caracteres.")
+                elif db.add_user(new_username, new_name, new_email, new_password, new_role):
+                    db.add_log(username, "Criou usuário", {"usuario": new_username, "perfil": new_role})
+                    st.success("Usuário cadastrado.")
+                    st.rerun()
+                else:
+                    st.error("Não foi possível cadastrar. O usuário pode já existir ou os dados estão incompletos.")
+
+        if users:
+            st.markdown("#### Editar usuário")
+            users_map = {user["username"]: user for user in users}
+            selected_username = st.selectbox("Selecione o usuário", list(users_map), key="admin_user_select")
+            selected = users_map[selected_username]
+            edit_col, password_col, delete_col = st.columns([1.3, 1, 0.8])
+
+            with edit_col:
+                with st.form("edit_user"):
+                    edited_name = st.text_input("Nome", value=selected.get("name", ""))
+                    edited_email = st.text_input("E-mail", value=selected.get("email", ""))
+                    edited_role = st.selectbox(
+                        "Perfil",
+                        ["user", "admin"],
+                        index=0 if selected.get("role") == "user" else 1,
+                        format_func=lambda value: "Usuário" if value == "user" else "Administrador",
+                    )
+                    edited_active = st.toggle("Acesso ativo", value=selected.get("active", True))
+                    save_user = st.form_submit_button("Salvar alterações", width="stretch")
+                if save_user and db.update_user_details(selected_username, edited_name, edited_email, edited_role, edited_active):
+                    db.add_log(username, "Editou usuário", {"usuario": selected_username, "perfil": edited_role, "ativo": edited_active})
+                    st.success("Usuário atualizado.")
+                    st.rerun()
+
+            with password_col:
+                with st.form("reset_user_password"):
+                    reset_password = st.text_input("Nova senha", type="password")
+                    reset_confirmation = st.text_input("Confirmar nova senha", type="password")
+                    reset_submit = st.form_submit_button("Redefinir senha", width="stretch")
+                if reset_submit:
+                    if len(reset_password) < 8:
+                        st.warning("Use pelo menos 8 caracteres.")
+                    elif reset_password != reset_confirmation:
+                        st.warning("As senhas não correspondem.")
+                    elif db.reset_user_password_by_admin(selected_username, reset_password):
+                        db.add_log(username, "Redefiniu senha", {"usuario": selected_username})
+                        st.success("Senha redefinida.")
                     else:
-                        st.warning("Preencha todos os campos.")
+                        st.error("Não foi possível redefinir a senha.")
 
-        users_dict = {u['username']: u for u in umdb.get_all_users_for_admin_display()}
-        if users_dict:
-            user_to_manage = st.selectbox(
-                "Selecione um utilizador para gerir:", 
-                list(users_dict.keys()), 
-                key="user_select_manage"
-            )
-            user_data = users_dict.get(user_to_manage, {})
-
-            with tab_edit:
-                st.subheader(f"A editar: {user_to_manage}")
-                with st.form(f"form_edit_{user_to_manage}"):
-                    new_name = st.text_input("Nome Completo", value=user_data.get('name', ''))
-                    new_email = st.text_input("Email", value=user_data.get('email', ''))
-                    role_idx = ["user", "admin"].index(user_data.get('role', 'user'))
-                    new_role = st.selectbox("Papel", ["user", "admin"], index=role_idx, format_func=str.capitalize)
-                    if st.form_submit_button("Salvar Alterações"):
-                        log_details = {
-                            "utilizador_alvo": user_to_manage,
-                            "alteracoes": {
-                                "nome": {"de": user_data.get('name', ''), "para": new_name},
-                                "email": {"de": user_data.get('email', ''), "para": new_email},
-                                "papel": {"de": user_data.get('role', 'user'), "para": new_role}
-                            }
-                        }
-                        if umdb.update_user_details(user_to_manage, new_name, new_email, new_role):
-                            umdb.add_log(username, "Editou Utilizador", details=log_details)
-                            st.toast("Detalhes atualizados.", icon="✏️")
-                            st.rerun()
-
-            with tab_del:
-                st.subheader(f"Excluir: {user_to_manage}")
-                st.warning(f"⚠️ Atenção: esta ação é irreversível.")
-                if st.button(f"Excluir Permanentemente '{user_to_manage}'", type="primary"):
-                    user_details_before_delete = user_data.copy()
-                    if umdb.delete_user(user_to_manage):
-                        umdb.add_log(username, "Excluiu Utilizador", details={"utilizador_excluido": user_details_before_delete})
-                        st.toast(f"Utilizador '{user_to_manage}' excluído.", icon="🗑️")
+            with delete_col:
+                st.caption("Exclusão permanente")
+                confirmation = st.text_input("Digite o usuário", key="delete_user_confirmation")
+                if st.button("Excluir usuário", type="primary", width="stretch", disabled=confirmation != selected_username):
+                    if selected_username == username:
+                        st.error("Você não pode excluir a própria conta durante a sessão.")
+                    elif db.delete_user(selected_username):
+                        db.add_log(username, "Excluiu usuário", {"usuario": selected_username})
+                        st.success("Usuário excluído.")
                         st.rerun()
-        else:
-            with tab_edit: st.info("Nenhum utilizador para editar.")
-            with tab_del: st.info("Nenhum utilizador para excluir.")
-
-        with tab_reset:
-            st.subheader("Resetar Senha de Utilizador")
-            users_list_reset = [u['username'] for u in umdb.get_all_users_for_admin_display()]
-            if not users_list_reset:
-                st.info("Nenhum utilizador disponível.")
-            else:
-                user_to_reset = st.selectbox("Selecione o utilizador:", users_list_reset, key="admin_reset_select")
-                with st.form(f"form_reset_password_{user_to_reset}", clear_on_submit=True):
-                    new_password = st.text_input("Digite a NOVA senha", type="password")
-                    if st.form_submit_button("Resetar Senha"):
-                        if new_password:
-                            if umdb.reset_user_password_by_admin(user_to_reset, new_password):
-                                umdb.add_log(username, "Resetou Senha", details={"utilizador_alvo": user_to_reset})
-                                st.toast(f"Senha para '{user_to_reset}' resetada com sucesso!", icon="🔑")
-                            else:
-                                st.error("Falha ao resetar a senha.")
-                        else:
-                            st.warning("A nova senha não pode ser vazia.")
-                            
-        with tab_precos:
-            st.subheader("Gestão de Preços e Taxas da Plataforma")
-            pricing_config = umdb.get_pricing_config()
-            
-            # --- ÁREA DE ADIÇÃO DE NOVOS PRODUTOS (NOVA FUNCIONALIDADE) ---
-            with st.expander("➕ Adicionar Novos Produtos (PF/PJ/Licitação)", expanded=False):
-                st.info("Use esta seção para criar novos produtos. Após adicionar, eles aparecerão no formulário abaixo para edição detalhada.")
-                
-                col_add_pf, col_add_pj, col_add_licit = st.columns(3)
-                
-                # Formulário para adicionar PF
-                with col_add_pf:
-                    st.markdown("###### Novo Produto - Pessoa Física")
-                    with st.form("form_add_prod_pf", clear_on_submit=True):
-                        new_pf_name = st.text_input("Nome do Produto (Ex: Rastreador Moto)")
-                        new_pf_price = st.number_input("Preço de Venda (R$)", min_value=0.0, format="%.2f")
-                        if st.form_submit_button("Adicionar Produto PF"):
-                            if new_pf_name:
-                                current_pf = pricing_config.get("PRECOS_PF", {})
-                                if new_pf_name in current_pf:
-                                    st.warning(f"O produto '{new_pf_name}' já existe.")
-                                else:
-                                    current_pf[new_pf_name] = new_pf_price
-                                    pricing_config["PRECOS_PF"] = current_pf
-                                    if umdb.update_pricing_config(pricing_config):
-                                        st.toast(f"Produto '{new_pf_name}' adicionado!", icon="✅")
-                                        umdb.add_log(username, "Adicionou Produto PF", details={"produto": new_pf_name, "preco": new_pf_price})
-                                        st.rerun()
-                                    else:
-                                        st.error("Erro ao salvar no banco de dados.")
-                            else:
-                                st.warning("Digite o nome do produto.")
-
-                # Formulário para adicionar PJ
-                with col_add_pj:
-                    st.markdown("###### Novo Produto - Pessoa Jurídica")
-                    with st.form("form_add_prod_pj", clear_on_submit=True):
-                        new_pj_name = st.text_input("Nome do Produto (Ex: Sensor de Fadiga)")
-                        new_pj_desc = st.text_input("Descrição Curta (para a Proposta)")
-                        new_pj_price = st.number_input("Preço Base Mensal (R$)", min_value=0.0, format="%.2f", 
-                                                       help="Este preço será aplicado a todos os planos. Você poderá ajustá-los individualmente abaixo.")
-                        if st.form_submit_button("Adicionar Produto PJ"):
-                            if new_pj_name:
-                                current_plans = pricing_config.get("PLANOS_PJ", {})
-                                # Adiciona o produto em todos os planos existentes
-                                for plano, itens in current_plans.items():
-                                    if new_pj_name not in itens:
-                                        itens[new_pj_name] = new_pj_price
-                                
-                                # Atualiza descrição
-                                descricoes = pricing_config.get("PRODUTOS_PJ_DESCRICAO", {})
-                                descricoes[new_pj_name] = new_pj_desc if new_pj_desc else new_pj_name
-                                pricing_config["PRODUTOS_PJ_DESCRICAO"] = descricoes
-                                pricing_config["PLANOS_PJ"] = current_plans 
-
-                                if umdb.update_pricing_config(pricing_config):
-                                    st.toast(f"Produto '{new_pj_name}' adicionado aos planos PJ!", icon="✅")
-                                    umdb.add_log(username, "Adicionou Produto PJ", details={"produto": new_pj_name, "preco_base": new_pj_price})
-                                    st.rerun()
-                                else:
-                                    st.error("Erro ao salvar no banco de dados.")
-                            else:
-                                st.warning("Digite o nome do produto.")
-                                
-                # Formulário para adicionar Licitação
-                with col_add_licit:
-                    st.markdown("###### Novo Produto - Licitação")
-                    with st.form("form_add_prod_licit", clear_on_submit=True):
-                        new_licit_name = st.text_input("Nome do Produto (Ex: RFID)")
-                        new_licit_price = st.number_input("Custo da Licitação (R$)", min_value=0.0, format="%.2f")
-                        if st.form_submit_button("Adicionar Produto Licitação"):
-                            if new_licit_name:
-                                current_licit = pricing_config.get("PRECO_CUSTO_LICITACAO", {})
-                                if new_licit_name in current_licit:
-                                    st.warning(f"O produto '{new_licit_name}' já existe.")
-                                else:
-                                    current_licit[new_licit_name] = new_licit_price
-                                    pricing_config["PRECO_CUSTO_LICITACAO"] = current_licit
-                                    if umdb.update_pricing_config(pricing_config):
-                                        st.toast(f"Produto '{new_licit_name}' adicionado!", icon="✅")
-                                        umdb.add_log(username, "Adicionou Produto Licitação", details={"produto": new_licit_name, "preco": new_licit_price})
-                                        st.rerun()
-                                    else:
-                                        st.error("Erro ao salvar no banco de dados.")
-                            else:
-                                st.warning("Digite o nome do produto.")
-
-            st.divider()
-            
-            # --- FORMULÁRIO DE EDIÇÃO EXISTENTE ---
-            with st.form("form_edit_prices"):
-                with st.expander("Simulador Pessoa Física (PF)", expanded=True):
-                    pf_prices = pricing_config.get("PRECOS_PF", {})
-                    col1, col2 = st.columns(2)
-                    keys_pf = list(pf_prices.keys())
-                    for i, key in enumerate(keys_pf):
-                        col = col1 if i % 2 == 0 else col2
-                        pf_prices[key] = col.number_input(f"Preço {key} (PF)", value=float(pf_prices.get(key, 0.0)), format="%.2f")
-                
-                with st.expander("Simulador Licitação (Custos)", expanded=True):
-                    licit_prices = pricing_config.get("PRECO_CUSTO_LICITACAO", {})
-                    l_col1, l_col2, l_col3 = st.columns(3)
-                    # Loop dinâmico! Garante que novos produtos criados acima apareçam na Licitação
-                    keys_licit = list(licit_prices.keys())
-                    for i, key in enumerate(keys_licit):
-                        col_l = [l_col1, l_col2, l_col3][i % 3]
-                        licit_prices[key] = col_l.number_input(f"Custo {key}", value=float(licit_prices.get(key, 0.0)), format="%.2f", key=f"licit_edit_{i}")
-
-                with st.expander("Simulador Pessoa Jurídica (PJ)", expanded=True):
-                    pj_plans = pricing_config.get("PLANOS_PJ", {})
-                    for plan_name, products in pj_plans.items():
-                        st.markdown(f"###### Plano: {plan_name}")
-                        cols = st.columns(3)
-                        product_keys = list(products.keys())
-                        for i, key in enumerate(product_keys):
-                            products[key] = cols[i % 3].number_input(f"Preço {key}", value=float(products.get(key, 0.0)), format="%.2f", key=f"pj_{plan_name}_{key}")
-
-                if st.form_submit_button("✅ Salvar Todas as Alterações de Preços"):
-                    new_config_data = pricing_config.copy()
-                    new_config_data["PRECOS_PF"] = pf_prices
-                    new_config_data["PRECO_CUSTO_LICITACAO"] = licit_prices
-                    new_config_data["PLANOS_PJ"] = pj_plans
-                    
-                    if umdb.update_pricing_config(new_config_data):
-                        umdb.add_log(username, "Atualizou Preços", details={"mensagem": "Todos os preços da plataforma foram alterados."})
-                        st.toast("Preços atualizados com sucesso!", icon="🎉")
                     else:
-                        st.error("Falha ao atualizar os preços.")
+                        st.error("A exclusão foi bloqueada. Verifique se este é o único administrador.")
 
-elif st.session_state["authentication_status"] is False:
-    st.error('❌ Nome de utilizador ou senha incorreto(s).')
-elif st.session_state["authentication_status"] is None:
-    st.title("Simulador de Telemetria")
-    st.info('👋 Por favor, insira o seu nome de utilizador e senha para aceder.')
+    with tab_prices:
+        pricing = db.get_pricing_config()
+        st.caption("As alterações são aplicadas imediatamente aos simuladores.")
+
+        add_pf, add_pj, add_bid = st.columns(3)
+        with add_pf:
+            with st.form("add_pf_product", clear_on_submit=True):
+                st.markdown("#### Novo produto PF")
+                pf_name = st.text_input("Nome do produto")
+                pf_price = st.number_input("Preço de venda", min_value=0.0, step=10.0, format="%.2f")
+                pf_submit = st.form_submit_button("Adicionar produto", width="stretch")
+            if pf_submit and pf_name.strip():
+                pricing.setdefault("PRECOS_PF", {})[pf_name.strip()] = pf_price
+                if db.update_pricing_config(pricing):
+                    db.add_log(username, "Adicionou produto PF", {"produto": pf_name, "preco": pf_price})
+                    st.success("Produto PF adicionado.")
+                    st.rerun()
+
+        with add_pj:
+            with st.form("add_pj_product", clear_on_submit=True):
+                st.markdown("#### Novo produto PJ")
+                pj_name = st.text_input("Nome do produto")
+                pj_description = st.text_input("Descrição comercial")
+                pj_price = st.number_input("Preço mensal base", min_value=0.0, step=10.0, format="%.2f")
+                pj_submit = st.form_submit_button("Adicionar produto", width="stretch")
+            if pj_submit and pj_name.strip():
+                for plan_products in pricing.setdefault("PLANOS_PJ", {}).values():
+                    plan_products[pj_name.strip()] = pj_price
+                pricing.setdefault("PRODUTOS_PJ_DESCRICAO", {})[pj_name.strip()] = pj_description.strip() or pj_name.strip()
+                if db.update_pricing_config(pricing):
+                    db.add_log(username, "Adicionou produto PJ", {"produto": pj_name, "preco": pj_price})
+                    st.success("Produto PJ adicionado.")
+                    st.rerun()
+
+        with add_bid:
+            with st.form("add_bid_product", clear_on_submit=True):
+                st.markdown("#### Novo item de licitação")
+                bid_name = st.text_input("Nome do item")
+                bid_cost = st.number_input("Custo do item", min_value=0.0, step=10.0, format="%.2f")
+                bid_submit = st.form_submit_button("Adicionar item", width="stretch")
+            if bid_submit and bid_name.strip():
+                pricing.setdefault("PRECO_CUSTO_LICITACAO", {})[bid_name.strip()] = bid_cost
+                if db.update_pricing_config(pricing):
+                    db.add_log(username, "Adicionou item de licitação", {"produto": bid_name, "custo": bid_cost})
+                    st.success("Item adicionado.")
+                    st.rerun()
+
+        with st.form("edit_pricing"):
+            st.markdown("#### Valores atuais")
+            pf_prices = dict(pricing.get("PRECOS_PF", {}))
+            with st.expander("Pessoa física", expanded=True):
+                pf_columns = st.columns(3)
+                for index, item in enumerate(list(pf_prices)):
+                    pf_prices[item] = pf_columns[index % 3].number_input(
+                        item,
+                        value=float(pf_prices[item]),
+                        min_value=0.0,
+                        format="%.2f",
+                        key=f"price_pf_{index}",
+                    )
+
+            bid_prices = dict(pricing.get("PRECO_CUSTO_LICITACAO", {}))
+            with st.expander("Licitações", expanded=False):
+                amortization = st.number_input(
+                    "Prazo de amortização do hardware (meses)",
+                    min_value=1,
+                    value=int(pricing.get("AMORTIZACAO_HARDWARE_MESES", 12)),
+                )
+                bid_columns = st.columns(3)
+                for index, item in enumerate(list(bid_prices)):
+                    bid_prices[item] = bid_columns[index % 3].number_input(
+                        item,
+                        value=float(bid_prices[item]),
+                        min_value=0.0,
+                        format="%.2f",
+                        key=f"price_bid_{index}",
+                    )
+
+            pj_plans = {plan: dict(products) for plan, products in pricing.get("PLANOS_PJ", {}).items()}
+            with st.expander("Pessoa jurídica", expanded=False):
+                for plan, products in pj_plans.items():
+                    st.markdown(f"**{plan}**")
+                    plan_columns = st.columns(3)
+                    for index, item in enumerate(list(products)):
+                        products[item] = plan_columns[index % 3].number_input(
+                            item,
+                            value=float(products[item]),
+                            min_value=0.0,
+                            format="%.2f",
+                            key=f"price_pj_{plan}_{index}",
+                        )
+
+            save_prices = st.form_submit_button("Salvar preços", type="primary", width="stretch")
+
+        if save_prices:
+            pricing["PRECOS_PF"] = pf_prices
+            pricing["PRECO_CUSTO_LICITACAO"] = bid_prices
+            pricing["PLANOS_PJ"] = pj_plans
+            pricing["AMORTIZACAO_HARDWARE_MESES"] = amortization
+            if db.update_pricing_config(pricing):
+                db.add_log(username, "Atualizou preços e produtos")
+                st.success("Preços atualizados.")
+                st.rerun()
+            else:
+                st.error("Não foi possível salvar os preços.")
+
+    with tab_branding:
+        current = db.get_system_settings()
+        preview_col, config_col = st.columns([1, 1.4])
+
+        with preview_col:
+            st.markdown("#### Pré-visualização")
+            render_logo(max_width=320)
+            st.markdown(f"### {current['system_name']}")
+            st.caption(current["system_subtitle"])
+            st.markdown(
+                f"""
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem;margin-top:1rem;">
+                    <div style="height:64px;border-radius:10px;background:{current['primary_color']};"></div>
+                    <div style="height:64px;border-radius:10px;background:{current['secondary_color']};"></div>
+                    <div style="height:64px;border-radius:10px;background:{current['accent_color']};"></div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            uploaded_logo = st.file_uploader("Nova logomarca", type=["png", "jpg", "jpeg", "webp"], help="Recomendado: fundo transparente e largura de até 1200 px.")
+            if uploaded_logo:
+                try:
+                    if uploaded_logo.size > 5_000_000:
+                        raise ValueError("O arquivo original deve possuir no máximo 5 MB.")
+                    image = Image.open(uploaded_logo)
+                    if image.width * image.height > 20_000_000:
+                        raise ValueError("A imagem possui resolução excessiva. Use no máximo 20 megapixels.")
+                    image = ImageOps.exif_transpose(image).convert("RGBA")
+                    image.thumbnail((1200, 500), Image.Resampling.LANCZOS)
+                    buffer = io.BytesIO()
+                    image.save(buffer, format="PNG", optimize=True)
+                    if len(buffer.getvalue()) > 2_000_000:
+                        st.error("A imagem otimizada ainda excede 2 MB.")
+                    elif st.button("Aplicar nova logomarca", type="primary", width="stretch"):
+                        if db.update_system_logo(buffer.getvalue(), "image/png", uploaded_logo.name):
+                            db.add_log(username, "Atualizou a logomarca")
+                            st.success("Logomarca atualizada.")
+                            st.rerun()
+                except Exception as exc:
+                    st.error(f"Arquivo de imagem inválido: {exc}")
+
+            if current.get("logo_base64") and st.button("Restaurar logomarca padrão", width="stretch"):
+                if db.reset_system_logo():
+                    db.add_log(username, "Restaurou a logomarca padrão")
+                    st.rerun()
+
+        with config_col:
+            with st.form("branding_form"):
+                st.markdown("#### Textos e cores")
+                system_name = st.text_input("Nome do sistema", value=current["system_name"], max_chars=80)
+                system_subtitle = st.text_input("Descrição curta", value=current["system_subtitle"], max_chars=160)
+                footer_text = st.text_input("Texto do rodapé", value=current.get("footer_text", ""), max_chars=160)
+
+                color_1, color_2, color_3 = st.columns(3)
+                primary = color_1.color_picker("Cor primária", current["primary_color"])
+                secondary = color_2.color_picker("Cor secundária", current["secondary_color"])
+                accent = color_3.color_picker("Cor de destaque", current["accent_color"])
+
+                color_4, color_5, color_6 = st.columns(3)
+                background = color_4.color_picker("Fundo", current["background_color"])
+                surface = color_5.color_picker("Superfície", current["surface_color"])
+                text = color_6.color_picker("Texto", current["text_color"])
+                muted = st.color_picker("Texto secundário", current["muted_color"])
+
+                save_branding = st.form_submit_button("Salvar identidade visual", type="primary", width="stretch")
+
+            if save_branding:
+                updated = dict(current)
+                updated.update(
+                    {
+                        "system_name": system_name,
+                        "system_subtitle": system_subtitle,
+                        "footer_text": footer_text,
+                        "primary_color": primary,
+                        "secondary_color": secondary,
+                        "accent_color": accent,
+                        "background_color": background,
+                        "surface_color": surface,
+                        "text_color": text,
+                        "muted_color": muted,
+                    }
+                )
+                contrast_errors = branding_contrast_errors(updated)
+                if contrast_errors:
+                    st.error("As cores selecionadas prejudicam a legibilidade.")
+                    for contrast_error in contrast_errors:
+                        st.caption(contrast_error)
+                elif db.update_system_settings(updated):
+                    db.add_log(username, "Atualizou a identidade visual")
+                    st.success("Identidade visual atualizada.")
+                    st.rerun()
+                else:
+                    st.error("Não foi possível salvar a identidade visual.")
+
+            if st.button("Restaurar todas as cores padrão", width="stretch"):
+                defaults = get_default_branding()
+                defaults.update(
+                    {
+                        "logo_base64": current.get("logo_base64"),
+                        "logo_mime": current.get("logo_mime"),
+                        "logo_filename": current.get("logo_filename"),
+                    }
+                )
+                if db.update_system_settings(defaults):
+                    db.add_log(username, "Restaurou a identidade visual padrão")
+                    st.rerun()
+
+    with tab_account:
+        with st.form("own_password_form"):
+            st.markdown("#### Alterar sua senha")
+            current_password = st.text_input("Senha atual", type="password")
+            new_password = st.text_input("Nova senha", type="password")
+            new_confirmation = st.text_input("Confirmar nova senha", type="password")
+            change_password = st.form_submit_button("Alterar senha", type="primary")
+        if change_password:
+            stored_hash = credentials["usernames"][username]["password"]
+            if not db.verify_password(current_password, stored_hash):
+                st.error("A senha atual está incorreta.")
+            elif len(new_password) < 8:
+                st.warning("A nova senha deve possuir pelo menos 8 caracteres.")
+            elif new_password != new_confirmation:
+                st.warning("As senhas não correspondem.")
+            elif db.update_user_password(username, new_password):
+                db.add_log(username, "Alterou a própria senha")
+                st.success("Senha alterada.")
+            else:
+                st.error("Não foi possível alterar a senha.")
+
+    with tab_status:
+        st.markdown("#### Diagnóstico do ambiente")
+        mongo_ok = db.get_mongo_client() is not None
+        twilio_configured = bool(
+            st.secrets.get("TWILIO_ACCOUNT_SID", st.secrets.get("account_sid"))
+            and st.secrets.get("TWILIO_AUTH_TOKEN", st.secrets.get("auth_token"))
+            and st.secrets.get("TWILIO_PHONE_NUMBER", st.secrets.get("phone_number"))
+        )
+        status_1, status_2, status_3 = st.columns(3)
+        status_1.metric("MongoDB", "Conectado" if mongo_ok else "Indisponível")
+        status_2.metric("Twilio", "Configurado" if twilio_configured else "Não configurado")
+        status_3.metric("Perfil atual", "Administrador")
+        st.caption("As credenciais permanecem exclusivamente nos Secrets do Streamlit Cloud e não são exibidas nesta tela.")
+
+else:
+    st.markdown("---")
+    with st.expander("Minha conta"):
+        with st.form("user_password_form"):
+            current_password = st.text_input("Senha atual", type="password")
+            new_password = st.text_input("Nova senha", type="password")
+            new_confirmation = st.text_input("Confirmar nova senha", type="password")
+            change_password = st.form_submit_button("Alterar senha")
+        if change_password:
+            stored_hash = credentials["usernames"][username]["password"]
+            if not db.verify_password(current_password, stored_hash):
+                st.error("A senha atual está incorreta.")
+            elif len(new_password) < 8:
+                st.warning("A nova senha deve possuir pelo menos 8 caracteres.")
+            elif new_password != new_confirmation:
+                st.warning("As senhas não correspondem.")
+            elif db.update_user_password(username, new_password):
+                db.add_log(username, "Alterou a própria senha")
+                st.success("Senha alterada.")
