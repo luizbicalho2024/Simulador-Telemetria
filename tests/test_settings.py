@@ -1,4 +1,10 @@
-from app_core.settings import branding_contrast_errors, contrast_ratio, normalize_branding
+from app_core.settings import (
+    best_contrast_text,
+    branding_contrast_errors,
+    contrast_ratio,
+    normalize_branding,
+    resolve_branding_colors,
+)
 
 
 def test_normalize_branding_rejects_invalid_color_and_limits_text():
@@ -19,7 +25,7 @@ def test_default_branding_has_acceptable_contrast():
     assert contrast_ratio("#000000", "#FFFFFF") == 21.0
 
 
-def test_low_contrast_branding_is_rejected():
+def test_low_contrast_branding_generates_warnings():
     errors = branding_contrast_errors(
         {
             "text_color": "#FFFFFF",
@@ -27,6 +33,33 @@ def test_low_contrast_branding_is_rejected():
             "surface_color": "#FFFFFF",
             "secondary_color": "#FFFFFF",
             "primary_color": "#FFFFFF",
+            "sidebar_background_color": "#FFFFFF",
+            "sidebar_text_color": "#FFFFFF",
+            "sidebar_active_color": "#FFFFFF",
+            "sidebar_active_text_color": "#FFFFFF",
         }
     )
     assert len(errors) >= 3
+
+
+def test_automatic_contrast_keeps_light_primary_color_readable():
+    resolved = resolve_branding_colors(
+        {
+            "primary_color": "#FFD000",
+            "auto_contrast": True,
+        }
+    )
+    assert resolved["on_primary"] == "#111827"
+    assert best_contrast_text("#FFD000") == "#111827"
+
+
+def test_previous_branding_migrates_sidebar_from_existing_colors():
+    branding = normalize_branding(
+        {
+            "primary_color": "#FF5C1A",
+            "secondary_color": "#2D2926",
+        }
+    )
+    assert branding["sidebar_background_color"] == "#2D2926"
+    assert branding["sidebar_hover_color"] == "#FF5C1A"
+    assert branding["sidebar_active_color"] == "#FF5C1A"

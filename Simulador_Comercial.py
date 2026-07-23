@@ -378,25 +378,45 @@ if st.session_state.get("role") == "admin":
 
     with tab_branding:
         current = db.get_system_settings()
-        preview_col, config_col = st.columns([1, 1.4])
+        flash = st.session_state.pop("branding_flash", None)
+        if flash:
+            level = flash.get("level", "success")
+            message = flash.get("message", "Identidade visual atualizada.")
+            getattr(st, level, st.success)(message)
+            for detail in flash.get("details", []):
+                st.caption(detail)
+
+        preview_col, config_col = st.columns([1, 1.45])
 
         with preview_col:
             st.markdown("#### Pré-visualização")
-            render_logo(max_width=320)
+            st.caption("A logomarca recebe um fundo automático quando o arquivo não possui contraste suficiente.")
+            render_logo(max_width=320, branding=current)
             st.markdown(f"### {current['system_name']}")
             st.caption(current["system_subtitle"])
+
             st.markdown(
                 f"""
                 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem;margin-top:1rem;">
-                    <div style="height:64px;border-radius:10px;background:{current['primary_color']};"></div>
-                    <div style="height:64px;border-radius:10px;background:{current['secondary_color']};"></div>
-                    <div style="height:64px;border-radius:10px;background:{current['accent_color']};"></div>
+                    <div title="Primária" style="height:64px;border-radius:10px;background:{current['primary_color']};border:1px solid rgba(15,23,42,.08);"></div>
+                    <div title="Secundária" style="height:64px;border-radius:10px;background:{current['secondary_color']};border:1px solid rgba(15,23,42,.08);"></div>
+                    <div title="Destaque" style="height:64px;border-radius:10px;background:{current['accent_color']};border:1px solid rgba(15,23,42,.08);"></div>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem;margin-top:.6rem;">
+                    <div title="Sidebar" style="height:48px;border-radius:10px;background:{current['sidebar_background_color']};border:1px solid rgba(15,23,42,.08);"></div>
+                    <div title="Hover da sidebar" style="height:48px;border-radius:10px;background:{current['sidebar_hover_color']};border:1px solid rgba(15,23,42,.08);"></div>
+                    <div title="Item ativo da sidebar" style="height:48px;border-radius:10px;background:{current['sidebar_active_color']};border:1px solid rgba(15,23,42,.08);"></div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
+            st.caption("Linha superior: primária, secundária e destaque. Linha inferior: sidebar, hover e item ativo.")
 
-            uploaded_logo = st.file_uploader("Nova logomarca", type=["png", "jpg", "jpeg", "webp"], help="Recomendado: fundo transparente e largura de até 1200 px.")
+            uploaded_logo = st.file_uploader(
+                "Nova logomarca",
+                type=["png", "jpg", "jpeg", "webp"],
+                help="Recomendado: PNG ou WebP com transparência e largura de até 1200 px.",
+            )
             if uploaded_logo:
                 try:
                     if uploaded_logo.size > 5_000_000:
@@ -413,35 +433,116 @@ if st.session_state.get("role") == "admin":
                     elif st.button("Aplicar nova logomarca", type="primary", width="stretch"):
                         if db.update_system_logo(buffer.getvalue(), "image/png", uploaded_logo.name):
                             db.add_log(username, "Atualizou a logomarca")
-                            st.success("Logomarca atualizada.")
+                            st.session_state["branding_flash"] = {
+                                "level": "success",
+                                "message": "Logomarca atualizada.",
+                            }
                             st.rerun()
+                        else:
+                            st.error("Não foi possível salvar a logomarca.")
                 except Exception as exc:
                     st.error(f"Arquivo de imagem inválido: {exc}")
 
             if current.get("logo_base64") and st.button("Restaurar logomarca padrão", width="stretch"):
                 if db.reset_system_logo():
                     db.add_log(username, "Restaurou a logomarca padrão")
+                    st.session_state["branding_flash"] = {
+                        "level": "success",
+                        "message": "Logomarca padrão restaurada.",
+                    }
                     st.rerun()
 
         with config_col:
             with st.form("branding_form"):
-                st.markdown("#### Textos e cores")
+                st.markdown("#### Textos e identidade")
                 system_name = st.text_input("Nome do sistema", value=current["system_name"], max_chars=80)
                 system_subtitle = st.text_input("Descrição curta", value=current["system_subtitle"], max_chars=160)
                 footer_text = st.text_input("Texto do rodapé", value=current.get("footer_text", ""), max_chars=160)
+                auto_contrast = st.toggle(
+                    "Ajustar automaticamente a cor dos textos para manter a leitura",
+                    value=bool(current.get("auto_contrast", True)),
+                    help="Quando habilitado, o sistema troca apenas a cor do texto que ficaria ilegível. As cores de fundo escolhidas não são alteradas.",
+                )
 
-                color_1, color_2, color_3 = st.columns(3)
-                primary = color_1.color_picker("Cor primária", current["primary_color"])
-                secondary = color_2.color_picker("Cor secundária", current["secondary_color"])
-                accent = color_3.color_picker("Cor de destaque", current["accent_color"])
+                with st.expander("Cores gerais", expanded=True):
+                    color_1, color_2, color_3 = st.columns(3)
+                    primary = color_1.color_picker("Cor primária", current["primary_color"])
+                    secondary = color_2.color_picker("Cor secundária", current["secondary_color"])
+                    accent = color_3.color_picker("Cor de destaque", current["accent_color"])
 
-                color_4, color_5, color_6 = st.columns(3)
-                background = color_4.color_picker("Fundo", current["background_color"])
-                surface = color_5.color_picker("Superfície", current["surface_color"])
-                text = color_6.color_picker("Texto", current["text_color"])
-                muted = st.color_picker("Texto secundário", current["muted_color"])
+                    color_4, color_5, color_6 = st.columns(3)
+                    background = color_4.color_picker("Fundo", current["background_color"])
+                    surface = color_5.color_picker("Superfície", current["surface_color"])
+                    text = color_6.color_picker("Texto", current["text_color"])
+                    muted = st.color_picker("Texto secundário", current["muted_color"])
 
-                save_branding = st.form_submit_button("Salvar identidade visual", type="primary", width="stretch")
+                with st.expander("Barra lateral", expanded=True):
+                    sidebar_1, sidebar_2, sidebar_3 = st.columns(3)
+                    sidebar_background = sidebar_1.color_picker(
+                        "Fundo da sidebar",
+                        current["sidebar_background_color"],
+                    )
+                    sidebar_text = sidebar_2.color_picker(
+                        "Texto da sidebar",
+                        current["sidebar_text_color"],
+                    )
+                    sidebar_muted = sidebar_3.color_picker(
+                        "Texto secundário da sidebar",
+                        current["sidebar_muted_color"],
+                    )
+
+                    sidebar_4, sidebar_5, sidebar_6 = st.columns(3)
+                    sidebar_hover = sidebar_4.color_picker(
+                        "Hover da sidebar",
+                        current["sidebar_hover_color"],
+                    )
+                    sidebar_active = sidebar_5.color_picker(
+                        "Item ativo da sidebar",
+                        current["sidebar_active_color"],
+                    )
+                    sidebar_active_text = sidebar_6.color_picker(
+                        "Texto do item ativo",
+                        current["sidebar_active_text_color"],
+                    )
+
+                with st.expander("Apresentação da logomarca", expanded=True):
+                    logo_mode_labels = {
+                        "auto": "Automático — cria fundo somente quando necessário",
+                        "transparent": "Sempre transparente",
+                        "custom": "Usar sempre um fundo personalizado",
+                    }
+                    mode_values = list(logo_mode_labels)
+                    current_mode = current.get("logo_background_mode", "auto")
+                    logo_background_mode = st.selectbox(
+                        "Tratamento do fundo",
+                        mode_values,
+                        index=mode_values.index(current_mode) if current_mode in mode_values else 0,
+                        format_func=lambda value: logo_mode_labels[value],
+                    )
+                    logo_background_color = st.color_picker(
+                        "Cor personalizada do fundo da logomarca",
+                        current.get("logo_background_color", "#FFFFFF"),
+                        help="Utilizada quando o tratamento do fundo estiver em modo personalizado.",
+                    )
+                    logo_size_1, logo_size_2 = st.columns(2)
+                    logo_padding = logo_size_1.slider(
+                        "Espaçamento interno",
+                        min_value=0,
+                        max_value=40,
+                        value=int(current.get("logo_padding", 12)),
+                    )
+                    logo_border_radius = logo_size_2.slider(
+                        "Arredondamento",
+                        min_value=0,
+                        max_value=40,
+                        value=int(current.get("logo_border_radius", 12)),
+                    )
+
+                save_branding = st.form_submit_button(
+                    "Salvar identidade visual",
+                    type="primary",
+                    width="stretch",
+                )
 
             if save_branding:
                 updated = dict(current)
@@ -457,16 +558,32 @@ if st.session_state.get("role") == "admin":
                         "surface_color": surface,
                         "text_color": text,
                         "muted_color": muted,
+                        "sidebar_background_color": sidebar_background,
+                        "sidebar_text_color": sidebar_text,
+                        "sidebar_muted_color": sidebar_muted,
+                        "sidebar_hover_color": sidebar_hover,
+                        "sidebar_active_color": sidebar_active,
+                        "sidebar_active_text_color": sidebar_active_text,
+                        "auto_contrast": auto_contrast,
+                        "logo_background_mode": logo_background_mode,
+                        "logo_background_color": logo_background_color,
+                        "logo_padding": logo_padding,
+                        "logo_border_radius": logo_border_radius,
                     }
                 )
-                contrast_errors = branding_contrast_errors(updated)
-                if contrast_errors:
-                    st.error("As cores selecionadas prejudicam a legibilidade.")
-                    for contrast_error in contrast_errors:
-                        st.caption(contrast_error)
-                elif db.update_system_settings(updated):
+                contrast_warnings = branding_contrast_errors(updated)
+                if db.update_system_settings(updated):
                     db.add_log(username, "Atualizou a identidade visual")
-                    st.success("Identidade visual atualizada.")
+                    message = "Identidade visual atualizada."
+                    if contrast_warnings and auto_contrast:
+                        message += " O contraste automático ajustou somente os textos necessários."
+                    elif contrast_warnings:
+                        message += " Algumas combinações possuem contraste reduzido."
+                    st.session_state["branding_flash"] = {
+                        "level": "success" if not contrast_warnings or auto_contrast else "warning",
+                        "message": message,
+                        "details": contrast_warnings,
+                    }
                     st.rerun()
                 else:
                     st.error("Não foi possível salvar a identidade visual.")
@@ -482,6 +599,10 @@ if st.session_state.get("role") == "admin":
                 )
                 if db.update_system_settings(defaults):
                     db.add_log(username, "Restaurou a identidade visual padrão")
+                    st.session_state["branding_flash"] = {
+                        "level": "success",
+                        "message": "Cores e comportamento visual restaurados para o padrão.",
+                    }
                     st.rerun()
 
     with tab_account:

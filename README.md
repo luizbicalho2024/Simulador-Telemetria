@@ -93,12 +93,14 @@ Entre como administrador e abra a página inicial. Na seção **Administração 
 - nome do sistema;
 - descrição curta;
 - texto do rodapé;
-- cor primária;
-- cor secundária;
-- cor de destaque;
-- fundo, superfície, texto e texto secundário.
+- cor primária, secundária e de destaque;
+- fundo, superfície, texto e texto secundário;
+- fundo, texto, hover e item ativo da barra lateral;
+- contraste automático dos textos;
+- fundo automático, transparente ou personalizado para a logomarca;
+- espaçamento e arredondamento do painel da logomarca.
 
-As alterações ficam armazenadas na coleção `system_settings` do MongoDB e são aplicadas a todas as páginas.
+As alterações ficam armazenadas na coleção `system_settings` do MongoDB e são aplicadas a todas as páginas. Combinações de baixo contraste geram um aviso, mas não bloqueiam o salvamento. Com o contraste automático habilitado, somente as cores de texto necessárias são ajustadas durante a renderização.
 
 ## Segurança
 

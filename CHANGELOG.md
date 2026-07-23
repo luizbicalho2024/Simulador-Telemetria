@@ -1,3 +1,16 @@
+# Changelog
+
+## 2.1.0 — Personalização visual e navegação
+
+- Salvamento de cores liberado mesmo quando a combinação escolhida possui contraste reduzido.
+- Contraste automático de textos sobre botões, sidebar, cards e cabeçalhos.
+- Controles específicos para fundo, texto, hover e item ativo da barra lateral.
+- Fundo automático, transparente ou personalizado para logomarcas claras e escuras.
+- Configuração de espaçamento e arredondamento do painel da logomarca.
+- Botão de encerramento da sessão movido para o topo da sidebar em todas as páginas.
+- Estilos de botões, links, abas e componentes alinhados à cor primária configurada.
+- Migração automática das configurações visuais salvas na versão 2.0.
+
 # Histórico de alterações
 
 ## 2.0.0 — modernização corporativa
