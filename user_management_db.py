@@ -253,7 +253,12 @@ def update_pricing_config(new_config: dict[str, Any]) -> bool:
     if collection is None:
         return False
     clean_config = normalize_pricing_config(new_config)
-    clean_config.pop("_id", None)
+
+    # Metadados sao administrados pelo MongoDB e nao podem ser enviados em
+    # $set ao mesmo tempo que updated_at e alterado por $currentDate.
+    for metadata_field in ("_id", "created_at", "updated_at"):
+        clean_config.pop(metadata_field, None)
+
     try:
         collection.update_one(
             {"_id": "global_prices"},
