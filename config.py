@@ -29,16 +29,27 @@ def get_default_pricing() -> dict[str, Any]:
             "Videomonitoramento + DMS + ADAS": 227.28,
         },
     }
+    products = sorted({product for plan_products in plans.values() for product in plan_products})
 
     return {
         "_id": "global_prices",
         "PLANOS_PJ": plans,
-        # Custos mensais unitários por produto e prazo. Permanecem em zero até o
-        # administrador cadastrar os custos reais da operação.
         "CUSTOS_PJ": {
-            plan: {product: 0.0 for product in products}
-            for plan, products in plans.items()
+            plan: {product: 0.0 for product in plan_products}
+            for plan, plan_products in plans.items()
         },
+        # Instalação é uma cobrança única por veículo. O preço pode ser cobrado
+        # ou isentado na proposta, porém o custo interno sempre reduz a margem.
+        "INSTALACAO_PJ": {
+            product: {"preco_venda": 0.0, "custo": 0.0}
+            for product in products
+        },
+        # Custo interno único da implantação da proposta, independente da frota.
+        # Esse valor torna a análise de equilíbrio por quantidade economicamente útil.
+        "CUSTO_FIXO_IMPLANTACAO_PJ": 0.0,
+        # Regra de negócio fixa: condições personalizadas nunca podem ficar abaixo de 30%.
+        "MARGEM_MINIMA_PERSONALIZADA_PJ": 30.0,
+        "CENARIOS_QUANTIDADE_PJ": [1, 5, 10, 25, 50, 100, 200],
         "PRODUTOS_PJ_DESCRICAO": {
             "GPRS / Gsm": "Equipamento de rastreamento GSM/GPRS 2G ou 4G.",
             "Satélite": "Equipamento de rastreamento via satélite para cobertura total.",
@@ -84,19 +95,33 @@ def _as_non_negative_float(value: Any, fallback: float = 0.0) -> float:
     return max(0.0, parsed)
 
 
-def normalize_pricing_config(data: dict[str, Any] | None) -> dict[str, Any]:
-    """Normaliza preços antigos e cria a estrutura de custos PJ sem KeyError.
+def _normalize_quantity_scenarios(value: Any) -> list[int]:
+    if not isinstance(value, (list, tuple, set)):
+        return [1, 5, 10, 25, 50, 100, 200]
+    normalized: list[int] = []
+    for item in value:
+        try:
+            parsed = max(1, min(int(item), 100_000))
+        except (TypeError, ValueError):
+            continue
+        if parsed not in normalized:
+            normalized.append(parsed)
+    return sorted(normalized) or [1, 5, 10, 25, 50, 100, 200]
 
-    Produtos e planos já cadastrados no MongoDB são preservados. Quando um custo
-    ainda não existe, ele é inicializado em zero para que o administrador possa
-    informar o valor real antes de usar a análise de margem.
-    """
+
+def normalize_pricing_config(data: dict[str, Any] | None) -> dict[str, Any]:
+    """Normaliza preços antigos e migra custos, instalação e regras PJ."""
     defaults = get_default_pricing()
     provided = deepcopy(data or {})
     result = deepcopy(defaults)
 
     for key, value in provided.items():
-        if key not in {"PLANOS_PJ", "CUSTOS_PJ", "PRODUTOS_PJ_DESCRICAO"}:
+        if key not in {
+            "PLANOS_PJ",
+            "CUSTOS_PJ",
+            "INSTALACAO_PJ",
+            "PRODUTOS_PJ_DESCRICAO",
+        }:
             result[key] = deepcopy(value)
 
     raw_plans = provided.get("PLANOS_PJ")
@@ -136,6 +161,40 @@ def normalize_pricing_config(data: dict[str, Any] | None) -> dict[str, Any]:
             for product in products
         }
     result["CUSTOS_PJ"] = normalized_costs
+
+    all_products = sorted(
+        {product for products in result["PLANOS_PJ"].values() for product in products}
+    )
+    raw_installation = provided.get("INSTALACAO_PJ")
+    raw_installation = raw_installation if isinstance(raw_installation, dict) else {}
+    normalized_installation: dict[str, dict[str, float]] = {}
+    for product in all_products:
+        raw_item = raw_installation.get(product)
+        raw_item = raw_item if isinstance(raw_item, dict) else {}
+        normalized_installation[product] = {
+            "preco_venda": _as_non_negative_float(raw_item.get("preco_venda", 0.0)),
+            "custo": _as_non_negative_float(raw_item.get("custo", 0.0)),
+        }
+    result["INSTALACAO_PJ"] = normalized_installation
+
+    result["CUSTO_FIXO_IMPLANTACAO_PJ"] = _as_non_negative_float(
+        result.get("CUSTO_FIXO_IMPLANTACAO_PJ", 0.0)
+    )
+    # O piso é propositalmente travado em 30%, mesmo que um documento antigo
+    # ou uma alteração manual no MongoDB tente gravar valor inferior.
+    result["MARGEM_MINIMA_PERSONALIZADA_PJ"] = max(
+        30.0,
+        min(
+            99.0,
+            _as_non_negative_float(
+                result.get("MARGEM_MINIMA_PERSONALIZADA_PJ", 30.0),
+                30.0,
+            ),
+        ),
+    )
+    result["CENARIOS_QUANTIDADE_PJ"] = _normalize_quantity_scenarios(
+        result.get("CENARIOS_QUANTIDADE_PJ")
+    )
 
     result["_id"] = "global_prices"
     result["AMORTIZACAO_HARDWARE_MESES"] = max(

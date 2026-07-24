@@ -12,6 +12,18 @@ from app_core.auth import LOGIN_FIELDS, build_authenticator, clear_auth_state
 from app_core.settings import branding_contrast_errors, get_default_branding, normalize_branding
 from app_core.ui import apply_branding, configure_page, money, render_hero, render_logo, render_sidebar
 
+ROLE_OPTIONS = ["user", "head_comercial", "admin"]
+ROLE_LABELS = {
+    "user": "Comercial",
+    "head_comercial": "Head Comercial",
+    "admin": "Administrador",
+}
+
+
+def role_label(value: str) -> str:
+    return ROLE_LABELS.get(value, value)
+
+
 configure_page("Simulador de Telemetria")
 branding = apply_branding()
 
@@ -205,7 +217,11 @@ if st.session_state.get("role") == "admin":
                 new_username = st.text_input("Usuário")
                 new_email = st.text_input("E-mail")
                 new_password = st.text_input("Senha inicial", type="password")
-                new_role = st.selectbox("Perfil", ["user", "admin"], format_func=lambda value: "Usuário" if value == "user" else "Administrador")
+                new_role = st.selectbox(
+                    "Perfil",
+                    ROLE_OPTIONS,
+                    format_func=role_label,
+                )
                 create_user = st.form_submit_button("Cadastrar usuário", type="primary", width="stretch")
             if create_user:
                 if len(new_password) < 8:
@@ -228,11 +244,16 @@ if st.session_state.get("role") == "admin":
                 with st.form("edit_user"):
                     edited_name = st.text_input("Nome", value=selected.get("name", ""))
                     edited_email = st.text_input("E-mail", value=selected.get("email", ""))
+                    current_user_role = str(selected.get("role") or "user")
                     edited_role = st.selectbox(
                         "Perfil",
-                        ["user", "admin"],
-                        index=0 if selected.get("role") == "user" else 1,
-                        format_func=lambda value: "Usuário" if value == "user" else "Administrador",
+                        ROLE_OPTIONS,
+                        index=(
+                            ROLE_OPTIONS.index(current_user_role)
+                            if current_user_role in ROLE_OPTIONS
+                            else 0
+                        ),
+                        format_func=role_label,
                     )
                     edited_active = st.toggle("Acesso ativo", value=selected.get("active", True))
                     save_user = st.form_submit_button("Salvar alterações", width="stretch")
@@ -321,14 +342,31 @@ if st.session_state.get("role") == "admin":
                     format="%.2f",
                     help="Custo unitário mensal por veículo usado no cálculo de margem.",
                 )
+                pj_installation_price = st.number_input(
+                    "Preço de instalação por veículo",
+                    min_value=0.0,
+                    step=10.0,
+                    format="%.2f",
+                )
+                pj_installation_cost = st.number_input(
+                    "Custo interno de instalação por veículo",
+                    min_value=0.0,
+                    step=10.0,
+                    format="%.2f",
+                )
                 pj_submit = st.form_submit_button("Adicionar produto", width="stretch")
             if pj_submit and pj_name.strip():
                 product_name = pj_name.strip()
                 plans_config = pricing.setdefault("PLANOS_PJ", {})
                 costs_config = pricing.setdefault("CUSTOS_PJ", {})
+                installation_config = pricing.setdefault("INSTALACAO_PJ", {})
                 for plan_name, plan_products in plans_config.items():
                     plan_products[product_name] = pj_price
                     costs_config.setdefault(plan_name, {})[product_name] = pj_cost
+                installation_config[product_name] = {
+                    "preco_venda": pj_installation_price,
+                    "custo": pj_installation_cost,
+                }
                 pricing.setdefault("PRODUTOS_PJ_DESCRICAO", {})[product_name] = (
                     pj_description.strip() or product_name
                 )
@@ -336,7 +374,13 @@ if st.session_state.get("role") == "admin":
                     db.add_log(
                         username,
                         "Adicionou produto PJ",
-                        {"produto": product_name, "preco": pj_price, "custo": pj_cost},
+                        {
+                            "produto": product_name,
+                            "preco": pj_price,
+                            "custo": pj_cost,
+                            "preco_instalacao": pj_installation_price,
+                            "custo_instalacao": pj_installation_cost,
+                        },
                     )
                     st.success("Produto PJ adicionado.")
                     st.rerun()
@@ -393,6 +437,16 @@ if st.session_state.get("role") == "admin":
                 plan: dict(pricing.get("CUSTOS_PJ", {}).get(plan, {}))
                 for plan in pj_plans
             }
+            unique_pj_products = sorted(
+                {product for products in pj_plans.values() for product in products}
+            )
+            pj_installation = {
+                product: dict(pricing.get("INSTALACAO_PJ", {}).get(product, {}))
+                for product in unique_pj_products
+            }
+            fixed_implementation_cost = float(
+                pricing.get("CUSTO_FIXO_IMPLANTACAO_PJ", 0.0) or 0.0
+            )
             with st.expander("Pessoa jurídica — preços, custos e margens", expanded=True):
                 st.caption(
                     "Preço e custo são mensais, unitários e específicos por prazo contratual. "
@@ -440,6 +494,47 @@ if st.session_state.get("role") == "admin":
                             name_col.caption("Preço zerado: margem indisponível.")
                     st.markdown("---")
 
+            with st.expander("Instalação e equilíbrio da proposta", expanded=True):
+                st.caption(
+                    "O preço é cobrado uma única vez por veículo. O custo interno sempre reduz "
+                    "a margem, inclusive quando a instalação é isenta para o cliente."
+                )
+                fixed_implementation_cost = st.number_input(
+                    "Custo fixo interno da implantação por proposta",
+                    min_value=0.0,
+                    value=fixed_implementation_cost,
+                    step=50.0,
+                    format="%.2f",
+                    help=(
+                        "Custo único não vinculado à quantidade, como mobilização, cadastro, "
+                        "treinamento ou deslocamento administrativo."
+                    ),
+                )
+                header_name, header_price, header_cost = st.columns([1.7, 1, 1])
+                header_name.markdown("**Produto**")
+                header_price.markdown("**Preço de instalação**")
+                header_cost.markdown("**Custo de instalação**")
+                for installation_index, product in enumerate(unique_pj_products):
+                    item = pj_installation.setdefault(product, {})
+                    name_col, price_col, cost_col = st.columns([1.7, 1, 1])
+                    name_col.markdown(f"**{product}**")
+                    item["preco_venda"] = price_col.number_input(
+                        f"Preço de instalação {product}",
+                        min_value=0.0,
+                        value=float(item.get("preco_venda", 0.0) or 0.0),
+                        format="%.2f",
+                        key=f"installation_price_{installation_index}",
+                        label_visibility="collapsed",
+                    )
+                    item["custo"] = cost_col.number_input(
+                        f"Custo de instalação {product}",
+                        min_value=0.0,
+                        value=float(item.get("custo", 0.0) or 0.0),
+                        format="%.2f",
+                        key=f"installation_cost_{installation_index}",
+                        label_visibility="collapsed",
+                    )
+
             save_prices = st.form_submit_button("Salvar preços e custos", type="primary", width="stretch")
 
         if save_prices:
@@ -447,6 +542,9 @@ if st.session_state.get("role") == "admin":
             pricing["PRECO_CUSTO_LICITACAO"] = bid_prices
             pricing["PLANOS_PJ"] = pj_plans
             pricing["CUSTOS_PJ"] = pj_costs
+            pricing["INSTALACAO_PJ"] = pj_installation
+            pricing["CUSTO_FIXO_IMPLANTACAO_PJ"] = fixed_implementation_cost
+            pricing["MARGEM_MINIMA_PERSONALIZADA_PJ"] = 30.0
             pricing["AMORTIZACAO_HARDWARE_MESES"] = amortization
             if db.update_pricing_config(pricing):
                 db.add_log(username, "Atualizou preços, custos e margens")

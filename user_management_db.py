@@ -21,6 +21,7 @@ from config import get_default_pricing, normalize_pricing_config
 log = logging.getLogger("SimuladorApp.database")
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 DB_NAME = "simulador_db"
+VALID_USER_ROLES = {"user", "head_comercial", "admin"}
 
 
 def _secret(*names: str, default: Any = None) -> Any:
@@ -89,6 +90,20 @@ def initialize_database() -> bool:
             [("empresa", ASCENDING), ("consultor", ASCENDING), ("tipo", ASCENDING), ("data_geracao", DESCENDING)],
             name="ix_proposals_lookup",
         )
+        database.proposals.create_index(
+            [("status", ASCENDING), ("data_geracao", DESCENDING)],
+            name="ix_proposals_status_date",
+        )
+        database.proposals.create_index(
+            [("submitted_by_username", ASCENDING), ("data_geracao", DESCENDING)],
+            name="ix_proposals_submitter_date",
+        )
+        database.proposals.create_index(
+            [("proposal_code", ASCENDING)],
+            unique=True,
+            sparse=True,
+            name="uq_proposals_code",
+        )
         database.billing_history.create_index([("data_geracao", DESCENDING)], name="ix_billing_date")
         database.fipe_vehicles.create_index(
             [("codigoFipe", ASCENDING), ("anoModelo", ASCENDING), ("combustivel", ASCENDING)],
@@ -146,7 +161,7 @@ def add_user(username: str, name: str, email: str, password: str, role: str) -> 
     username = username.strip().lower()
     email = email.strip().lower()
     name = name.strip()
-    role = role if role in {"admin", "user"} else "user"
+    role = role if role in VALID_USER_ROLES else "user"
     if not username or not name or not email or len(password) < 8:
         return False
 
@@ -200,7 +215,7 @@ def update_user_details(username: str, name: str, email: str, role: str, active:
     users_collection = get_users_collection()
     if users_collection is None:
         return False
-    role = role if role in {"admin", "user"} else "user"
+    role = role if role in VALID_USER_ROLES else "user"
     result = users_collection.update_one(
         {"username": username.strip().lower()},
         {
@@ -414,6 +429,171 @@ def upsert_proposal(proposal_data: dict[str, Any]) -> bool:
     except (PyMongoError, TypeError, ValueError):
         log.exception("Falha ao salvar proposta.")
         return False
+
+
+def create_pj_proposal(proposal_data: dict[str, Any]) -> str | None:
+    """Insere uma proposta PJ com snapshot financeiro e fluxo de aprovação."""
+    collection = get_collection("proposals")
+    if collection is None:
+        return None
+
+    try:
+        now = datetime.now()
+        proposal_id = ObjectId()
+        proposal_code = f"PJ-{now:%Y%m%d}-{str(proposal_id)[-6:].upper()}"
+        status = str(proposal_data.get("status") or "approved")
+        if status not in {"approved", "pending_approval", "rejected"}:
+            status = "pending_approval"
+
+        document = dict(proposal_data)
+        document.update(
+            {
+                "_id": proposal_id,
+                "proposal_code": proposal_code,
+                "tipo": "PJ",
+                "status": status,
+                "approval_workflow_version": 1,
+                "approval_required": bool(proposal_data.get("approval_required")),
+                "approval_reasons": list(proposal_data.get("approval_reasons") or []),
+                "data_geracao": now,
+                "created_at": now,
+                "updated_at": now,
+                "valor_total": float(proposal_data.get("valor_total") or 0),
+            }
+        )
+        document["approval_history"] = [
+            {
+                "action": "submitted",
+                "status": status,
+                "at": now,
+                "username": str(proposal_data.get("submitted_by_username") or ""),
+                "name": str(proposal_data.get("submitted_by_name") or ""),
+                "reasons": document["approval_reasons"],
+            }
+        ]
+        if status == "approved":
+            document.setdefault("approved_at", now)
+            if document.get("approval_required"):
+                document["approval_history"].append(
+                    {
+                        "action": "approved",
+                        "status": "approved",
+                        "at": now,
+                        "username": str(proposal_data.get("approved_by_username") or ""),
+                        "name": str(proposal_data.get("approved_by_name") or ""),
+                        "reason": "Aprovação realizada por usuário com alçada.",
+                    }
+                )
+
+        collection.insert_one(document)
+        return str(proposal_id)
+    except (PyMongoError, TypeError, ValueError):
+        log.exception("Falha ao criar proposta PJ com aprovação.")
+        return None
+
+
+def get_commercial_proposals(
+    *,
+    status: str | None = None,
+    submitted_by_username: str | None = None,
+    limit: int = 5_000,
+) -> list[dict[str, Any]]:
+    collection = get_collection("proposals")
+    if collection is None:
+        return []
+
+    query: dict[str, Any] = {
+        "tipo": "PJ",
+        "approval_workflow_version": 1,
+    }
+    if status:
+        query["status"] = status
+    if submitted_by_username:
+        query["submitted_by_username"] = submitted_by_username.strip().lower()
+
+    safe_limit = max(1, min(int(limit), 20_000))
+    return list(collection.find(query).sort("data_geracao", DESCENDING).limit(safe_limit))
+
+
+def get_commercial_proposal(proposal_id: str) -> dict[str, Any] | None:
+    collection = get_collection("proposals")
+    if collection is None:
+        return None
+    try:
+        return collection.find_one({"_id": ObjectId(proposal_id), "approval_workflow_version": 1})
+    except (PyMongoError, ValueError):
+        return None
+
+
+def decide_commercial_proposal(
+    proposal_id: str,
+    *,
+    decision: str,
+    decided_by_username: str,
+    decided_by_name: str,
+    reason: str = "",
+) -> bool:
+    """Aprova ou rejeita uma proposta ainda pendente, com trilha de auditoria."""
+    collection = get_collection("proposals")
+    if collection is None or decision not in {"approved", "rejected"}:
+        return False
+    if decision == "rejected" and not reason.strip():
+        return False
+
+    try:
+        now = datetime.now()
+        set_fields: dict[str, Any] = {
+            "status": decision,
+            "decided_at": now,
+            "decided_by_username": decided_by_username.strip().lower(),
+            "decided_by_name": decided_by_name.strip(),
+            "decision_reason": reason.strip(),
+            "updated_at": now,
+        }
+        if decision == "approved":
+            set_fields.update(
+                {
+                    "approved_at": now,
+                    "approved_by_username": decided_by_username.strip().lower(),
+                    "approved_by_name": decided_by_name.strip(),
+                }
+            )
+
+        result = collection.update_one(
+            {
+                "_id": ObjectId(proposal_id),
+                "approval_workflow_version": 1,
+                "status": "pending_approval",
+            },
+            {
+                "$set": set_fields,
+                "$push": {
+                    "approval_history": {
+                        "action": decision,
+                        "status": decision,
+                        "at": now,
+                        "username": decided_by_username.strip().lower(),
+                        "name": decided_by_name.strip(),
+                        "reason": reason.strip(),
+                    }
+                },
+            },
+        )
+        return result.modified_count == 1
+    except (PyMongoError, ValueError):
+        log.exception("Falha ao decidir proposta comercial.")
+        return False
+
+
+def get_pending_approval_count() -> int:
+    collection = get_collection("proposals")
+    if collection is None:
+        return 0
+    return int(
+        collection.count_documents(
+            {"approval_workflow_version": 1, "status": "pending_approval"}
+        )
+    )
 
 
 # Compatibilidade com versões anteriores do projeto.

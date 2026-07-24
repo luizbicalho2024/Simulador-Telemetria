@@ -1,24 +1,28 @@
 from __future__ import annotations
 
 import hashlib
-import io
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from decimal import Decimal
-from pathlib import Path
 
-import docx
 import pandas as pd
 import streamlit as st
 
 import user_management_db as db
 from app_core.auth import require_auth
 from app_core.pricing import (
+    MIN_CUSTOM_MARGIN_PERCENT,
+    break_even_vehicle_count,
     gross_margin_percent,
     gross_margin_value,
+    minimum_sale_price,
+    proposal_totals,
+    quantity_scenarios,
     quantize_money,
     sale_price_from_margin,
     to_decimal,
+    validate_minimum_margin,
 )
+from app_core.proposal_documents import generate_pj_proposal
 from app_core.ui import apply_branding, configure_page, money, render_hero, render_sidebar
 
 configure_page("Simulador Pessoa Jurídica")
@@ -27,11 +31,13 @@ require_auth()
 render_sidebar()
 render_hero(
     "Simulador de venda — Pessoa Jurídica",
-    "Configure a frota, o prazo contratual, os produtos e as condições comerciais da proposta.",
+    "Simule preço, instalação, rentabilidade, equilíbrio da frota e fluxo de aprovação comercial.",
 )
 
-ROOT = Path(__file__).resolve().parents[1]
-TEMPLATE_PATH = ROOT / "assets" / "templates" / "proposta_comercial_verdio.docx"
+ROLE = str(st.session_state.get("role") or "user")
+USERNAME = str(st.session_state.get("username") or "").strip().lower()
+USER_NAME = str(st.session_state.get("name") or USERNAME or "Usuário")
+IS_APPROVER = ROLE in {"admin", "head_comercial"}
 
 pricing_config = db.get_pricing_config()
 plans = {
@@ -42,8 +48,16 @@ costs_by_plan = {
     plan: {product: quantize_money(value) for product, value in products.items()}
     for plan, products in pricing_config.get("CUSTOS_PJ", {}).items()
 }
+installation_by_product = pricing_config.get("INSTALACAO_PJ", {})
 descriptions = pricing_config.get("PRODUTOS_PJ_DESCRICAO", {})
-is_admin = st.session_state.get("role") == "admin"
+fixed_implementation_cost = quantize_money(
+    pricing_config.get("CUSTO_FIXO_IMPLANTACAO_PJ", 0)
+)
+minimum_custom_margin = max(
+    MIN_CUSTOM_MARGIN_PERCENT,
+    to_decimal(pricing_config.get("MARGEM_MINIMA_PERSONALIZADA_PJ", 30)),
+)
+quantity_defaults = pricing_config.get("CENARIOS_QUANTIDADE_PJ", [1, 5, 10, 25, 50, 100, 200])
 
 if "pj_results" not in st.session_state:
     st.session_state.pj_results = None
@@ -57,63 +71,22 @@ def _margin_label(percent: Decimal | None) -> str:
     return "Não disponível" if percent is None else f"{percent:.2f}%"
 
 
-def replace_in_paragraph(paragraph, replacements: dict[str, str]) -> None:
-    full_text = paragraph.text
-    if not any(token in full_text for token in replacements):
-        return
-    updated = full_text
-    for token, value in replacements.items():
-        updated = updated.replace(token, value)
-    if paragraph.runs:
-        paragraph.runs[0].text = updated
-        for run in paragraph.runs[1:]:
-            run.text = ""
-    else:
-        paragraph.text = updated
+def _status_label(status: str) -> str:
+    return {
+        "approved": "Aprovada",
+        "pending_approval": "Aguardando aprovação",
+        "rejected": "Rejeitada",
+    }.get(status, status or "Sem status")
 
 
-@st.cache_data(show_spinner=False)
-def generate_proposal(context: dict) -> bytes:
-    if not TEMPLATE_PATH.exists():
-        raise FileNotFoundError(f"Template não encontrado: {TEMPLATE_PATH}")
-
-    document = docx.Document(str(TEMPLATE_PATH))
-    replacements = {
-        "{{" + key + "}}": str(value)
-        for key, value in context.items()
-        if key != "itens_proposta"
-    }
-
-    for paragraph in document.paragraphs:
-        replace_in_paragraph(paragraph, replacements)
-    for table in document.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for paragraph in cell.paragraphs:
-                    replace_in_paragraph(paragraph, replacements)
-
-    if document.tables:
-        product_table = document.tables[0]
-        for item in context.get("itens_proposta", []):
-            cells = product_table.add_row().cells
-            if len(cells) >= 3:
-                cells[0].text = item["nome"]
-                cells[1].text = item["descricao"]
-                cells[2].text = item["preco"]
-
-    output = io.BytesIO()
-    document.save(output)
-    return output.getvalue()
+def _safe_float(value: object) -> float:
+    return float(to_decimal(value))
 
 
 def clear_simulation() -> None:
-    keys = [
-        key
-        for key in list(st.session_state)
-        if key.startswith("pj_") and key != "pj_results"
-    ]
-    for key in keys:
-        st.session_state.pop(key, None)
+    for key in list(st.session_state):
+        if key.startswith("pj_") and key != "pj_results":
+            st.session_state.pop(key, None)
     st.session_state.pj_results = None
 
 
@@ -133,6 +106,7 @@ with config_col:
     vehicle_count = st.number_input(
         "Quantidade de veículos",
         min_value=1,
+        max_value=100_000,
         value=1,
         step=1,
         key="pj_vehicle_count",
@@ -142,7 +116,17 @@ with config_col:
         list(plans),
         key="pj_contract_term",
     )
-    st.caption("Os preços e custos são mensais e unitários por veículo.")
+    installation_policy = st.radio(
+        "Condição da instalação",
+        ["Cobrar instalação", "Isentar instalação"],
+        horizontal=True,
+        key="pj_installation_policy",
+        help=(
+            "Ao isentar, a receita da instalação é zerada, mas o custo interno de instalação "
+            "continua sendo descontado da margem da proposta."
+        ),
+    )
+    st.caption("Mensalidades são unitárias por veículo; instalação é uma cobrança única.")
 
 with client_col:
     st.markdown("#### Dados da proposta")
@@ -157,22 +141,34 @@ with client_col:
     )
 
 st.markdown("#### Produtos e serviços")
-if is_admin:
-    st.info(
-        "Como administrador, você visualiza custos e margens e pode substituir o preço "
-        "de cada produto por um valor final ou por uma margem-alvo. Esses dados internos "
-        "não são exibidos no documento da proposta."
-    )
+st.info(
+    "O comercial pode usar preço ou margem personalizados, mas nenhuma condição personalizada "
+    f"pode ficar abaixo de {minimum_custom_margin:.2f}% de margem. Descontos e isenção de "
+    "instalação seguem para aprovação do Head Comercial."
+)
 
-selected: dict[str, dict[str, Decimal | str | bool | None]] = {}
+selected: dict[str, dict[str, object]] = {}
 current_plan_costs = costs_by_plan.get(contract_term, {})
+validation_errors: list[str] = []
 
 for product_index, (product, base_price) in enumerate(plans[contract_term].items()):
     product_id = _product_key(product)
-    cost = quantize_money(current_plan_costs.get(product, 0))
-    cost_configured = cost > 0
-    base_margin_value = gross_margin_value(base_price, cost) if cost_configured else None
-    base_margin_percent = gross_margin_percent(base_price, cost) if cost_configured else None
+    recurring_cost = quantize_money(current_plan_costs.get(product, 0))
+    recurring_cost_configured = recurring_cost > 0
+    installation_config = installation_by_product.get(product, {})
+    installation_sale = quantize_money(installation_config.get("preco_venda", 0))
+    installation_cost = quantize_money(installation_config.get("custo", 0))
+
+    base_margin_value = (
+        gross_margin_value(base_price, recurring_cost)
+        if recurring_cost_configured
+        else None
+    )
+    base_margin_percent = (
+        gross_margin_percent(base_price, recurring_cost)
+        if recurring_cost_configured
+        else None
+    )
 
     with st.container(border=True):
         enable_col, value_col = st.columns([1.65, 1])
@@ -186,153 +182,385 @@ for product_index, (product, base_price) in enumerate(plans[contract_term].items
             st.markdown(f"**Preço padrão: {money(base_price)}**")
             st.caption("por veículo/mês")
 
+        info_1, info_2, info_3, info_4 = st.columns(4)
+        info_1.metric(
+            "Custo mensal",
+            money(recurring_cost) if recurring_cost_configured else "Não cadastrado",
+        )
+        info_2.metric(
+            "Margem padrão",
+            money(base_margin_value) if base_margin_value is not None else "Pendente",
+        )
+        info_3.metric("Margem padrão (%)", _margin_label(base_margin_percent))
+        info_4.metric(
+            "Instalação",
+            f"{money(installation_sale)} / custo {money(installation_cost)}",
+        )
+
         effective_price = base_price
         pricing_mode = "Preço padrão"
-
-        if is_admin:
-            margin_1, margin_2, margin_3 = st.columns(3)
-            margin_1.metric("Custo mensal", money(cost) if cost_configured else "Não cadastrado")
-            margin_2.metric(
-                "Margem unitária",
-                money(base_margin_value) if base_margin_value is not None else "Pendente",
-            )
-            margin_3.metric("Margem percentual", _margin_label(base_margin_percent))
-
-            if not cost_configured:
-                st.warning(
-                    "O custo mensal deste produto ainda não foi cadastrado em "
-                    "Administração → Preços e produtos. A margem percentual não pode ser calculada."
-                )
-
-            if enabled:
-                modes = ["Preço padrão", "Valor personalizado"]
-                if cost_configured:
-                    modes.append("Margem personalizada")
-
-                pricing_mode = st.selectbox(
-                    "Condição comercial",
-                    modes,
-                    key=f"pj_mode_{contract_term}_{product_id}",
-                    help=(
-                        "Valor personalizado define o preço mensal final. Margem personalizada "
-                        "calcula o preço necessário com base no custo cadastrado."
-                    ),
-                )
-
-                if pricing_mode == "Valor personalizado":
-                    custom_value = st.number_input(
-                        "Preço mensal personalizado por veículo",
-                        min_value=0.0,
-                        value=float(base_price),
-                        step=1.0,
-                        format="%.2f",
-                        key=f"pj_custom_value_{contract_term}_{product_id}",
-                    )
-                    effective_price = quantize_money(custom_value)
-                elif pricing_mode == "Margem personalizada":
-                    default_margin = float(base_margin_percent or Decimal("30"))
-                    default_margin = max(0.0, min(default_margin, 99.0))
-                    target_margin = st.number_input(
-                        "Margem desejada sobre o preço de venda (%)",
-                        min_value=0.0,
-                        max_value=99.0,
-                        value=default_margin,
-                        step=0.5,
-                        format="%.2f",
-                        key=f"pj_custom_margin_{contract_term}_{product_id}",
-                    )
-                    effective_price = sale_price_from_margin(cost, target_margin)
-                    st.caption(f"Preço calculado: {money(effective_price)} por veículo/mês")
-
-                if cost_configured:
-                    effective_margin_value = gross_margin_value(effective_price, cost)
-                    effective_margin_percent = gross_margin_percent(effective_price, cost)
-                    if effective_margin_value < 0:
-                        st.error(
-                            f"O preço selecionado gera prejuízo de {money(abs(effective_margin_value))} "
-                            "por veículo/mês."
-                        )
-                    else:
-                        st.success(
-                            f"Margem simulada: {money(effective_margin_value)} "
-                            f"({_margin_label(effective_margin_percent)}) por veículo/mês."
-                        )
+        custom_discount = False
 
         if enabled:
-            margin_value = gross_margin_value(effective_price, cost) if cost_configured else None
-            margin_percent = gross_margin_percent(effective_price, cost) if cost_configured else None
+            modes = ["Preço padrão"]
+            if recurring_cost_configured:
+                modes.extend(["Valor personalizado", "Margem personalizada"])
+            else:
+                st.warning(
+                    "Cadastre o custo mensal deste produto antes de usar uma condição personalizada."
+                )
+
+            pricing_mode = st.selectbox(
+                "Condição comercial",
+                modes,
+                key=f"pj_mode_{contract_term}_{product_id}",
+            )
+
+            if pricing_mode == "Valor personalizado":
+                floor_price = minimum_sale_price(recurring_cost, minimum_custom_margin)
+                custom_value = st.number_input(
+                    "Preço mensal personalizado por veículo",
+                    min_value=float(floor_price),
+                    value=max(float(base_price), float(floor_price)),
+                    step=1.0,
+                    format="%.2f",
+                    key=f"pj_custom_value_{contract_term}_{product_id}",
+                    help=(
+                        f"Preço mínimo permitido para manter {minimum_custom_margin:.2f}% de margem: "
+                        f"{money(floor_price)}."
+                    ),
+                )
+                effective_price = quantize_money(custom_value)
+            elif pricing_mode == "Margem personalizada":
+                default_margin = max(
+                    float(minimum_custom_margin),
+                    min(float(base_margin_percent or minimum_custom_margin), 99.0),
+                )
+                target_margin = st.number_input(
+                    "Margem desejada sobre o preço de venda (%)",
+                    min_value=float(minimum_custom_margin),
+                    max_value=99.0,
+                    value=default_margin,
+                    step=0.5,
+                    format="%.2f",
+                    key=f"pj_custom_margin_{contract_term}_{product_id}",
+                )
+                effective_price = sale_price_from_margin(recurring_cost, target_margin)
+                st.caption(f"Preço calculado: {money(effective_price)} por veículo/mês")
+
+            effective_margin_value = (
+                gross_margin_value(effective_price, recurring_cost)
+                if recurring_cost_configured
+                else None
+            )
+            effective_margin_percent = (
+                gross_margin_percent(effective_price, recurring_cost)
+                if recurring_cost_configured
+                else None
+            )
+            custom_discount = pricing_mode != "Preço padrão" and effective_price < base_price
+
+            if pricing_mode != "Preço padrão" and recurring_cost_configured:
+                valid_margin, calculated_percent = validate_minimum_margin(
+                    effective_price,
+                    recurring_cost,
+                    minimum_custom_margin,
+                )
+                if not valid_margin:
+                    validation_errors.append(
+                        f"{product}: condição personalizada com margem "
+                        f"{_margin_label(calculated_percent)}, abaixo do piso de "
+                        f"{minimum_custom_margin:.2f}%."
+                    )
+
+            if effective_margin_value is not None:
+                message = (
+                    f"Margem simulada: {money(effective_margin_value)} "
+                    f"({_margin_label(effective_margin_percent)}) por veículo/mês."
+                )
+                if effective_margin_percent is not None and effective_margin_percent >= minimum_custom_margin:
+                    st.success(message)
+                else:
+                    st.warning(message)
+
             selected[product] = {
+                "base_price": base_price,
                 "price": effective_price,
-                "cost": cost,
-                "cost_configured": cost_configured,
-                "margin_value": margin_value,
-                "margin_percent": margin_percent,
+                "recurring_cost": recurring_cost,
+                "cost_configured": recurring_cost_configured,
+                "margin_value": effective_margin_value,
+                "margin_percent": effective_margin_percent,
                 "pricing_mode": pricing_mode,
+                "custom_discount": custom_discount,
+                "installation_sale": installation_sale,
+                "installation_cost": installation_cost,
             }
+
+if not selected:
+    st.info("Selecione ao menos um produto para visualizar a análise de margem e equilíbrio.")
+
+analysis: dict[str, object] | None = None
+if selected:
+    vehicle_decimal = Decimal(vehicle_count)
+    months = Decimal(contract_term.split()[0])
+    recurring_sale_per_vehicle = quantize_money(
+        sum((to_decimal(item["price"]) for item in selected.values()), Decimal("0"))
+    )
+    recurring_cost_per_vehicle = quantize_money(
+        sum((to_decimal(item["recurring_cost"]) for item in selected.values()), Decimal("0"))
+    )
+    installation_sale_per_vehicle = quantize_money(
+        sum((to_decimal(item["installation_sale"]) for item in selected.values()), Decimal("0"))
+    )
+    installation_cost_per_vehicle = quantize_money(
+        sum((to_decimal(item["installation_cost"]) for item in selected.values()), Decimal("0"))
+    )
+    all_costs_configured = all(bool(item["cost_configured"]) for item in selected.values())
+
+    charged_totals = proposal_totals(
+        recurring_sale_per_vehicle=recurring_sale_per_vehicle,
+        recurring_cost_per_vehicle=recurring_cost_per_vehicle,
+        months=months,
+        vehicles=vehicle_decimal,
+        installation_sale_per_vehicle=installation_sale_per_vehicle,
+        installation_cost_per_vehicle=installation_cost_per_vehicle,
+        charge_installation=True,
+        fixed_cost=fixed_implementation_cost,
+    )
+    waived_totals = proposal_totals(
+        recurring_sale_per_vehicle=recurring_sale_per_vehicle,
+        recurring_cost_per_vehicle=recurring_cost_per_vehicle,
+        months=months,
+        vehicles=vehicle_decimal,
+        installation_sale_per_vehicle=installation_sale_per_vehicle,
+        installation_cost_per_vehicle=installation_cost_per_vehicle,
+        charge_installation=False,
+        fixed_cost=fixed_implementation_cost,
+    )
+    charge_installation = installation_policy == "Cobrar instalação"
+    chosen_totals = charged_totals if charge_installation else waived_totals
+
+    st.markdown("### Comparativo de rentabilidade")
+    normal_col, waived_col = st.columns(2)
+    with normal_col:
+        st.markdown("#### Margem cobrando instalação")
+        m1, m2 = st.columns(2)
+        m1.metric("Margem total", money(charged_totals["total_margin"]))
+        m2.metric("Margem (%)", _margin_label(charged_totals["margin_percent"]))
+        st.caption(
+            f"Receita de instalação: {money(charged_totals['installation_revenue'])} · "
+            f"Custo de instalação: {money(charged_totals['installation_cost'])}"
+        )
+    with waived_col:
+        st.markdown("#### Margem isentando instalação")
+        m1, m2 = st.columns(2)
+        m1.metric("Margem total", money(waived_totals["total_margin"]))
+        m2.metric("Margem (%)", _margin_label(waived_totals["margin_percent"]))
+        st.caption(
+            f"Receita de instalação: {money(waived_totals['installation_revenue'])} · "
+            f"Custo mantido na margem: {money(waived_totals['installation_cost'])}"
+        )
+        if waived_totals["payback_months"] is not None:
+            st.caption(
+                f"Recuperação do subsídio da instalação: aproximadamente "
+                f"{waived_totals['payback_months']} meses."
+            )
+
+    st.markdown("### Ponto de equilíbrio por tamanho da frota")
+    st.caption(
+        "A quantidade altera a margem percentual quando existe custo fixo de implantação. "
+        "Sem custo fixo, o percentual tende a permanecer estável e apenas a margem total cresce."
+    )
+    scenario_tabs = st.tabs(["Cobrando instalação", "Isentando instalação"])
+    scenario_quantities = sorted(
+        {
+            *[int(value) for value in quantity_defaults if int(value) > 0],
+            int(vehicle_count),
+        }
+    )
+
+    for tab, scenario_charge in zip(scenario_tabs, [True, False]):
+        with tab:
+            break_even = break_even_vehicle_count(
+                recurring_sale_per_vehicle=recurring_sale_per_vehicle,
+                recurring_cost_per_vehicle=recurring_cost_per_vehicle,
+                months=months,
+                installation_sale_per_vehicle=installation_sale_per_vehicle,
+                installation_cost_per_vehicle=installation_cost_per_vehicle,
+                charge_installation=scenario_charge,
+                fixed_cost=fixed_implementation_cost,
+                target_margin_percent=minimum_custom_margin,
+            )
+            if break_even is None:
+                st.error(
+                    f"A estrutura atual não alcança {minimum_custom_margin:.2f}% de margem, "
+                    "mesmo aumentando a quantidade de veículos."
+                )
+            else:
+                st.success(
+                    f"Quantidade mínima para atingir {minimum_custom_margin:.2f}% de margem: "
+                    f"{break_even} veículo(s)."
+                )
+
+            scenario_df = pd.DataFrame(
+                quantity_scenarios(
+                    scenario_quantities,
+                    recurring_sale_per_vehicle=recurring_sale_per_vehicle,
+                    recurring_cost_per_vehicle=recurring_cost_per_vehicle,
+                    months=months,
+                    installation_sale_per_vehicle=installation_sale_per_vehicle,
+                    installation_cost_per_vehicle=installation_cost_per_vehicle,
+                    charge_installation=scenario_charge,
+                    fixed_cost=fixed_implementation_cost,
+                )
+            )
+            st.dataframe(
+                scenario_df,
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "Veículos": st.column_config.NumberColumn("Veículos", format="%d"),
+                    "Receita do contrato": st.column_config.NumberColumn(
+                        "Receita do contrato", format="R$ %.2f"
+                    ),
+                    "Custo total": st.column_config.NumberColumn("Custo total", format="R$ %.2f"),
+                    "Margem total": st.column_config.NumberColumn("Margem total", format="R$ %.2f"),
+                    "Margem (%)": st.column_config.NumberColumn("Margem (%)", format="%.2f%%"),
+                    "Payback instalação (meses)": st.column_config.NumberColumn(
+                        "Payback instalação (meses)", format="%.2f"
+                    ),
+                },
+            )
+
+    custom_discount_products = [
+        product for product, item in selected.items() if bool(item["custom_discount"])
+    ]
+    has_personalized_condition = any(
+        str(item["pricing_mode"]) != "Preço padrão" for item in selected.values()
+    )
+    installation_has_impact = (
+        installation_sale_per_vehicle > 0 or installation_cost_per_vehicle > 0
+    )
+    installation_waived = not charge_installation and installation_has_impact
+    approval_reasons: list[str] = []
+    if custom_discount_products:
+        approval_reasons.append(
+            "Desconto personalizado em: " + ", ".join(custom_discount_products)
+        )
+    if installation_waived:
+        approval_reasons.append("Isenção da cobrança de instalação")
+    approval_required = bool(approval_reasons)
+
+    chosen_margin_percent = chosen_totals["margin_percent"]
+    if (has_personalized_condition or installation_waived) and (
+        chosen_margin_percent is None or chosen_margin_percent < minimum_custom_margin
+    ):
+        validation_errors.append(
+            "A condição final da proposta ficou com margem de "
+            f"{_margin_label(chosen_margin_percent)}, abaixo do piso de "
+            f"{minimum_custom_margin:.2f}% após considerar instalação e custos da implantação."
+        )
+
+    analysis = {
+        "months": months,
+        "recurring_sale_per_vehicle": recurring_sale_per_vehicle,
+        "recurring_cost_per_vehicle": recurring_cost_per_vehicle,
+        "installation_sale_per_vehicle": installation_sale_per_vehicle,
+        "installation_cost_per_vehicle": installation_cost_per_vehicle,
+        "all_costs_configured": all_costs_configured,
+        "charged_totals": charged_totals,
+        "waived_totals": waived_totals,
+        "chosen_totals": chosen_totals,
+        "charge_installation": charge_installation,
+        "approval_required": approval_required,
+        "approval_reasons": approval_reasons,
+    }
+
+if validation_errors:
+    st.error("A proposta possui condições comerciais inválidas:")
+    for error in dict.fromkeys(validation_errors):
+        st.markdown(f"- {error}")
 
 submitted = st.button(
     "Calcular e registrar proposta",
     type="primary",
     width="stretch",
     key="pj_submit",
+    disabled=not selected or bool(validation_errors),
 )
 
-if submitted:
+if submitted and analysis is not None:
     if not company.strip() or not responsible.strip():
         st.warning("Informe a empresa e o responsável.")
-    elif not selected:
-        st.warning("Selecione pelo menos um produto ou serviço.")
+    elif not bool(analysis["all_costs_configured"]):
+        st.warning(
+            "Cadastre os custos mensais de todos os produtos selecionados antes de registrar a proposta."
+        )
     else:
-        vehicle_decimal = Decimal(vehicle_count)
-        months = Decimal(contract_term.split()[0])
-        monthly_per_vehicle = sum(
-            (to_decimal(item["price"]) for item in selected.values()),
-            Decimal("0"),
-        )
-        monthly_fleet = quantize_money(monthly_per_vehicle * vehicle_decimal)
-        contract_total = quantize_money(monthly_fleet * months)
-
-        all_costs_configured = all(bool(item["cost_configured"]) for item in selected.values())
-        monthly_cost_per_vehicle = sum(
-            (to_decimal(item["cost"]) for item in selected.values()),
-            Decimal("0"),
-        )
-        monthly_cost_fleet = quantize_money(monthly_cost_per_vehicle * vehicle_decimal)
-        monthly_margin_fleet = quantize_money(monthly_fleet - monthly_cost_fleet)
-        contract_margin = quantize_money(monthly_margin_fleet * months)
-        aggregate_margin_percent = (
-            gross_margin_percent(monthly_per_vehicle, monthly_cost_per_vehicle)
-            if all_costs_configured
-            else None
-        )
-
+        chosen_totals = analysis["chosen_totals"]
+        approval_required = bool(analysis["approval_required"])
+        approval_reasons = list(analysis["approval_reasons"])
+        status = "approved" if not approval_required or IS_APPROVER else "pending_approval"
         validity_label = (date.today() + timedelta(days=int(validity_days))).strftime("%d/%m/%Y")
-        item_rows = []
-        proposal_items = []
+
+        proposal_items: list[dict[str, str]] = []
+        item_rows: list[dict[str, object]] = []
+        database_items: list[dict[str, object]] = []
         for product, item in selected.items():
-            price = to_decimal(item["price"])
-            cost = to_decimal(item["cost"])
-            margin_value = item["margin_value"]
-            margin_percent = item["margin_percent"]
+            effective_price = quantize_money(item["price"])
+            recurring_cost = quantize_money(item["recurring_cost"])
+            margin_value = gross_margin_value(effective_price, recurring_cost)
+            margin_percent = gross_margin_percent(effective_price, recurring_cost)
             proposal_items.append(
                 {
                     "nome": product,
                     "descricao": descriptions.get(product, product),
-                    "preco": money(price),
+                    "preco": f"{money(effective_price)} por veículo/mês",
+                }
+            )
+            database_items.append(
+                {
+                    "produto": product,
+                    "condicao": str(item["pricing_mode"]),
+                    "preco_padrao": _safe_float(item["base_price"]),
+                    "preco_mensal": _safe_float(effective_price),
+                    "custo_mensal": _safe_float(recurring_cost),
+                    "margem_unitaria": _safe_float(margin_value),
+                    "margem_percentual": _safe_float(margin_percent or 0),
+                    "preco_instalacao": _safe_float(item["installation_sale"]),
+                    "custo_instalacao": _safe_float(item["installation_cost"]),
+                    "desconto_personalizado": bool(item["custom_discount"]),
                 }
             )
             item_rows.append(
                 {
                     "Produto": product,
                     "Condição": str(item["pricing_mode"]),
-                    "Preço mensal unitário": float(price),
-                    "Custo mensal unitário": float(cost) if item["cost_configured"] else None,
-                    "Margem unitária": float(margin_value) if margin_value is not None else None,
-                    "Margem (%)": float(margin_percent) if margin_percent is not None else None,
-                    "Margem mensal da frota": (
-                        float(quantize_money(to_decimal(margin_value) * vehicle_decimal))
-                        if margin_value is not None
-                        else None
+                    "Preço padrão": _safe_float(item["base_price"]),
+                    "Preço aplicado": _safe_float(effective_price),
+                    "Custo mensal": _safe_float(recurring_cost),
+                    "Margem unitária": _safe_float(margin_value),
+                    "Margem (%)": _safe_float(margin_percent or 0),
+                    "Instalação cobrada": _safe_float(item["installation_sale"]),
+                    "Custo de instalação": _safe_float(item["installation_cost"]),
+                }
+            )
+
+        if to_decimal(analysis["installation_cost_per_vehicle"]) > 0 or to_decimal(
+            analysis["installation_sale_per_vehicle"]
+        ) > 0:
+            proposal_items.append(
+                {
+                    "nome": "Instalação dos equipamentos",
+                    "descricao": (
+                        "Cobrança única por veículo"
+                        if bool(analysis["charge_installation"])
+                        else "Instalação isenta para o cliente"
+                    ),
+                    "preco": (
+                        money(analysis["installation_sale_per_vehicle"])
+                        if bool(analysis["charge_installation"])
+                        else "Isenta"
                     ),
                 }
             )
@@ -340,121 +568,130 @@ if submitted:
         context = {
             "NOME_EMPRESA": company.strip(),
             "NOME_RESPONSAVEL": responsible.strip(),
-            "NOME_CONSULTOR": st.session_state.get("name", ""),
+            "NOME_CONSULTOR": USER_NAME,
             "DATA_VALIDADE": validity_label,
             "QTD_VEICULOS": str(vehicle_count),
             "TEMPO_CONTRATO": contract_term,
-            "VALOR_MENSAL_FROTA": money(monthly_fleet),
-            "VALOR_TOTAL_CONTRATO": money(contract_total),
-            "SOMA_TOTAL_MENSAL_VEICULO": money(monthly_per_vehicle),
+            "VALOR_MENSAL_FROTA": money(chosen_totals["monthly_revenue"]),
+            "VALOR_TOTAL_CONTRATO": money(chosen_totals["total_revenue"]),
+            "SOMA_TOTAL_MENSAL_VEICULO": money(analysis["recurring_sale_per_vehicle"]),
+            "CONDICAO_INSTALACAO": installation_policy,
             "itens_proposta": proposal_items,
         }
-        st.session_state.pj_results = {
-            "monthly_per_vehicle": quantize_money(monthly_per_vehicle),
-            "monthly_fleet": monthly_fleet,
-            "contract_total": contract_total,
-            "monthly_cost_per_vehicle": quantize_money(monthly_cost_per_vehicle),
-            "monthly_cost_fleet": monthly_cost_fleet,
-            "monthly_margin_fleet": monthly_margin_fleet,
-            "contract_margin": contract_margin,
-            "aggregate_margin_percent": aggregate_margin_percent,
-            "all_costs_configured": all_costs_configured,
-            "item_rows": item_rows,
-            "context": context,
+
+        proposal_document = {
+            "tipo": "PJ",
+            "empresa": company.strip(),
+            "responsavel": responsible.strip(),
+            "consultor": USER_NAME,
+            "consultor_username": USERNAME,
+            "submitted_by_name": USER_NAME,
+            "submitted_by_username": USERNAME,
+            "valor_total": _safe_float(chosen_totals["total_revenue"]),
+            "status": status,
+            "approval_required": approval_required,
+            "approval_reasons": approval_reasons,
+            "approved_by_username": USERNAME if status == "approved" and approval_required else None,
+            "approved_by_name": USER_NAME if status == "approved" and approval_required else None,
+            "quantidade_veiculos": int(vehicle_count),
+            "prazo_contrato": contract_term,
+            "instalacao": installation_policy,
+            "preco_mensal_veiculo": _safe_float(analysis["recurring_sale_per_vehicle"]),
+            "custo_mensal_veiculo": _safe_float(analysis["recurring_cost_per_vehicle"]),
+            "preco_instalacao_veiculo": _safe_float(analysis["installation_sale_per_vehicle"]),
+            "custo_instalacao_veiculo": _safe_float(analysis["installation_cost_per_vehicle"]),
+            "custo_fixo_implantacao": _safe_float(fixed_implementation_cost),
+            "receita_total": _safe_float(chosen_totals["total_revenue"]),
+            "custo_total": _safe_float(chosen_totals["total_cost"]),
+            "margem_total": _safe_float(chosen_totals["total_margin"]),
+            "margem_percentual": _safe_float(chosen_totals["margin_percent"] or 0),
+            "itens": database_items,
+            "document_context": context,
         }
-        db.upsert_proposal(
-            {
-                "tipo": "PJ",
-                "empresa": company.strip(),
-                "consultor": st.session_state.get("name", "N/A"),
-                "valor_total": float(contract_total),
+
+        proposal_id = db.create_pj_proposal(proposal_document)
+        if not proposal_id:
+            st.error("Não foi possível registrar a proposta no banco de dados.")
+        else:
+            st.session_state.pj_results = {
+                "proposal_id": proposal_id,
+                "status": status,
+                "approval_required": approval_required,
+                "approval_reasons": approval_reasons,
+                "chosen_totals": chosen_totals,
+                "charged_totals": analysis["charged_totals"],
+                "waived_totals": analysis["waived_totals"],
+                "item_rows": item_rows,
+                "context": context,
             }
-        )
-        db.add_log(
-            st.session_state.get("username", "sistema"),
-            "Simulou proposta PJ",
-            {
-                "empresa": company.strip(),
-                "veiculos": vehicle_count,
-                "prazo": contract_term,
-                "valor_total": float(contract_total),
-                "produtos": [
-                    {
-                        "produto": product,
-                        "condicao": str(item["pricing_mode"]),
-                        "preco_mensal": float(to_decimal(item["price"])),
-                    }
-                    for product, item in selected.items()
-                ],
-            },
-        )
-        st.success("Proposta calculada e registrada.")
+            db.add_log(
+                USERNAME,
+                "Registrou proposta PJ",
+                {
+                    "proposta_id": proposal_id,
+                    "empresa": company.strip(),
+                    "veiculos": vehicle_count,
+                    "prazo": contract_term,
+                    "status": status,
+                    "motivos_aprovacao": approval_reasons,
+                },
+            )
+            if status == "pending_approval":
+                st.warning(
+                    "Proposta registrada e enviada para aprovação do Head Comercial. "
+                    "O documento só poderá ser baixado depois da aprovação."
+                )
+            else:
+                st.success("Proposta registrada e aprovada para emissão.")
 
 result = st.session_state.get("pj_results")
 if result:
-    st.markdown("### Resultado")
-    metric_1, metric_2, metric_3 = st.columns(3)
-    metric_1.metric("Mensal por veículo", money(result["monthly_per_vehicle"]))
-    metric_2.metric("Mensal da frota", money(result["monthly_fleet"]))
-    metric_3.metric("Valor do contrato", money(result["contract_total"]))
+    st.markdown("### Resultado registrado")
+    status = str(result.get("status") or "")
+    status_cols = st.columns(4)
+    chosen = result["chosen_totals"]
+    status_cols[0].metric("Status", _status_label(status))
+    status_cols[1].metric("Receita total", money(chosen["total_revenue"]))
+    status_cols[2].metric("Margem total", money(chosen["total_margin"]))
+    status_cols[3].metric("Margem (%)", _margin_label(chosen["margin_percent"]))
 
-    if is_admin:
-        st.markdown("#### Rentabilidade interna")
-        if result["all_costs_configured"]:
-            margin_1, margin_2, margin_3, margin_4 = st.columns(4)
-            margin_1.metric("Custo mensal da frota", money(result["monthly_cost_fleet"]))
-            margin_2.metric("Margem mensal da frota", money(result["monthly_margin_fleet"]))
-            margin_3.metric("Margem do contrato", money(result["contract_margin"]))
-            margin_4.metric(
-                "Margem percentual",
-                _margin_label(result["aggregate_margin_percent"]),
-            )
-        else:
-            st.warning(
-                "A rentabilidade consolidada não é definitiva porque um ou mais produtos "
-                "selecionados estão sem custo cadastrado."
-            )
+    if result.get("approval_reasons"):
+        st.caption("Motivos de aprovação: " + "; ".join(result["approval_reasons"]))
 
-        margin_df = pd.DataFrame(result["item_rows"])
-        st.dataframe(
-            margin_df,
+    st.dataframe(
+        pd.DataFrame(result["item_rows"]),
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "Preço padrão": st.column_config.NumberColumn("Preço padrão", format="R$ %.2f"),
+            "Preço aplicado": st.column_config.NumberColumn("Preço aplicado", format="R$ %.2f"),
+            "Custo mensal": st.column_config.NumberColumn("Custo mensal", format="R$ %.2f"),
+            "Margem unitária": st.column_config.NumberColumn("Margem unitária", format="R$ %.2f"),
+            "Margem (%)": st.column_config.NumberColumn("Margem (%)", format="%.2f%%"),
+            "Instalação cobrada": st.column_config.NumberColumn("Instalação cobrada", format="R$ %.2f"),
+            "Custo de instalação": st.column_config.NumberColumn("Custo de instalação", format="R$ %.2f"),
+        },
+    )
+
+    if status == "approved":
+        try:
+            document_bytes = generate_pj_proposal(result["context"])
+            safe_company = "_".join(result["context"]["NOME_EMPRESA"].split())
+            st.download_button(
+                "Baixar proposta aprovada em DOCX",
+                data=document_bytes,
+                file_name=f"Proposta_{safe_company}.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                type="primary",
+            )
+        except Exception as exc:
+            st.error(f"Não foi possível gerar o documento: {exc}")
+    else:
+        st.info(
+            "Acompanhe o andamento em Aprovações comerciais. O download será liberado após a aprovação."
+        )
+        st.page_link(
+            "pages/12_Aprovacoes_Comerciais.py",
+            label="Acompanhar aprovação",
             width="stretch",
-            hide_index=True,
-            column_config={
-                "Produto": "Produto",
-                "Condição": "Condição comercial",
-                "Preço mensal unitário": st.column_config.NumberColumn(
-                    "Preço mensal unitário",
-                    format="R$ %.2f",
-                ),
-                "Custo mensal unitário": st.column_config.NumberColumn(
-                    "Custo mensal unitário",
-                    format="R$ %.2f",
-                ),
-                "Margem unitária": st.column_config.NumberColumn(
-                    "Margem unitária",
-                    format="R$ %.2f",
-                ),
-                "Margem (%)": st.column_config.NumberColumn(
-                    "Margem (%)",
-                    format="%.2f%%",
-                ),
-                "Margem mensal da frota": st.column_config.NumberColumn(
-                    "Margem mensal da frota",
-                    format="R$ %.2f",
-                ),
-            },
         )
-
-    try:
-        document_bytes = generate_proposal(result["context"])
-        safe_company = "_".join(result["context"]["NOME_EMPRESA"].split())
-        st.download_button(
-            "Baixar proposta em DOCX",
-            data=document_bytes,
-            file_name=f"Proposta_{safe_company}.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            type="primary",
-        )
-    except Exception as exc:
-        st.error(f"Não foi possível gerar o documento: {exc}")
