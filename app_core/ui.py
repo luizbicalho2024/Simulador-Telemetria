@@ -643,6 +643,7 @@ def render_sidebar(*, current_page: str | None = None, include_logout: bool = Tr
         st.sidebar.page_link("pages/2_Simulador_PF.py", label="Simulador PF")
         st.sidebar.page_link("pages/3_Simulador_Licitacao.py", label="Licitações e editais")
         st.sidebar.page_link("pages/4_Dashboard.py", label="Dashboard de propostas")
+        st.sidebar.page_link("pages/13_Churn_Clientes.py", label="Churn e base ativa")
         st.sidebar.page_link("pages/12_Aprovacoes_Comerciais.py", label="Aprovações comerciais")
         st.sidebar.page_link("pages/5_Consultas_Gerais.py", label="Consultas gerais")
         st.sidebar.page_link("pages/6_Analise_Jornada.py", label="Análise de jornada")
