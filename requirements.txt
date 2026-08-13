@@ -1,6 +1,5 @@
 streamlit==1.56.0
 streamlit-authenticator==0.3.3
-firebase-admin>=6.5,<8.0
 
 pymongo[srv]>=4.6,<5.0
 passlib==1.7.4

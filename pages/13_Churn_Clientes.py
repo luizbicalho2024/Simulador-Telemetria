@@ -8,7 +8,7 @@ import plotly.express as px
 import streamlit as st
 
 from app_core.auth import require_auth
-from app_core.financeiro_firestore import (
+from app_core.financeiro_mongo import (
     connection_diagnostics,
     get_month_closures,
     get_monthly_metrics,
@@ -165,10 +165,10 @@ def _snapshot_dataframe(records: list[dict]) -> pd.DataFrame:
 
 diagnostics = connection_diagnostics()
 if not diagnostics.get("ok"):
-    st.error("O Simulador ainda não conseguiu acessar o Firestore do Financeiro.")
+    st.error("O Simulador ainda não conseguiu acessar o MongoDB do Financeiro.")
     st.code(
         "Adicione no Streamlit Cloud do Simulador a seção [financeiro_service_account] "
-        "com a conta de serviço do projeto Firebase financeiro.",
+        "com a conta de serviço do projeto MongoDB financeiro.",
         language="text",
     )
     with st.expander("Diagnóstico técnico"):
