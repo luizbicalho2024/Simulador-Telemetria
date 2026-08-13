@@ -122,34 +122,187 @@ def previous_period(period_key: str) -> str:
     return f"{year:04d}-{month:02d}"
 
 
-def _finance_secret() -> dict[str, Any]:
+def _secret_section(name: str) -> dict[str, Any] | None:
+    """
+    Lê uma seção dos Secrets sem interromper a aplicação caso
+    ela não exista.
+    """
     try:
-        section = dict(st.secrets["financeiro_service_account"])
-    except Exception as exc:
+        return dict(st.secrets[name])
+    except Exception:
+        return None
+
+
+def _normalize_service_account(
+    section: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Normaliza a conta de serviço do Firebase.
+
+    Também corrige private_key armazenada com \n literal.
+    """
+    normalized = dict(section or {})
+
+    private_key = normalized.get("private_key")
+
+    if private_key is not None:
+        key_text = str(private_key).strip()
+
+        if "\\n" in key_text and "\n" not in key_text:
+            key_text = key_text.replace("\\n", "\n")
+
+        normalized["private_key"] = key_text
+
+    return normalized
+
+
+def _finance_secret_with_source() -> tuple[dict[str, Any], str]:
+    """
+    Procura a conta Firebase em diferentes formatos.
+
+    Ordem:
+    1. [financeiro_service_account]
+    2. [service_account]
+
+    O segundo formato é exatamente o já utilizado pelo
+    projeto financeiro-verdio.
+    """
+
+    candidates = [
+        (
+            "financeiro_service_account",
+            _secret_section("financeiro_service_account"),
+        ),
+        (
+            "service_account",
+            _secret_section("service_account"),
+        ),
+    ]
+
+    incomplete = []
+
+    for source, raw_section in candidates:
+
+        if not raw_section:
+            continue
+
+        section = _normalize_service_account(raw_section)
+
+        required_fields = (
+            "project_id",
+            "client_email",
+            "private_key",
+        )
+
+        missing = [
+            field
+            for field in required_fields
+            if not str(section.get(field) or "").strip()
+        ]
+
+        if missing:
+            incomplete.append(
+                f"{source}: faltando {', '.join(missing)}"
+            )
+
+            continue
+
+        return section, source
+
+    if incomplete:
         raise RuntimeError(
-            "Secret 'financeiro_service_account' não configurado no Streamlit Cloud do Simulador."
-        ) from exc
-    if not section.get("project_id") or not section.get("client_email") or not section.get("private_key"):
-        raise RuntimeError("Secret financeiro_service_account está incompleto.")
-    return section
+            "Foi encontrada uma conta Firebase, mas ela está "
+            "incompleta. "
+            + "; ".join(incomplete)
+        )
+
+    raise RuntimeError(
+        "Nenhuma conta de serviço Firebase foi encontrada. "
+        "O Simulador aceita [financeiro_service_account] "
+        "ou [service_account]."
+    )
 
 
+def _finance_secret() -> dict[str, Any]:
+    secret, _ = _finance_secret_with_source()
+
+    return secret
+
+
+def _safe_firebase_error(exc: BaseException) -> str:
+    """
+    Retorna diagnóstico sem permitir exposição da private_key.
+    """
+    message = str(exc or "").strip()
+
+    if not message:
+        message = exc.__class__.__name__
+
+    if "BEGIN PRIVATE KEY" in message:
+        return (
+            "A chave privada Firebase não pôde ser interpretada. "
+            "Verifique o campo private_key no Streamlit Secrets."
+        )
+
+    message = re.sub(
+        r"-----BEGIN(?: [A-Z]+)* PRIVATE KEY-----.*?"
+        r"-----END(?: [A-Z]+)* PRIVATE KEY-----",
+        "[CHAVE PRIVADA OMITIDA]",
+        message,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+
+    return message[:1200]
 @st.cache_resource(show_spinner="Conectando ao histórico financeiro...")
 def get_finance_db():
+    """
+    Inicializa uma instância Firebase independente para leitura
+    dos dados financeiros.
+    """
+
     try:
+
         try:
-            app = firebase_admin.get_app(FIREBASE_APP_NAME)
+            app = firebase_admin.get_app(
+                FIREBASE_APP_NAME
+            )
+
         except ValueError:
+
+            service_account, secret_source = (
+                _finance_secret_with_source()
+            )
+
+            log.info(
+                "Inicializando Firebase financeiro usando Secret %s "
+                "no projeto %s.",
+                secret_source,
+                service_account.get("project_id"),
+            )
+
+            credential = credentials.Certificate(
+                service_account
+            )
+
             app = firebase_admin.initialize_app(
-                credentials.Certificate(_finance_secret()),
+                credential,
                 name=FIREBASE_APP_NAME,
             )
+
         return firestore.client(app=app)
+
     except Exception as exc:
-        log.exception("Não foi possível inicializar o Firestore financeiro.")
-        raise RuntimeError("Não foi possível conectar ao Firestore do Financeiro.") from exc
 
+        safe_message = _safe_firebase_error(exc)
 
+        log.exception(
+            "Não foi possível inicializar o Firestore financeiro."
+        )
+
+        raise RuntimeError(
+            "Não foi possível conectar ao Firestore do Financeiro. "
+            f"{exc.__class__.__name__}: {safe_message}"
+        ) from exc
 def _stream_collection(collection_name: str, limit: int) -> list[dict[str, Any]]:
     client = get_finance_db()
     safe_limit = max(1, min(int(limit), 50000))
@@ -288,14 +441,53 @@ def clear_finance_cache() -> None:
 
 
 def connection_diagnostics() -> dict[str, Any]:
+    """
+    Diagnóstico seguro da integração financeira.
+    """
+
+    project_id = ""
+    secret_source = "não identificado"
+
     try:
+
+        secret, secret_source = (
+            _finance_secret_with_source()
+        )
+
+        project_id = str(
+            secret.get("project_id") or ""
+        )
+
         client = get_finance_db()
-        # Uma leitura limitada confirma credencial e permissão sem carregar toda a base.
-        next(iter(client.collection("billing_history").limit(1).stream()), None)
+
+        # Consulta mínima para validar:
+        # - credencial;
+        # - projeto;
+        # - Firestore;
+        # - permissão de leitura.
+        next(
+            iter(
+                client.collection("billing_history")
+                .limit(1)
+                .stream()
+            ),
+            None,
+        )
+
         return {
             "ok": True,
-            "project_id": _finance_secret().get("project_id", ""),
+            "project_id": project_id,
+            "secret_source": secret_source,
             "checked_at": datetime.now(timezone.utc),
         }
+
     except Exception as exc:
-        return {"ok": False, "error": str(exc), "checked_at": datetime.now(timezone.utc)}
+
+        return {
+            "ok": False,
+            "project_id": project_id,
+            "secret_source": secret_source,
+            "error_type": exc.__class__.__name__,
+            "error": _safe_firebase_error(exc),
+            "checked_at": datetime.now(timezone.utc),
+        }
