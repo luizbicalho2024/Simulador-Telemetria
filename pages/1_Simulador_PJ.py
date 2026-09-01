@@ -631,270 +631,270 @@ for product, base_price in plans[contract_term].items():
     )
 
 
-effective_price = base_price
-pricing_mode = "Preço padrão"
-custom_discount = False
-quantity = 0
+    effective_price = base_price
+    pricing_mode = "Preço padrão"
+    custom_discount = False
+    quantity = 0
 
-with st.container(border=True):
-    row = st.columns(
-        [2.75, 0.72, 1.0, 1.0, 1.0, 1.1, 0.82],
-        vertical_alignment="center",
-    )
-
-    with row[0]:
-        enabled = st.toggle(
-            product,
-            key=f"pj_enabled_{contract_term}_{product_id}",
+    with st.container(border=True):
+        row = st.columns(
+            [2.75, 0.72, 1.0, 1.0, 1.0, 1.1, 0.82],
+            vertical_alignment="center",
         )
-        st.caption(descriptions.get(product, product))
 
-    quantity_key = (
-        f"pj_quantity_{contract_term}_{product_id}"
-    )
-    with row[1]:
+        with row[0]:
+            enabled = st.toggle(
+                product,
+                key=f"pj_enabled_{contract_term}_{product_id}",
+            )
+            st.caption(descriptions.get(product, product))
+
+        quantity_key = (
+            f"pj_quantity_{contract_term}_{product_id}"
+        )
+        with row[1]:
+            if enabled:
+                if quantity_key not in st.session_state:
+                    st.session_state[quantity_key] = int(
+                        vehicle_count
+                    )
+
+                current_quantity = int(
+                    st.session_state.get(
+                        quantity_key,
+                        vehicle_count,
+                    )
+                    or 1
+                )
+                current_quantity = max(
+                    1,
+                    min(int(vehicle_count), current_quantity),
+                )
+                st.session_state[quantity_key] = current_quantity
+
+                quantity = int(
+                    st.number_input(
+                        f"Quantidade {product}",
+                        min_value=1,
+                        max_value=int(vehicle_count),
+                        step=1,
+                        key=quantity_key,
+                        label_visibility="collapsed",
+                    )
+                )
+                st.caption(f"de {vehicle_count}")
+            else:
+                st.markdown("**—**")
+                st.caption("não usado")
+
+        modes = ["Preço padrão"]
+        if recurring_cost_configured:
+            modes.extend(
+                ["Valor personalizado", "Margem personalizada"]
+            )
+
         if enabled:
-            if quantity_key not in st.session_state:
-                st.session_state[quantity_key] = int(
-                    vehicle_count
-                )
-
-            current_quantity = int(
-                st.session_state.get(
-                    quantity_key,
-                    vehicle_count,
-                )
-                or 1
-            )
-            current_quantity = max(
-                1,
-                min(int(vehicle_count), current_quantity),
-            )
-            st.session_state[quantity_key] = current_quantity
-
-            quantity = int(
-                st.number_input(
-                    f"Quantidade {product}",
-                    min_value=1,
-                    max_value=int(vehicle_count),
-                    step=1,
-                    key=quantity_key,
-                    label_visibility="collapsed",
-                )
-            )
-            st.caption(f"de {vehicle_count}")
-        else:
-            st.markdown("**—**")
-            st.caption("não usado")
-
-    modes = ["Preço padrão"]
-    if recurring_cost_configured:
-        modes.extend(
-            ["Valor personalizado", "Margem personalizada"]
-        )
-
-    if enabled:
-        with row[6]:
-            with st.popover("Ajustar"):
-                st.caption(
-                    f"Preço padrão: {money(base_price)} "
-                    "por veículo/mês"
-                )
-
-                if has_detailed_cost:
+            with row[6]:
+                with st.popover("Ajustar"):
                     st.caption(
-                        f"Custo recorrente: "
-                        f"{money(recurring_cost)}/mês"
-                    )
-                    st.caption(
-                        f"Custo único por veículo: "
-                        f"{money(one_time_cost)}"
-                    )
-                    st.caption(
-                        f"Custo mensal equivalente em "
-                        f"{int(contract_months_for_cost)} meses: "
-                        f"{money(pricing_cost)}"
-                    )
-                else:
-                    st.caption(
-                        "Custo mensal legado: "
-                        + (
-                            money(pricing_cost)
-                            if recurring_cost_configured
-                            else "não cadastrado"
-                        )
-                    )
-
-                if not recurring_cost_configured:
-                    st.warning(
-                        "Cadastre o custo mensal deste produto "
-                        "antes de usar uma condição personalizada."
-                    )
-
-                pricing_mode = st.radio(
-                    "Condição comercial",
-                    modes,
-                    key=f"pj_mode_{contract_term}_{product_id}",
-                )
-
-                if pricing_mode == "Valor personalizado":
-                    floor_price = minimum_sale_price(
-                        pricing_cost,
-                        minimum_custom_margin,
-                    )
-                    custom_value = st.number_input(
-                        "Preço mensal personalizado por veículo",
-                        min_value=0.01,
-                        value=max(0.01, float(base_price)),
-                        step=1.0,
-                        format="%.2f",
-                        key=(
-                            f"pj_custom_value_{contract_term}_"
-                            f"{product_id}"
-                        ),
-                        help=(
-                            f"Referência para manter "
-                            f"{minimum_custom_margin:.2f}% "
-                            f"de margem unitária: "
-                            f"{money(floor_price)}. "
-                            "Valores menores continuam permitidos "
-                            "para simulação."
-                        ),
-                    )
-                    effective_price = quantize_money(custom_value)
-
-                elif pricing_mode == "Margem personalizada":
-                    default_margin = min(
-                        max(
-                            float(
-                                base_margin_percent
-                                or minimum_custom_margin
-                            ),
-                            -500.0,
-                        ),
-                        99.0,
-                    )
-                    target_margin = st.number_input(
-                        "Margem desejada sobre o preço de venda (%)",
-                        min_value=-500.0,
-                        max_value=99.0,
-                        value=default_margin,
-                        step=0.5,
-                        format="%.2f",
-                        key=(
-                            f"pj_custom_margin_{contract_term}_"
-                            f"{product_id}"
-                        ),
-                        help=(
-                            "Margens abaixo do piso, inclusive "
-                            "negativas, podem ser simuladas. "
-                            "A proposta final seguirá a alçada "
-                            "comercial quando necessário."
-                        ),
-                    )
-                    effective_price = sale_price_from_margin(
-                        pricing_cost,
-                        target_margin,
-                    )
-                    st.caption(
-                        f"Preço calculado: {money(effective_price)} "
+                        f"Preço padrão: {money(base_price)} "
                         "por veículo/mês"
                     )
-    else:
-        with row[6]:
-            st.caption("Selecione")
 
-    effective_margin_value = (
-        gross_margin_value(
-            effective_price,
-            pricing_cost,
-        )
-        if recurring_cost_configured
-        else None
-    )
-    effective_margin_percent = (
-        gross_margin_percent(
-            effective_price,
-            pricing_cost,
-        )
-        if recurring_cost_configured
-        else None
-    )
-    custom_discount = (
-        pricing_mode != "Preço padrão"
-        and effective_price < base_price
-    )
+                    if has_detailed_cost:
+                        st.caption(
+                            f"Custo recorrente: "
+                            f"{money(recurring_cost)}/mês"
+                        )
+                        st.caption(
+                            f"Custo único por veículo: "
+                            f"{money(one_time_cost)}"
+                        )
+                        st.caption(
+                            f"Custo mensal equivalente em "
+                            f"{int(contract_months_for_cost)} meses: "
+                            f"{money(pricing_cost)}"
+                        )
+                    else:
+                        st.caption(
+                            "Custo mensal legado: "
+                            + (
+                                money(pricing_cost)
+                                if recurring_cost_configured
+                                else "não cadastrado"
+                            )
+                        )
 
-    with row[2]:
-        st.markdown(f"**{money(base_price)}**")
-        if has_detailed_cost:
-            st.caption(
-                f"Custo eq. {money(pricing_cost)}"
-            )
-            st.caption(
-                f"{money(recurring_cost)}/mês + "
-                f"{money(one_time_cost)} único"
-            )
+                    if not recurring_cost_configured:
+                        st.warning(
+                            "Cadastre o custo mensal deste produto "
+                            "antes de usar uma condição personalizada."
+                        )
+
+                    pricing_mode = st.radio(
+                        "Condição comercial",
+                        modes,
+                        key=f"pj_mode_{contract_term}_{product_id}",
+                    )
+
+                    if pricing_mode == "Valor personalizado":
+                        floor_price = minimum_sale_price(
+                            pricing_cost,
+                            minimum_custom_margin,
+                        )
+                        custom_value = st.number_input(
+                            "Preço mensal personalizado por veículo",
+                            min_value=0.01,
+                            value=max(0.01, float(base_price)),
+                            step=1.0,
+                            format="%.2f",
+                            key=(
+                                f"pj_custom_value_{contract_term}_"
+                                f"{product_id}"
+                            ),
+                            help=(
+                                f"Referência para manter "
+                                f"{minimum_custom_margin:.2f}% "
+                                f"de margem unitária: "
+                                f"{money(floor_price)}. "
+                                "Valores menores continuam permitidos "
+                                "para simulação."
+                            ),
+                        )
+                        effective_price = quantize_money(custom_value)
+
+                    elif pricing_mode == "Margem personalizada":
+                        default_margin = min(
+                            max(
+                                float(
+                                    base_margin_percent
+                                    or minimum_custom_margin
+                                ),
+                                -500.0,
+                            ),
+                            99.0,
+                        )
+                        target_margin = st.number_input(
+                            "Margem desejada sobre o preço de venda (%)",
+                            min_value=-500.0,
+                            max_value=99.0,
+                            value=default_margin,
+                            step=0.5,
+                            format="%.2f",
+                            key=(
+                                f"pj_custom_margin_{contract_term}_"
+                                f"{product_id}"
+                            ),
+                            help=(
+                                "Margens abaixo do piso, inclusive "
+                                "negativas, podem ser simuladas. "
+                                "A proposta final seguirá a alçada "
+                                "comercial quando necessário."
+                            ),
+                        )
+                        effective_price = sale_price_from_margin(
+                            pricing_cost,
+                            target_margin,
+                        )
+                        st.caption(
+                            f"Preço calculado: {money(effective_price)} "
+                            "por veículo/mês"
+                        )
         else:
-            st.caption(
-                "Custo "
-                + (
-                    money(pricing_cost)
-                    if recurring_cost_configured
-                    else "pendente"
+            with row[6]:
+                st.caption("Selecione")
+
+        effective_margin_value = (
+            gross_margin_value(
+                effective_price,
+                pricing_cost,
+            )
+            if recurring_cost_configured
+            else None
+        )
+        effective_margin_percent = (
+            gross_margin_percent(
+                effective_price,
+                pricing_cost,
+            )
+            if recurring_cost_configured
+            else None
+        )
+        custom_discount = (
+            pricing_mode != "Preço padrão"
+            and effective_price < base_price
+        )
+
+        with row[2]:
+            st.markdown(f"**{money(base_price)}**")
+            if has_detailed_cost:
+                st.caption(
+                    f"Custo eq. {money(pricing_cost)}"
                 )
-            )
+                st.caption(
+                    f"{money(recurring_cost)}/mês + "
+                    f"{money(one_time_cost)} único"
+                )
+            else:
+                st.caption(
+                    "Custo "
+                    + (
+                        money(pricing_cost)
+                        if recurring_cost_configured
+                        else "pendente"
+                    )
+                )
 
-    with row[3]:
-        st.markdown(f"**{money(effective_price)}**")
-        st.caption(
-            pricing_mode if enabled else "Não selecionado"
-        )
-
-    with row[4]:
-        st.markdown(
-            f"**{_margin_label(effective_margin_percent)}**"
-        )
-        if effective_margin_percent is None:
-            st.caption("Custo pendente")
-        elif effective_margin_percent >= minimum_custom_margin:
-            st.caption("Dentro da política")
-        else:
-            st.caption("Abaixo do piso")
-
-    with row[5]:
-        if installation_sale > 0 or installation_cost > 0:
-            st.markdown(
-                f"**{money(installation_sale)}**"
-            )
+        with row[3]:
+            st.markdown(f"**{money(effective_price)}**")
             st.caption(
-                f"Custo {money(installation_cost)}"
+                pricing_mode if enabled else "Não selecionado"
             )
-        else:
-            st.markdown("**—**")
-            st.caption("Sem cobrança")
 
-    if enabled and quantity > 0:
-        selected[product] = {
-            "quantity": quantity,
-            "base_price": base_price,
-            "price": effective_price,
-            "recurring_cost": recurring_cost,
-            "one_time_cost": one_time_cost,
-            "pricing_cost": pricing_cost,
-            "cost_details": [
-                dict(cost_row)
-                for cost_row in detailed_cost_rows
-                if isinstance(cost_row, dict)
-            ],
-            "cost_configured": recurring_cost_configured,
-            "margin_value": effective_margin_value,
-            "margin_percent": effective_margin_percent,
-            "pricing_mode": pricing_mode,
-            "custom_discount": custom_discount,
-            "installation_sale": installation_sale,
-            "installation_cost": installation_cost,
-        }
+        with row[4]:
+            st.markdown(
+                f"**{_margin_label(effective_margin_percent)}**"
+            )
+            if effective_margin_percent is None:
+                st.caption("Custo pendente")
+            elif effective_margin_percent >= minimum_custom_margin:
+                st.caption("Dentro da política")
+            else:
+                st.caption("Abaixo do piso")
+
+        with row[5]:
+            if installation_sale > 0 or installation_cost > 0:
+                st.markdown(
+                    f"**{money(installation_sale)}**"
+                )
+                st.caption(
+                    f"Custo {money(installation_cost)}"
+                )
+            else:
+                st.markdown("**—**")
+                st.caption("Sem cobrança")
+
+        if enabled and quantity > 0:
+            selected[product] = {
+                "quantity": quantity,
+                "base_price": base_price,
+                "price": effective_price,
+                "recurring_cost": recurring_cost,
+                "one_time_cost": one_time_cost,
+                "pricing_cost": pricing_cost,
+                "cost_details": [
+                    dict(cost_row)
+                    for cost_row in detailed_cost_rows
+                    if isinstance(cost_row, dict)
+                ],
+                "cost_configured": recurring_cost_configured,
+                "margin_value": effective_margin_value,
+                "margin_percent": effective_margin_percent,
+                "pricing_mode": pricing_mode,
+                "custom_discount": custom_discount,
+                "installation_sale": installation_sale,
+                "installation_cost": installation_cost,
+            }
 if not selected:
     st.info("Selecione ao menos um produto para visualizar a análise de margem e equilíbrio.")
 
