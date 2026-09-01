@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.3.1 — Correção de renderização do amCharts
+
+- Corrigida quebra de linha escapada no tooltip que gerava `SyntaxError` dentro do iframe do Streamlit.
+- CDN do amCharts fixado na versão 5.20.3 para evitar mudanças inesperadas da versão `latest`.
+- Gráfico passa a exibir fallback técnico quando a biblioteca externa não carregar ou ocorrer erro de renderização.
+- Teste de contrato visual passa a impedir regressão do escape JavaScript inválido.
+
 ## 2.3.0 — Interface compacta PJ e amCharts
 
 - Produtos e serviços reorganizados em linhas compactas, reduzindo rolagem e excesso de métricas visuais.
