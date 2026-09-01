@@ -6,6 +6,53 @@ from typing import Any, Iterable
 MONEY_QUANT = Decimal("0.01")
 PERCENT_QUANT = Decimal("0.01")
 MIN_CUSTOM_MARGIN_PERCENT = Decimal("30.00")
+COST_INCIDENCES = (
+    "Mensal por veículo",
+    "Único por veículo",
+)
+
+
+def summarize_cost_components(
+    components: Iterable[dict[str, Any]] | None,
+    months: Any,
+) -> dict[str, Decimal]:
+    """Resume despesas reais de um rastreador sem amortização dupla.
+
+    - Mensal por veículo: entra no custo recorrente de cada mês.
+    - Único por veículo: entra uma vez no custo total e é dividido pelo prazo
+      apenas para formar o custo mensal equivalente usado na referência de
+      preço/margem unitária.
+    """
+    contract_months = max(Decimal("1"), to_decimal(months, "1"))
+    recurring_monthly = Decimal("0")
+    one_time_per_vehicle = Decimal("0")
+
+    for component in components or []:
+        if not isinstance(component, dict):
+            continue
+        incidence = str(
+            component.get("incidencia")
+            or component.get("Incidência")
+            or "Mensal por veículo"
+        ).strip()
+        value = quantize_money(
+            component.get("valor", component.get("Valor", 0))
+        )
+        if incidence == "Único por veículo":
+            one_time_per_vehicle += value
+        else:
+            recurring_monthly += value
+
+    recurring_monthly = quantize_money(recurring_monthly)
+    one_time_per_vehicle = quantize_money(one_time_per_vehicle)
+    monthly_equivalent = quantize_money(
+        recurring_monthly + (one_time_per_vehicle / contract_months)
+    )
+    return {
+        "recurring_monthly": recurring_monthly,
+        "one_time_per_vehicle": one_time_per_vehicle,
+        "monthly_equivalent": monthly_equivalent,
+    }
 
 
 def to_decimal(value: Any, fallback: Decimal | str = Decimal("0")) -> Decimal:
@@ -101,6 +148,7 @@ def proposal_totals(
     vehicles: Any,
     installation_sale_per_vehicle: Any = 0,
     installation_cost_per_vehicle: Any = 0,
+    one_time_cost_per_vehicle: Any = 0,
     charge_installation: bool = True,
     fixed_cost: Any = 0,
 ) -> dict[str, Decimal | None]:
@@ -116,6 +164,7 @@ def proposal_totals(
     monthly_cost_vehicle = quantize_money(recurring_cost_per_vehicle)
     installation_sale_vehicle = quantize_money(installation_sale_per_vehicle)
     installation_cost_vehicle = quantize_money(installation_cost_per_vehicle)
+    one_time_cost_vehicle = quantize_money(one_time_cost_per_vehicle)
     normalized_fixed_cost = quantize_money(fixed_cost)
 
     recurring_revenue = quantize_money(monthly_sale_vehicle * contract_months * vehicle_count)
@@ -126,9 +175,15 @@ def proposal_totals(
         else Decimal("0.00")
     )
     installation_cost = quantize_money(installation_cost_vehicle * vehicle_count)
+    one_time_cost = quantize_money(one_time_cost_vehicle * vehicle_count)
 
     total_revenue = quantize_money(recurring_revenue + installation_revenue)
-    total_cost = quantize_money(recurring_cost + installation_cost + normalized_fixed_cost)
+    total_cost = quantize_money(
+        recurring_cost
+        + one_time_cost
+        + installation_cost
+        + normalized_fixed_cost
+    )
     total_margin = quantize_money(total_revenue - total_cost)
     margin_percent = gross_margin_percent(total_revenue, total_cost)
 
@@ -165,6 +220,7 @@ def proposal_totals(
         "recurring_cost": recurring_cost,
         "installation_revenue": installation_revenue,
         "installation_cost": installation_cost,
+        "one_time_cost": one_time_cost,
         "fixed_cost": normalized_fixed_cost,
         "total_revenue": total_revenue,
         "total_cost": total_cost,
@@ -181,6 +237,7 @@ def break_even_vehicle_count(
     months: Any,
     installation_sale_per_vehicle: Any = 0,
     installation_cost_per_vehicle: Any = 0,
+    one_time_cost_per_vehicle: Any = 0,
     charge_installation: bool = True,
     fixed_cost: Any = 0,
     target_margin_percent: Any = MIN_CUSTOM_MARGIN_PERCENT,
@@ -201,6 +258,7 @@ def break_even_vehicle_count(
     )
     cost_per_vehicle = quantize_money(
         to_decimal(recurring_cost_per_vehicle) * months_decimal
+        + to_decimal(one_time_cost_per_vehicle)
         + to_decimal(installation_cost_per_vehicle)
     )
     normalized_fixed_cost = quantize_money(fixed_cost)
@@ -228,6 +286,7 @@ def quantity_scenarios(
     months: Any,
     installation_sale_per_vehicle: Any = 0,
     installation_cost_per_vehicle: Any = 0,
+    one_time_cost_per_vehicle: Any = 0,
     charge_installation: bool = True,
     fixed_cost: Any = 0,
 ) -> list[dict[str, float | int | None]]:
@@ -242,6 +301,7 @@ def quantity_scenarios(
             vehicles=quantity,
             installation_sale_per_vehicle=installation_sale_per_vehicle,
             installation_cost_per_vehicle=installation_cost_per_vehicle,
+            one_time_cost_per_vehicle=one_time_cost_per_vehicle,
             charge_installation=charge_installation,
             fixed_cost=fixed_cost,
         )

@@ -38,6 +38,14 @@ def get_default_pricing() -> dict[str, Any]:
             plan: {product: 0.0 for product in plan_products}
             for plan, plan_products in plans.items()
         },
+        # Fonte detalhada de custo por rastreador. Cada linha representa uma
+        # despesa real da operação e informa se ocorre mensalmente ou uma única
+        # vez por veículo. CUSTOS_PJ continua existindo como projeção mensal
+        # equivalente para compatibilidade com versões anteriores.
+        "CUSTOS_DETALHADOS_PJ": {
+            product: []
+            for product in products
+        },
         # Instalação é uma cobrança única por veículo. O preço pode ser cobrado
         # ou isentado na proposta, porém o custo interno sempre reduz a margem.
         "INSTALACAO_PJ": {
@@ -119,6 +127,7 @@ def normalize_pricing_config(data: dict[str, Any] | None) -> dict[str, Any]:
         if key not in {
             "PLANOS_PJ",
             "CUSTOS_PJ",
+            "CUSTOS_DETALHADOS_PJ",
             "INSTALACAO_PJ",
             "PRODUTOS_PJ_DESCRICAO",
         }:
@@ -165,6 +174,52 @@ def normalize_pricing_config(data: dict[str, Any] | None) -> dict[str, Any]:
     all_products = sorted(
         {product for products in result["PLANOS_PJ"].values() for product in products}
     )
+
+    valid_incidences = {"Mensal por veículo", "Único por veículo"}
+    raw_detailed_costs = provided.get("CUSTOS_DETALHADOS_PJ")
+    raw_detailed_costs = (
+        raw_detailed_costs
+        if isinstance(raw_detailed_costs, dict)
+        else {}
+    )
+    normalized_detailed_costs: dict[str, list[dict[str, Any]]] = {}
+    for product in all_products:
+        raw_rows = raw_detailed_costs.get(product)
+        raw_rows = raw_rows if isinstance(raw_rows, list) else []
+        clean_rows: list[dict[str, Any]] = []
+        for raw_row in raw_rows:
+            if not isinstance(raw_row, dict):
+                continue
+            expense = str(
+                raw_row.get("despesa")
+                or raw_row.get("Despesa")
+                or ""
+            ).strip()
+            if not expense:
+                continue
+            incidence = str(
+                raw_row.get("incidencia")
+                or raw_row.get("Incidência")
+                or "Mensal por veículo"
+            ).strip()
+            if incidence not in valid_incidences:
+                incidence = "Mensal por veículo"
+            clean_rows.append(
+                {
+                    "despesa": expense,
+                    "incidencia": incidence,
+                    "valor": _as_non_negative_float(
+                        raw_row.get("valor", raw_row.get("Valor", 0.0))
+                    ),
+                    "observacao": str(
+                        raw_row.get("observacao")
+                        or raw_row.get("Observação")
+                        or ""
+                    ).strip(),
+                }
+            )
+        normalized_detailed_costs[product] = clean_rows
+    result["CUSTOS_DETALHADOS_PJ"] = normalized_detailed_costs
     raw_installation = provided.get("INSTALACAO_PJ")
     raw_installation = raw_installation if isinstance(raw_installation, dict) else {}
     normalized_installation: dict[str, dict[str, float]] = {}

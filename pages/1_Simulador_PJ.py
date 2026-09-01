@@ -21,6 +21,7 @@ from app_core.pricing import (
     quantity_scenarios,
     quantize_money,
     sale_price_from_margin,
+    summarize_cost_components,
     to_decimal,
 )
 from app_core.proposal_documents import generate_pj_proposal
@@ -49,6 +50,7 @@ costs_by_plan = {
     for plan, products in pricing_config.get("CUSTOS_PJ", {}).items()
 }
 installation_by_product = pricing_config.get("INSTALACAO_PJ", {})
+detailed_costs_by_product = pricing_config.get("CUSTOS_DETALHADOS_PJ", {})
 descriptions = pricing_config.get("PRODUTOS_PJ_DESCRICAO", {})
 fixed_implementation_cost = quantize_money(
     pricing_config.get("CUSTO_FIXO_IMPLANTACAO_PJ", 0)
@@ -130,6 +132,7 @@ def _render_break_even_chart(
     months: Decimal,
     installation_sale_per_vehicle: Decimal,
     installation_cost_per_vehicle: Decimal,
+    one_time_cost_per_vehicle: Decimal,
     fixed_cost: Decimal,
     minimum_margin_percent: Decimal,
 ) -> None:
@@ -140,6 +143,7 @@ def _render_break_even_chart(
         months=months,
         installation_sale_per_vehicle=installation_sale_per_vehicle,
         installation_cost_per_vehicle=installation_cost_per_vehicle,
+        one_time_cost_per_vehicle=one_time_cost_per_vehicle,
         charge_installation=True,
         fixed_cost=fixed_cost,
     )
@@ -150,6 +154,7 @@ def _render_break_even_chart(
         months=months,
         installation_sale_per_vehicle=installation_sale_per_vehicle,
         installation_cost_per_vehicle=installation_cost_per_vehicle,
+        one_time_cost_per_vehicle=one_time_cost_per_vehicle,
         charge_installation=False,
         fixed_cost=fixed_cost,
     )
@@ -545,21 +550,41 @@ for column, label in zip(
 ):
     column.caption(label)
 
+contract_months_for_cost = Decimal(contract_term.split()[0])
+
 for product, base_price in plans[contract_term].items():
     product_id = _product_key(product)
-    recurring_cost = quantize_money(current_plan_costs.get(product, 0))
-    recurring_cost_configured = recurring_cost > 0
+    legacy_recurring_cost = quantize_money(
+        current_plan_costs.get(product, 0)
+    )
+    detailed_cost_rows = detailed_costs_by_product.get(product, [])
+    has_detailed_cost = bool(detailed_cost_rows)
+    detailed_cost_summary = summarize_cost_components(
+        detailed_cost_rows,
+        contract_months_for_cost,
+    )
+
+    if has_detailed_cost:
+        recurring_cost = detailed_cost_summary["recurring_monthly"]
+        one_time_cost = detailed_cost_summary["one_time_per_vehicle"]
+        pricing_cost = detailed_cost_summary["monthly_equivalent"]
+    else:
+        recurring_cost = legacy_recurring_cost
+        one_time_cost = Decimal("0.00")
+        pricing_cost = legacy_recurring_cost
+
+    recurring_cost_configured = pricing_cost > 0
     installation_config = installation_by_product.get(product, {})
     installation_sale = quantize_money(installation_config.get("preco_venda", 0))
     installation_cost = quantize_money(installation_config.get("custo", 0))
 
     base_margin_value = (
-        gross_margin_value(base_price, recurring_cost)
+        gross_margin_value(base_price, pricing_cost)
         if recurring_cost_configured
         else None
     )
     base_margin_percent = (
-        gross_margin_percent(base_price, recurring_cost)
+        gross_margin_percent(base_price, pricing_cost)
         if recurring_cost_configured
         else None
     )
@@ -586,10 +611,26 @@ for product, base_price in plans[contract_term].items():
             with row[5]:
                 with st.popover("Ajustar"):
                     st.caption(f"Preço padrão: {money(base_price)} por veículo/mês")
-                    st.caption(
-                        "Custo mensal: "
-                        + (money(recurring_cost) if recurring_cost_configured else "não cadastrado")
-                    )
+                    if has_detailed_cost:
+                        st.caption(
+                            f"Custo recorrente: {money(recurring_cost)}/mês"
+                        )
+                        st.caption(
+                            f"Custo único por veículo: {money(one_time_cost)}"
+                        )
+                        st.caption(
+                            f"Custo mensal equivalente em {int(contract_months_for_cost)} meses: "
+                            f"{money(pricing_cost)}"
+                        )
+                    else:
+                        st.caption(
+                            "Custo mensal legado: "
+                            + (
+                                money(pricing_cost)
+                                if recurring_cost_configured
+                                else "não cadastrado"
+                            )
+                        )
 
                     if not recurring_cost_configured:
                         st.warning(
@@ -604,7 +645,7 @@ for product, base_price in plans[contract_term].items():
 
                     if pricing_mode == "Valor personalizado":
                         floor_price = minimum_sale_price(
-                            recurring_cost,
+                            pricing_cost,
                             minimum_custom_margin,
                         )
                         custom_value = st.number_input(
@@ -640,7 +681,7 @@ for product, base_price in plans[contract_term].items():
                             ),
                         )
                         effective_price = sale_price_from_margin(
-                            recurring_cost,
+                            pricing_cost,
                             target_margin,
                         )
                         st.caption(
@@ -651,12 +692,12 @@ for product, base_price in plans[contract_term].items():
                 st.caption("Selecione")
 
         effective_margin_value = (
-            gross_margin_value(effective_price, recurring_cost)
+            gross_margin_value(effective_price, pricing_cost)
             if recurring_cost_configured
             else None
         )
         effective_margin_percent = (
-            gross_margin_percent(effective_price, recurring_cost)
+            gross_margin_percent(effective_price, pricing_cost)
             if recurring_cost_configured
             else None
         )
@@ -666,10 +707,23 @@ for product, base_price in plans[contract_term].items():
 
         with row[1]:
             st.markdown(f"**{money(base_price)}**")
-            st.caption(
-                "Custo "
-                + (money(recurring_cost) if recurring_cost_configured else "pendente")
-            )
+            if has_detailed_cost:
+                st.caption(
+                    f"Custo eq. {money(pricing_cost)}"
+                )
+                st.caption(
+                    f"{money(recurring_cost)}/mês + "
+                    f"{money(one_time_cost)} único"
+                )
+            else:
+                st.caption(
+                    "Custo "
+                    + (
+                        money(pricing_cost)
+                        if recurring_cost_configured
+                        else "pendente"
+                    )
+                )
 
         with row[2]:
             st.markdown(f"**{money(effective_price)}**")
@@ -697,6 +751,13 @@ for product, base_price in plans[contract_term].items():
                 "base_price": base_price,
                 "price": effective_price,
                 "recurring_cost": recurring_cost,
+                "one_time_cost": one_time_cost,
+                "pricing_cost": pricing_cost,
+                "cost_details": [
+                    dict(row)
+                    for row in detailed_cost_rows
+                    if isinstance(row, dict)
+                ],
                 "cost_configured": recurring_cost_configured,
                 "margin_value": effective_margin_value,
                 "margin_percent": effective_margin_percent,
@@ -716,7 +777,22 @@ if selected:
         sum((to_decimal(item["price"]) for item in selected.values()), Decimal("0"))
     )
     recurring_cost_per_vehicle = quantize_money(
-        sum((to_decimal(item["recurring_cost"]) for item in selected.values()), Decimal("0"))
+        sum(
+            (
+                to_decimal(item["recurring_cost"])
+                for item in selected.values()
+            ),
+            Decimal("0"),
+        )
+    )
+    one_time_cost_per_vehicle = quantize_money(
+        sum(
+            (
+                to_decimal(item["one_time_cost"])
+                for item in selected.values()
+            ),
+            Decimal("0"),
+        )
     )
     installation_sale_per_vehicle = quantize_money(
         sum((to_decimal(item["installation_sale"]) for item in selected.values()), Decimal("0"))
@@ -733,6 +809,7 @@ if selected:
         vehicles=vehicle_decimal,
         installation_sale_per_vehicle=installation_sale_per_vehicle,
         installation_cost_per_vehicle=installation_cost_per_vehicle,
+        one_time_cost_per_vehicle=one_time_cost_per_vehicle,
         charge_installation=True,
         fixed_cost=fixed_implementation_cost,
     )
@@ -743,6 +820,7 @@ if selected:
         vehicles=vehicle_decimal,
         installation_sale_per_vehicle=installation_sale_per_vehicle,
         installation_cost_per_vehicle=installation_cost_per_vehicle,
+        one_time_cost_per_vehicle=one_time_cost_per_vehicle,
         charge_installation=False,
         fixed_cost=fixed_implementation_cost,
     )
@@ -754,6 +832,7 @@ if selected:
         vehicles=vehicle_decimal,
         installation_sale_per_vehicle=installation_sale_per_vehicle,
         installation_cost_per_vehicle=installation_cost_per_vehicle,
+        one_time_cost_per_vehicle=one_time_cost_per_vehicle,
         charge_installation=True,
         fixed_cost=0,
     )
@@ -764,6 +843,7 @@ if selected:
         vehicles=vehicle_decimal,
         installation_sale_per_vehicle=installation_sale_per_vehicle,
         installation_cost_per_vehicle=installation_cost_per_vehicle,
+        one_time_cost_per_vehicle=one_time_cost_per_vehicle,
         charge_installation=False,
         fixed_cost=0,
     )
@@ -782,6 +862,7 @@ if selected:
         months=months,
         installation_sale_per_vehicle=installation_sale_per_vehicle,
         installation_cost_per_vehicle=installation_cost_per_vehicle,
+        one_time_cost_per_vehicle=one_time_cost_per_vehicle,
         charge_installation=charge_installation,
         fixed_cost=fixed_implementation_cost,
         target_margin_percent=minimum_custom_margin,
@@ -893,6 +974,10 @@ if selected:
             money(chosen_totals["recurring_cost"]),
         )
         breakdown_2.metric(
+            "Custo único dos rastreadores",
+            money(chosen_totals["one_time_cost"]),
+        )
+        breakdown_2.metric(
             "Custo de instalação",
             money(chosen_totals["installation_cost"]),
         )
@@ -988,6 +1073,7 @@ if selected:
         months=months,
         installation_sale_per_vehicle=installation_sale_per_vehicle,
         installation_cost_per_vehicle=installation_cost_per_vehicle,
+        one_time_cost_per_vehicle=one_time_cost_per_vehicle,
         fixed_cost=fixed_implementation_cost,
         minimum_margin_percent=minimum_custom_margin,
     )
@@ -1016,6 +1102,7 @@ if selected:
                     months=months,
                     installation_sale_per_vehicle=installation_sale_per_vehicle,
                     installation_cost_per_vehicle=installation_cost_per_vehicle,
+                    one_time_cost_per_vehicle=one_time_cost_per_vehicle,
                     charge_installation=scenario_charge,
                     fixed_cost=fixed_implementation_cost,
                 )
@@ -1077,6 +1164,7 @@ if selected:
         "months": months,
         "recurring_sale_per_vehicle": recurring_sale_per_vehicle,
         "recurring_cost_per_vehicle": recurring_cost_per_vehicle,
+        "one_time_cost_per_vehicle": one_time_cost_per_vehicle,
         "installation_sale_per_vehicle": installation_sale_per_vehicle,
         "installation_cost_per_vehicle": installation_cost_per_vehicle,
         "all_costs_configured": all_costs_configured,
@@ -1137,7 +1225,14 @@ if submitted and analysis is not None:
                     "condicao": str(item["pricing_mode"]),
                     "preco_padrao": _safe_float(item["base_price"]),
                     "preco_mensal": _safe_float(effective_price),
-                    "custo_mensal": _safe_float(recurring_cost),
+                    "custo_mensal": _safe_float(item["pricing_cost"]),
+                    "custo_mensal_recorrente": _safe_float(
+                        item["recurring_cost"]
+                    ),
+                    "custo_unico_veiculo": _safe_float(
+                        item["one_time_cost"]
+                    ),
+                    "composicao_custos": list(item["cost_details"]),
                     "margem_unitaria": _safe_float(margin_value),
                     "margem_percentual": _safe_float(margin_percent or 0),
                     "preco_instalacao": _safe_float(item["installation_sale"]),
@@ -1151,7 +1246,15 @@ if submitted and analysis is not None:
                     "Condição": str(item["pricing_mode"]),
                     "Preço padrão": _safe_float(item["base_price"]),
                     "Preço aplicado": _safe_float(effective_price),
-                    "Custo mensal": _safe_float(recurring_cost),
+                    "Custo mensal recorrente": _safe_float(
+                        item["recurring_cost"]
+                    ),
+                    "Custo único/veículo": _safe_float(
+                        item["one_time_cost"]
+                    ),
+                    "Custo mensal equivalente": _safe_float(
+                        item["pricing_cost"]
+                    ),
                     "Margem unitária": _safe_float(margin_value),
                     "Margem (%)": _safe_float(margin_percent or 0),
                     "Instalação cobrada": _safe_float(item["installation_sale"]),
@@ -1212,7 +1315,12 @@ if submitted and analysis is not None:
             "prazo_contrato": contract_term,
             "instalacao": installation_policy,
             "preco_mensal_veiculo": _safe_float(analysis["recurring_sale_per_vehicle"]),
-            "custo_mensal_veiculo": _safe_float(analysis["recurring_cost_per_vehicle"]),
+            "custo_mensal_veiculo": _safe_float(
+                analysis["recurring_cost_per_vehicle"]
+            ),
+            "custo_unico_veiculo": _safe_float(
+                analysis["one_time_cost_per_vehicle"]
+            ),
             "preco_instalacao_veiculo": _safe_float(analysis["installation_sale_per_vehicle"]),
             "custo_instalacao_veiculo": _safe_float(analysis["installation_cost_per_vehicle"]),
             "custo_fixo_implantacao": _safe_float(fixed_implementation_cost),
@@ -1293,7 +1401,18 @@ if result:
         column_config={
             "Preço padrão": st.column_config.NumberColumn("Preço padrão", format="R$ %.2f"),
             "Preço aplicado": st.column_config.NumberColumn("Preço aplicado", format="R$ %.2f"),
-            "Custo mensal": st.column_config.NumberColumn("Custo mensal", format="R$ %.2f"),
+            "Custo mensal recorrente": st.column_config.NumberColumn(
+                "Custo mensal recorrente",
+                format="R$ %.2f",
+            ),
+            "Custo único/veículo": st.column_config.NumberColumn(
+                "Custo único/veículo",
+                format="R$ %.2f",
+            ),
+            "Custo mensal equivalente": st.column_config.NumberColumn(
+                "Custo mensal equivalente",
+                format="R$ %.2f",
+            ),
             "Margem unitária": st.column_config.NumberColumn("Margem unitária", format="R$ %.2f"),
             "Margem (%)": st.column_config.NumberColumn("Margem (%)", format="%.2f%%"),
             "Instalação cobrada": st.column_config.NumberColumn("Instalação cobrada", format="R$ %.2f"),
