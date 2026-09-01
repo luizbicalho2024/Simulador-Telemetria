@@ -9,6 +9,7 @@ from PIL import Image, ImageOps
 
 import user_management_db as db
 from app_core.auth import LOGIN_FIELDS, build_authenticator, clear_auth_state
+from app_core.pricing import COST_INCIDENCES, summarize_cost_components
 from app_core.settings import branding_contrast_errors, get_default_branding, normalize_branding
 from app_core.ui import apply_branding, configure_page, money, render_hero, render_logo, render_sidebar
 
@@ -444,9 +445,146 @@ if st.session_state.get("role") == "admin":
                 product: dict(pricing.get("INSTALACAO_PJ", {}).get(product, {}))
                 for product in unique_pj_products
             }
+            pj_detailed_costs = {
+                product: [
+                    dict(row)
+                    for row in pricing.get("CUSTOS_DETALHADOS_PJ", {}).get(product, [])
+                    if isinstance(row, dict)
+                ]
+                for product in unique_pj_products
+            }
             fixed_implementation_cost = float(
                 pricing.get("CUSTO_FIXO_IMPLANTACAO_PJ", 0.0) or 0.0
             )
+            with st.expander("Composição real de custos por rastreador", expanded=True):
+                st.caption(
+                    "Cadastre uma linha para cada despesa real da operação. "
+                    "Use o mesmo nome da sua planilha. Despesas mensais entram em todos "
+                    "os meses do contrato; despesas únicas por veículo entram uma única vez "
+                    "e são amortizadas somente para calcular a referência mensal de preço."
+                )
+                st.info(
+                    "O custo mensal equivalente é usado para avaliar margem e preço mínimo. "
+                    "No custo total do contrato, a despesa única continua sendo cobrada uma única vez."
+                )
+
+                for cost_index, product in enumerate(unique_pj_products):
+                    st.markdown(f"##### {product}")
+                    raw_rows = pj_detailed_costs.get(product, [])
+                    editor_rows = [
+                        {
+                            "Despesa": str(row.get("despesa") or ""),
+                            "Incidência": str(
+                                row.get("incidencia") or "Mensal por veículo"
+                            ),
+                            "Valor (R$)": float(row.get("valor", 0.0) or 0.0),
+                            "Observação": str(row.get("observacao") or ""),
+                        }
+                        for row in raw_rows
+                    ]
+                    editor_frame = pd.DataFrame(
+                        editor_rows,
+                        columns=[
+                            "Despesa",
+                            "Incidência",
+                            "Valor (R$)",
+                            "Observação",
+                        ],
+                    )
+                    edited_costs = st.data_editor(
+                        editor_frame,
+                        num_rows="dynamic",
+                        width="stretch",
+                        hide_index=True,
+                        key=f"pj_detailed_costs_{cost_index}",
+                        column_config={
+                            "Despesa": st.column_config.TextColumn(
+                                "Despesa",
+                                help="Use o mesmo nome da despesa na planilha de custos.",
+                            ),
+                            "Incidência": st.column_config.SelectboxColumn(
+                                "Incidência",
+                                options=list(COST_INCIDENCES),
+                                required=True,
+                            ),
+                            "Valor (R$)": st.column_config.NumberColumn(
+                                "Valor (R$)",
+                                min_value=0.0,
+                                step=0.01,
+                                format="R$ %.2f",
+                            ),
+                            "Observação": st.column_config.TextColumn(
+                                "Observação"
+                            ),
+                        },
+                    )
+
+                    normalized_rows = []
+                    for row in edited_costs.to_dict("records"):
+                        expense = str(row.get("Despesa") or "").strip()
+                        if not expense:
+                            continue
+                        incidence = str(
+                            row.get("Incidência") or "Mensal por veículo"
+                        ).strip()
+                        if incidence not in COST_INCIDENCES:
+                            incidence = "Mensal por veículo"
+                        raw_value = row.get("Valor (R$)")
+                        value = (
+                            0.0
+                            if pd.isna(raw_value)
+                            else max(0.0, float(raw_value or 0.0))
+                        )
+                        normalized_rows.append(
+                            {
+                                "despesa": expense,
+                                "incidencia": incidence,
+                                "valor": value,
+                                "observacao": str(
+                                    row.get("Observação") or ""
+                                ).strip(),
+                            }
+                        )
+                    pj_detailed_costs[product] = normalized_rows
+
+                    if normalized_rows:
+                        summary_12 = summarize_cost_components(
+                            normalized_rows,
+                            12,
+                        )
+                        c1, c2, c3 = st.columns(3)
+                        c1.metric(
+                            "Mensal recorrente",
+                            money(summary_12["recurring_monthly"]),
+                        )
+                        c2.metric(
+                            "Único por veículo",
+                            money(summary_12["one_time_per_vehicle"]),
+                        )
+                        c3.metric(
+                            "Custo mensal equivalente (12 meses)",
+                            money(summary_12["monthly_equivalent"]),
+                        )
+                    else:
+                        legacy_values = [
+                            float(
+                                pj_costs.get(plan, {}).get(product, 0.0)
+                                or 0.0
+                            )
+                            for plan in pj_plans
+                        ]
+                        if any(value > 0 for value in legacy_values):
+                            st.caption(
+                                "Ainda usando o custo mensal legado. "
+                                "Ao cadastrar a composição acima, ela passa a ser "
+                                "a fonte oficial de custo deste rastreador."
+                            )
+                        else:
+                            st.warning(
+                                "Nenhuma despesa cadastrada para este rastreador."
+                            )
+                    st.markdown("---")
+
             with st.expander("Pessoa jurídica — preços, custos e margens", expanded=True):
                 st.caption(
                     "Preço e custo são mensais, unitários e específicos por prazo contratual. "
@@ -471,14 +609,42 @@ if st.session_state.get("role") == "admin":
                             key=f"price_pj_{plan_index}_{product_index}",
                             label_visibility="collapsed",
                         )
-                        cost_value = cost_col.number_input(
-                            f"Custo {item} {plan}",
-                            value=float(plan_costs.get(item, 0.0) or 0.0),
-                            min_value=0.0,
-                            format="%.2f",
-                            key=f"cost_pj_{plan_index}_{product_index}",
-                            label_visibility="collapsed",
-                        )
+                        detailed_rows = pj_detailed_costs.get(item, [])
+                        if detailed_rows:
+                            plan_months = int(str(plan).split()[0])
+                            cost_summary = summarize_cost_components(
+                                detailed_rows,
+                                plan_months,
+                            )
+                            cost_value = float(
+                                cost_summary["monthly_equivalent"]
+                            )
+                            cost_col.number_input(
+                                f"Custo {item} {plan}",
+                                value=cost_value,
+                                min_value=0.0,
+                                format="%.2f",
+                                key=f"cost_pj_{plan_index}_{product_index}",
+                                label_visibility="collapsed",
+                                disabled=True,
+                            )
+                            name_col.caption(
+                                "Custo detalhado: "
+                                f"{money(cost_summary['recurring_monthly'])}/mês "
+                                f"+ {money(cost_summary['one_time_per_vehicle'])} "
+                                "único por veículo."
+                            )
+                        else:
+                            cost_value = cost_col.number_input(
+                                f"Custo {item} {plan}",
+                                value=float(
+                                    plan_costs.get(item, 0.0) or 0.0
+                                ),
+                                min_value=0.0,
+                                format="%.2f",
+                                key=f"cost_pj_{plan_index}_{product_index}",
+                                label_visibility="collapsed",
+                            )
                         products[item] = sale_value
                         plan_costs[item] = cost_value
 
@@ -554,6 +720,7 @@ if st.session_state.get("role") == "admin":
             pricing["PRECO_CUSTO_LICITACAO"] = bid_prices
             pricing["PLANOS_PJ"] = pj_plans
             pricing["CUSTOS_PJ"] = pj_costs
+            pricing["CUSTOS_DETALHADOS_PJ"] = pj_detailed_costs
             pricing["INSTALACAO_PJ"] = pj_installation
             pricing["CUSTO_FIXO_IMPLANTACAO_PJ"] = fixed_implementation_cost
             pricing["MARGEM_MINIMA_PERSONALIZADA_PJ"] = 30.0
