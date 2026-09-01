@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from datetime import date, timedelta
 from decimal import Decimal
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 import user_management_db as db
 from app_core.auth import require_auth
@@ -106,6 +108,269 @@ def _status_label(status: str) -> str:
 
 def _safe_float(value: object) -> float:
     return float(to_decimal(value))
+
+
+
+def _safe_hex_color(value: object, fallback: str) -> str:
+    text = str(value or "").strip()
+    if (
+        len(text) == 7
+        and text.startswith("#")
+        and all(character in "0123456789abcdefABCDEF" for character in text[1:])
+    ):
+        return text
+    return fallback
+
+
+def _render_break_even_chart(
+    quantities: list[int],
+    *,
+    recurring_sale_per_vehicle: Decimal,
+    recurring_cost_per_vehicle: Decimal,
+    months: Decimal,
+    installation_sale_per_vehicle: Decimal,
+    installation_cost_per_vehicle: Decimal,
+    fixed_cost: Decimal,
+    minimum_margin_percent: Decimal,
+) -> None:
+    charged_rows = quantity_scenarios(
+        quantities,
+        recurring_sale_per_vehicle=recurring_sale_per_vehicle,
+        recurring_cost_per_vehicle=recurring_cost_per_vehicle,
+        months=months,
+        installation_sale_per_vehicle=installation_sale_per_vehicle,
+        installation_cost_per_vehicle=installation_cost_per_vehicle,
+        charge_installation=True,
+        fixed_cost=fixed_cost,
+    )
+    waived_rows = quantity_scenarios(
+        quantities,
+        recurring_sale_per_vehicle=recurring_sale_per_vehicle,
+        recurring_cost_per_vehicle=recurring_cost_per_vehicle,
+        months=months,
+        installation_sale_per_vehicle=installation_sale_per_vehicle,
+        installation_cost_per_vehicle=installation_cost_per_vehicle,
+        charge_installation=False,
+        fixed_cost=fixed_cost,
+    )
+
+    waived_by_quantity = {
+        int(row["Veículos"]): row for row in waived_rows
+    }
+    chart_data: list[dict[str, float | int | None]] = []
+    for charged_row in charged_rows:
+        quantity = int(charged_row["Veículos"])
+        waived_row = waived_by_quantity.get(quantity, {})
+        chart_data.append(
+            {
+                "vehicles": quantity,
+                "chargedMargin": charged_row.get("Margem (%)"),
+                "waivedMargin": waived_row.get("Margem (%)"),
+            }
+        )
+
+    if not chart_data:
+        return
+
+    branding = db.get_system_settings() or {}
+    primary = _safe_hex_color(branding.get("primary_color"), "#0F766E")
+    accent = _safe_hex_color(branding.get("accent_color"), "#2563EB")
+    text_color = _safe_hex_color(branding.get("text_color"), "#0F172A")
+    muted_color = _safe_hex_color(branding.get("muted_color"), "#64748B")
+    surface_color = _safe_hex_color(branding.get("surface_color"), "#FFFFFF")
+    policy_color = "#D97706"
+    chart_id = "pj-break-even-" + hashlib.sha1(
+        json.dumps(chart_data, sort_keys=True).encode("utf-8")
+    ).hexdigest()[:10]
+
+    chart_html = """
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+body { font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.chart-shell {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid rgba(100, 116, 139, .20);
+    border-radius: 14px;
+    background: __SURFACE__;
+    padding: 10px 10px 4px;
+}
+#__CHART_ID__ { width: 100%; height: 380px; }
+.chart-fallback {
+    color: __MUTED__;
+    font-size: 13px;
+    padding: 18px;
+}
+</style>
+<script src="https://cdn.amcharts.com/lib/5/index.js"></script>
+<script src="https://cdn.amcharts.com/lib/5/xy.js"></script>
+<script src="https://cdn.amcharts.com/lib/5/themes/Animated.js"></script>
+</head>
+<body>
+<div class="chart-shell">
+    <div id="__CHART_ID__">
+        <div class="chart-fallback">Carregando análise interativa de margem...</div>
+    </div>
+</div>
+<script>
+am5.ready(function() {
+    const data = __DATA__;
+    const minimumMargin = __MIN_MARGIN__;
+
+    function color(hex) {
+        return am5.color(parseInt(hex.replace("#", ""), 16));
+    }
+
+    const root = am5.Root.new("__CHART_ID__");
+    root.setThemes([am5themes_Animated.new(root)]);
+
+    const chart = root.container.children.push(am5xy.XYChart.new(root, {
+        panX: false,
+        panY: false,
+        wheelX: "none",
+        wheelY: "none",
+        layout: root.verticalLayout,
+        paddingLeft: 8,
+        paddingRight: 18,
+        paddingTop: 8
+    }));
+
+    const xRenderer = am5xy.AxisRendererX.new(root, { minGridDistance: 52 });
+    xRenderer.labels.template.setAll({
+        fill: color("__MUTED__"),
+        fontSize: 12,
+        paddingTop: 8
+    });
+    xRenderer.grid.template.setAll({
+        stroke: color("__MUTED__"),
+        strokeOpacity: 0.10
+    });
+
+    const xAxis = chart.xAxes.push(am5xy.ValueAxis.new(root, {
+        min: 0,
+        extraMax: 0.04,
+        numberFormat: "#",
+        renderer: xRenderer
+    }));
+
+    const yRenderer = am5xy.AxisRendererY.new(root, {});
+    yRenderer.labels.template.setAll({
+        fill: color("__MUTED__"),
+        fontSize: 12,
+        paddingRight: 8
+    });
+    yRenderer.grid.template.setAll({
+        stroke: color("__MUTED__"),
+        strokeOpacity: 0.10
+    });
+
+    const yAxis = chart.yAxes.push(am5xy.ValueAxis.new(root, {
+        extraMin: 0.08,
+        extraMax: 0.10,
+        numberFormat: "#.0'%'",
+        renderer: yRenderer
+    }));
+
+    function createSeries(name, field, seriesColor) {
+        const series = chart.series.push(am5xy.LineSeries.new(root, {
+            name: name,
+            xAxis: xAxis,
+            yAxis: yAxis,
+            valueXField: "vehicles",
+            valueYField: field,
+            stroke: color(seriesColor),
+            fill: color(seriesColor),
+            tooltip: am5.Tooltip.new(root, {
+                labelText: "[bold]" + name + "[/]\n{valueX} veículos · {valueY}%"
+            })
+        }));
+
+        series.strokes.template.setAll({
+            strokeWidth: 3
+        });
+
+        series.bullets.push(function() {
+            return am5.Bullet.new(root, {
+                sprite: am5.Circle.new(root, {
+                    radius: 4,
+                    fill: series.get("fill"),
+                    stroke: color("__SURFACE__"),
+                    strokeWidth: 2
+                })
+            });
+        });
+
+        series.data.setAll(data.filter(function(row) {
+            return row[field] !== null && row[field] !== undefined;
+        }));
+        return series;
+    }
+
+    createSeries("Cobrando instalação", "chargedMargin", "__PRIMARY__");
+    createSeries("Isentando instalação", "waivedMargin", "__ACCENT__");
+
+    const rangeDataItem = yAxis.makeDataItem({ value: minimumMargin });
+    const range = yAxis.createAxisRange(rangeDataItem);
+    range.get("grid").setAll({
+        stroke: color("__POLICY__"),
+        strokeWidth: 2,
+        strokeOpacity: 0.95,
+        strokeDasharray: [7, 5]
+    });
+    range.get("label").setAll({
+        text: "Piso " + minimumMargin.toFixed(2) + "%",
+        fill: color("__POLICY__"),
+        fontSize: 12,
+        fontWeight: "600",
+        inside: true,
+        location: 1,
+        dx: -8
+    });
+
+    const legend = chart.children.push(am5.Legend.new(root, {
+        centerX: am5.p50,
+        x: am5.p50,
+        marginTop: 10
+    }));
+    legend.labels.template.setAll({
+        fill: color("__TEXT__"),
+        fontSize: 12
+    });
+    legend.valueLabels.template.set("forceHidden", true);
+    legend.data.setAll(chart.series.values);
+
+    const cursor = chart.set("cursor", am5xy.XYCursor.new(root, {
+        behavior: "none"
+    }));
+    cursor.lineY.set("visible", false);
+    cursor.lineX.setAll({
+        stroke: color("__MUTED__"),
+        strokeOpacity: 0.25
+    });
+
+    chart.appear(700, 80);
+});
+</script>
+</body>
+</html>
+"""
+    chart_html = (
+        chart_html
+        .replace("__CHART_ID__", chart_id)
+        .replace("__DATA__", json.dumps(chart_data, ensure_ascii=False))
+        .replace("__MIN_MARGIN__", str(float(minimum_margin_percent)))
+        .replace("__PRIMARY__", primary)
+        .replace("__ACCENT__", accent)
+        .replace("__TEXT__", text_color)
+        .replace("__MUTED__", muted_color)
+        .replace("__SURFACE__", surface_color)
+        .replace("__POLICY__", policy_color)
+    )
+    components.html(chart_html, height=410, scrolling=False)
 
 
 def _product_matches(product: str, preset_name: str) -> bool:
@@ -220,16 +485,26 @@ active_reference = st.session_state.get("pj_offer_reference")
 if active_reference in OFFER_PRESETS:
     st.info(f"Referência ativa: {active_reference}. Você pode incluir, remover ou reprificar itens livremente.")
 
+
 st.markdown("#### Produtos e serviços")
-st.info(
-    f"Piso de governança: {minimum_custom_margin:.2f}% de margem total da proposta. "
-    "O comercial pode simular preços e margens abaixo desse piso. Quando a condição final ficar "
-    "abaixo da política, a proposta será registrada para decisão do Head Comercial e o download "
-    "permanecerá bloqueado até a aprovação."
-)
+policy_col, selection_col = st.columns([3.4, 1])
+with policy_col:
+    st.caption(
+        f"Piso de governança: {minimum_custom_margin:.2f}% de margem total. "
+        "Valores abaixo do piso continuam simuláveis, mas exigem aprovação do Head Comercial para emissão."
+    )
+with selection_col:
+    st.caption("Selecione os itens e ajuste apenas quando necessário.")
 
 selected: dict[str, dict[str, object]] = {}
 current_plan_costs = costs_by_plan.get(contract_term, {})
+
+header_cols = st.columns([3.4, 1.05, 1.05, 1.05, 1.15, 0.85], vertical_alignment="center")
+for column, label in zip(
+    header_cols,
+    ["Produto", "Padrão", "Aplicado", "Margem", "Instalação", "Ação"],
+):
+    column.caption(label)
 
 for product, base_price in plans[contract_term].items():
     product_id = _product_key(product)
@@ -250,110 +525,135 @@ for product, base_price in plans[contract_term].items():
         else None
     )
 
+    effective_price = base_price
+    pricing_mode = "Preço padrão"
+    custom_discount = False
+
     with st.container(border=True):
-        enable_col, value_col = st.columns([1.65, 1])
-        with enable_col:
+        row = st.columns([3.4, 1.05, 1.05, 1.05, 1.15, 0.85], vertical_alignment="center")
+
+        with row[0]:
             enabled = st.toggle(
                 product,
                 key=f"pj_enabled_{contract_term}_{product_id}",
             )
             st.caption(descriptions.get(product, product))
-        with value_col:
-            st.markdown(f"**Preço padrão: {money(base_price)}**")
-            st.caption("por veículo/mês")
 
-        info_1, info_2, info_3, info_4 = st.columns(4)
-        info_1.metric(
-            "Custo mensal",
-            money(recurring_cost) if recurring_cost_configured else "Não cadastrado",
-        )
-        info_2.metric(
-            "Margem padrão",
-            money(base_margin_value) if base_margin_value is not None else "Pendente",
-        )
-        info_3.metric("Margem padrão (%)", _margin_label(base_margin_percent))
-        info_4.metric(
-            "Instalação",
-            f"{money(installation_sale)} / custo {money(installation_cost)}",
-        )
-
-        effective_price = base_price
-        pricing_mode = "Preço padrão"
-        custom_discount = False
+        modes = ["Preço padrão"]
+        if recurring_cost_configured:
+            modes.extend(["Valor personalizado", "Margem personalizada"])
 
         if enabled:
-            modes = ["Preço padrão"]
-            if recurring_cost_configured:
-                modes.extend(["Valor personalizado", "Margem personalizada"])
+            with row[5]:
+                with st.popover("Ajustar"):
+                    st.caption(f"Preço padrão: {money(base_price)} por veículo/mês")
+                    st.caption(
+                        "Custo mensal: "
+                        + (money(recurring_cost) if recurring_cost_configured else "não cadastrado")
+                    )
+
+                    if not recurring_cost_configured:
+                        st.warning(
+                            "Cadastre o custo mensal deste produto antes de usar uma condição personalizada."
+                        )
+
+                    pricing_mode = st.radio(
+                        "Condição comercial",
+                        modes,
+                        key=f"pj_mode_{contract_term}_{product_id}",
+                    )
+
+                    if pricing_mode == "Valor personalizado":
+                        floor_price = minimum_sale_price(
+                            recurring_cost,
+                            minimum_custom_margin,
+                        )
+                        custom_value = st.number_input(
+                            "Preço mensal personalizado por veículo",
+                            min_value=0.01,
+                            value=max(0.01, float(base_price)),
+                            step=1.0,
+                            format="%.2f",
+                            key=f"pj_custom_value_{contract_term}_{product_id}",
+                            help=(
+                                f"Referência para manter {minimum_custom_margin:.2f}% "
+                                f"de margem unitária: {money(floor_price)}. "
+                                "Valores menores continuam permitidos para simulação."
+                            ),
+                        )
+                        effective_price = quantize_money(custom_value)
+                    elif pricing_mode == "Margem personalizada":
+                        default_margin = min(
+                            max(float(base_margin_percent or minimum_custom_margin), -500.0),
+                            99.0,
+                        )
+                        target_margin = st.number_input(
+                            "Margem desejada sobre o preço de venda (%)",
+                            min_value=-500.0,
+                            max_value=99.0,
+                            value=default_margin,
+                            step=0.5,
+                            format="%.2f",
+                            key=f"pj_custom_margin_{contract_term}_{product_id}",
+                            help=(
+                                "Margens abaixo do piso, inclusive negativas, podem ser simuladas. "
+                                "A proposta final seguirá a alçada comercial quando necessário."
+                            ),
+                        )
+                        effective_price = sale_price_from_margin(
+                            recurring_cost,
+                            target_margin,
+                        )
+                        st.caption(
+                            f"Preço calculado: {money(effective_price)} por veículo/mês"
+                        )
+        else:
+            with row[5]:
+                st.caption("Selecione")
+
+        effective_margin_value = (
+            gross_margin_value(effective_price, recurring_cost)
+            if recurring_cost_configured
+            else None
+        )
+        effective_margin_percent = (
+            gross_margin_percent(effective_price, recurring_cost)
+            if recurring_cost_configured
+            else None
+        )
+        custom_discount = (
+            pricing_mode != "Preço padrão" and effective_price < base_price
+        )
+
+        with row[1]:
+            st.markdown(f"**{money(base_price)}**")
+            st.caption(
+                "Custo "
+                + (money(recurring_cost) if recurring_cost_configured else "pendente")
+            )
+
+        with row[2]:
+            st.markdown(f"**{money(effective_price)}**")
+            st.caption(pricing_mode if enabled else "Não selecionado")
+
+        with row[3]:
+            st.markdown(f"**{_margin_label(effective_margin_percent)}**")
+            if effective_margin_percent is None:
+                st.caption("Custo pendente")
+            elif effective_margin_percent >= minimum_custom_margin:
+                st.caption("Dentro da política")
             else:
-                st.warning(
-                    "Cadastre o custo mensal deste produto antes de usar uma condição personalizada."
-                )
+                st.caption("Abaixo do piso")
 
-            pricing_mode = st.selectbox(
-                "Condição comercial",
-                modes,
-                key=f"pj_mode_{contract_term}_{product_id}",
-            )
+        with row[4]:
+            if installation_sale > 0 or installation_cost > 0:
+                st.markdown(f"**{money(installation_sale)}**")
+                st.caption(f"Custo {money(installation_cost)}")
+            else:
+                st.markdown("**—**")
+                st.caption("Sem cobrança")
 
-            if pricing_mode == "Valor personalizado":
-                floor_price = minimum_sale_price(recurring_cost, minimum_custom_margin)
-                custom_value = st.number_input(
-                    "Preço mensal personalizado por veículo",
-                    min_value=0.01,
-                    value=max(0.01, float(base_price)),
-                    step=1.0,
-                    format="%.2f",
-                    key=f"pj_custom_value_{contract_term}_{product_id}",
-                    help=(
-                        f"Referência para manter {minimum_custom_margin:.2f}% de margem unitária: "
-                        f"{money(floor_price)}. Valores menores são permitidos para simulação."
-                    ),
-                )
-                effective_price = quantize_money(custom_value)
-            elif pricing_mode == "Margem personalizada":
-                default_margin = min(
-                    max(float(base_margin_percent or minimum_custom_margin), -500.0),
-                    99.0,
-                )
-                target_margin = st.number_input(
-                    "Margem desejada sobre o preço de venda (%)",
-                    min_value=-500.0,
-                    max_value=99.0,
-                    value=default_margin,
-                    step=0.5,
-                    format="%.2f",
-                    key=f"pj_custom_margin_{contract_term}_{product_id}",
-                    help=(
-                        "Margens abaixo do piso, inclusive negativas, podem ser simuladas. "
-                        "A proposta final será submetida à alçada comercial quando necessário."
-                    ),
-                )
-                effective_price = sale_price_from_margin(recurring_cost, target_margin)
-                st.caption(f"Preço calculado: {money(effective_price)} por veículo/mês")
-
-            effective_margin_value = (
-                gross_margin_value(effective_price, recurring_cost)
-                if recurring_cost_configured
-                else None
-            )
-            effective_margin_percent = (
-                gross_margin_percent(effective_price, recurring_cost)
-                if recurring_cost_configured
-                else None
-            )
-            custom_discount = pricing_mode != "Preço padrão" and effective_price < base_price
-
-            if effective_margin_value is not None:
-                message = (
-                    f"Margem simulada: {money(effective_margin_value)} "
-                    f"({_margin_label(effective_margin_percent)}) por veículo/mês."
-                )
-                if effective_margin_percent is not None and effective_margin_percent >= minimum_custom_margin:
-                    st.success(message + " Dentro da política de margem.")
-                else:
-                    st.warning(message + " Abaixo do piso; a decisão será feita pela margem consolidada da proposta.")
-
+        if enabled:
             selected[product] = {
                 "base_price": base_price,
                 "price": effective_price,
@@ -366,7 +666,6 @@ for product, base_price in plans[contract_term].items():
                 "installation_sale": installation_sale,
                 "installation_cost": installation_cost,
             }
-
 if not selected:
     st.info("Selecione ao menos um produto para visualizar a análise de margem e equilíbrio.")
 
@@ -466,12 +765,12 @@ if selected:
                 f"{waived_totals['payback_months']} meses."
             )
 
+
     st.markdown("### Ponto de equilíbrio por tamanho da frota")
     st.caption(
-        "A quantidade altera a margem percentual quando existe custo fixo de implantação. "
-        "Sem custo fixo, o percentual tende a permanecer estável e apenas a margem total cresce."
+        "A curva mostra como a margem percentual evolui conforme a frota cresce. "
+        "A linha tracejada representa o piso de governança; passe o mouse sobre os pontos para comparar os cenários."
     )
-    scenario_tabs = st.tabs(["Cobrando instalação", "Isentando instalação"])
     scenario_quantities = sorted(
         {
             *[int(value) for value in quantity_defaults if int(value) > 0],
@@ -479,18 +778,56 @@ if selected:
         }
     )
 
+    charged_break_even = break_even_vehicle_count(
+        recurring_sale_per_vehicle=recurring_sale_per_vehicle,
+        recurring_cost_per_vehicle=recurring_cost_per_vehicle,
+        months=months,
+        installation_sale_per_vehicle=installation_sale_per_vehicle,
+        installation_cost_per_vehicle=installation_cost_per_vehicle,
+        charge_installation=True,
+        fixed_cost=fixed_implementation_cost,
+        target_margin_percent=minimum_custom_margin,
+    )
+    waived_break_even = break_even_vehicle_count(
+        recurring_sale_per_vehicle=recurring_sale_per_vehicle,
+        recurring_cost_per_vehicle=recurring_cost_per_vehicle,
+        months=months,
+        installation_sale_per_vehicle=installation_sale_per_vehicle,
+        installation_cost_per_vehicle=installation_cost_per_vehicle,
+        charge_installation=False,
+        fixed_cost=fixed_implementation_cost,
+        target_margin_percent=minimum_custom_margin,
+    )
+
+    equilibrium_cols = st.columns(3)
+    equilibrium_cols[0].metric(
+        "Piso de governança",
+        f"{minimum_custom_margin:.2f}%",
+    )
+    equilibrium_cols[1].metric(
+        "Equilíbrio cobrando instalação",
+        f"{charged_break_even} veículo(s)" if charged_break_even is not None else "Não atinge",
+    )
+    equilibrium_cols[2].metric(
+        "Equilíbrio isentando instalação",
+        f"{waived_break_even} veículo(s)" if waived_break_even is not None else "Não atinge",
+    )
+
+    _render_break_even_chart(
+        scenario_quantities,
+        recurring_sale_per_vehicle=recurring_sale_per_vehicle,
+        recurring_cost_per_vehicle=recurring_cost_per_vehicle,
+        months=months,
+        installation_sale_per_vehicle=installation_sale_per_vehicle,
+        installation_cost_per_vehicle=installation_cost_per_vehicle,
+        fixed_cost=fixed_implementation_cost,
+        minimum_margin_percent=minimum_custom_margin,
+    )
+
+    scenario_tabs = st.tabs(["Cobrando instalação", "Isentando instalação"])
     for tab, scenario_charge in zip(scenario_tabs, [True, False]):
         with tab:
-            break_even = break_even_vehicle_count(
-                recurring_sale_per_vehicle=recurring_sale_per_vehicle,
-                recurring_cost_per_vehicle=recurring_cost_per_vehicle,
-                months=months,
-                installation_sale_per_vehicle=installation_sale_per_vehicle,
-                installation_cost_per_vehicle=installation_cost_per_vehicle,
-                charge_installation=scenario_charge,
-                fixed_cost=fixed_implementation_cost,
-                target_margin_percent=minimum_custom_margin,
-            )
+            break_even = charged_break_even if scenario_charge else waived_break_even
             if break_even is None:
                 st.warning(
                     f"A estrutura atual não alcança {minimum_custom_margin:.2f}% de margem, "
@@ -515,24 +852,30 @@ if selected:
                     fixed_cost=fixed_implementation_cost,
                 )
             )
-            st.dataframe(
-                scenario_df,
-                width="stretch",
-                hide_index=True,
-                column_config={
-                    "Veículos": st.column_config.NumberColumn("Veículos", format="%d"),
-                    "Receita do contrato": st.column_config.NumberColumn(
-                        "Receita do contrato", format="R$ %.2f"
-                    ),
-                    "Custo total": st.column_config.NumberColumn("Custo total", format="R$ %.2f"),
-                    "Margem total": st.column_config.NumberColumn("Margem total", format="R$ %.2f"),
-                    "Margem (%)": st.column_config.NumberColumn("Margem (%)", format="%.2f%%"),
-                    "Payback instalação (meses)": st.column_config.NumberColumn(
-                        "Payback instalação (meses)", format="%.2f"
-                    ),
-                },
-            )
-
+            with st.expander("Ver tabela detalhada do cenário"):
+                st.dataframe(
+                    scenario_df,
+                    width="stretch",
+                    hide_index=True,
+                    column_config={
+                        "Veículos": st.column_config.NumberColumn("Veículos", format="%d"),
+                        "Receita do contrato": st.column_config.NumberColumn(
+                            "Receita do contrato", format="R$ %.2f"
+                        ),
+                        "Custo total": st.column_config.NumberColumn(
+                            "Custo total", format="R$ %.2f"
+                        ),
+                        "Margem total": st.column_config.NumberColumn(
+                            "Margem total", format="R$ %.2f"
+                        ),
+                        "Margem (%)": st.column_config.NumberColumn(
+                            "Margem (%)", format="%.2f%%"
+                        ),
+                        "Payback instalação (meses)": st.column_config.NumberColumn(
+                            "Payback instalação (meses)", format="%.2f"
+                        ),
+                    },
+                )
     custom_discount_products = [
         product for product, item in selected.items() if bool(item["custom_discount"])
     ]
