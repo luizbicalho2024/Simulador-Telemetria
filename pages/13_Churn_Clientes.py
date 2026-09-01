@@ -49,6 +49,50 @@ MOVEMENT_COLORS = {
     "Sem movimento": "#CBD5E1",
 }
 
+MOVEMENT_LABELS = {
+    "Churn total": "Cliente perdido",
+    "Contração": "Reduziu a base",
+    "Estável": "Manteve a base",
+    "Expansão": "Expandiu a base",
+    "Novo cliente": "Novo cliente",
+    "Reativação": "Cliente reativado",
+    "Sem dados no mês": "Mês ainda sem fechamento",
+    "Sem movimento": "Sem base nos dois meses",
+}
+
+MOVEMENT_DESCRIPTIONS = {
+    "Churn total": (
+        "Tinha veículos ativos no mês anterior e ficou com zero no mês atual. "
+        "Quando o mês está fechado, representa perda completa do cliente."
+    ),
+    "Contração": (
+        "O cliente continua ativo, mas reduziu veículos ou faturamento "
+        "em relação ao mês anterior."
+    ),
+    "Estável": (
+        "O cliente tinha base ativa nos dois meses e permaneceu sem "
+        "variação relevante de veículos ou faturamento."
+    ),
+    "Expansão": (
+        "O cliente já estava ativo e aumentou veículos ou faturamento "
+        "no mês atual."
+    ),
+    "Novo cliente": (
+        "Entrou na base pela primeira vez com veículos ativos no mês atual."
+    ),
+    "Reativação": (
+        "Voltou a ter base ativa depois de já ter aparecido em meses anteriores."
+    ),
+    "Sem dados no mês": (
+        "Havia base no mês anterior, mas o mês atual ainda não foi fechado. "
+        "Não é tratado como churn para evitar falso positivo."
+    ),
+    "Sem movimento": (
+        "Não havia veículos ativos no mês anterior nem no mês atual. "
+        "Não representa cliente perdido neste comparativo."
+    ),
+}
+
 configure_page("Churn e Base Ativa")
 branding = apply_branding()
 require_auth()
@@ -116,6 +160,75 @@ def _money_delta(value: float) -> str:
 
 def _pct(value: float) -> str:
     return f"{value:+.2f}%".replace(".", ",")
+
+
+def _movement_label(value: object) -> str:
+    text = str(value or "").strip()
+    return MOVEMENT_LABELS.get(text, text or "Não classificado")
+
+
+def _movement_description(value: object) -> str:
+    text = str(value or "").strip()
+    return MOVEMENT_DESCRIPTIONS.get(
+        text,
+        "Movimento sem descrição comercial cadastrada.",
+    )
+
+
+def _impact_direction_label(delta_revenue: float) -> str:
+    if delta_revenue > 0:
+        return "Ganho de receita"
+    if delta_revenue < 0:
+        return "Perda de receita"
+    return "Impacto neutro"
+
+
+def _impact_color(delta_revenue: float) -> str:
+    if delta_revenue > 0:
+        return "#16A34A"
+    if delta_revenue < 0:
+        return "#DC2626"
+    return "#64748B"
+
+
+def _delta_cell_style(value: object) -> str:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return ""
+
+    if numeric > 0:
+        return (
+            "background-color: rgba(22, 163, 74, 0.16); "
+            "color: #166534; font-weight: 700;"
+        )
+    if numeric < 0:
+        return (
+            "background-color: rgba(220, 38, 38, 0.16); "
+            "color: #991B1B; font-weight: 700;"
+        )
+    return (
+        "background-color: rgba(100, 116, 139, 0.10); "
+        "color: #475569;"
+    )
+
+
+def _style_churn_table(frame: pd.DataFrame):
+    if frame is None or frame.empty:
+        return frame
+
+    columns = [
+        column
+        for column in ["Δ Receita", "Δ Receita %"]
+        if column in frame.columns
+    ]
+    styler = frame.style
+    if columns:
+        styler = styler.map(
+            _delta_cell_style,
+            subset=columns,
+        )
+    return styler
 
 
 def _classification(
@@ -368,17 +481,21 @@ am5.ready(function() {
                     panY: false,
                     wheelX: "none",
                     wheelY: "none",
-                    paddingLeft: 4,
-                    paddingRight: 18
+                    paddingLeft: 6,
+                    paddingRight: 28
                 })
             );
 
             const yRenderer = am5xy.AxisRendererY.new(root, {
                 inversed: true,
-                minGridDistance: 28
+                minGridDistance: 30
             });
             styleCategoryRenderer(yRenderer);
             yRenderer.grid.template.set("forceHidden", true);
+            yRenderer.labels.template.setAll({
+                maxWidth: 220,
+                oversizedBehavior: "wrap"
+            });
 
             const yAxis = chart.yAxes.push(
                 am5xy.CategoryAxis.new(root, {
@@ -393,51 +510,69 @@ am5.ready(function() {
             const xAxis = chart.xAxes.push(
                 am5xy.ValueAxis.new(root, {
                     renderer: xRenderer,
-                    extraMin: 0.08,
-                    extraMax: 0.08
+                    min: 0,
+                    extraMax: 0.18
                 })
             );
-
-            const zeroItem = xAxis.makeDataItem({ value: 0 });
-            const zeroRange = xAxis.createAxisRange(zeroItem);
-            zeroRange.get("grid").setAll({
-                stroke: color("__MUTED__"),
-                strokeOpacity: 0.55,
-                strokeWidth: 1
-            });
 
             const series = chart.series.push(
                 am5xy.ColumnSeries.new(root, {
                     xAxis: xAxis,
                     yAxis: yAxis,
-                    valueXField: "deltaRevenue",
+                    valueXField: "impactMagnitude",
                     categoryYField: "classification",
                     tooltip: am5.Tooltip.new(root, {
-                        labelText: "[bold]{categoryY}[/] · Δ receita {deltaLabel} · {clients} cliente(s)"
+                        labelText:
+                            "{classification} · {directionLabel}: {deltaLabel} · " +
+                            "{clients} cliente(s) · veículos {vehicleDeltaLabel} · " +
+                            "base {previousVehicles} → {currentVehicles} · {description}"
                     })
                 })
             );
 
             series.columns.template.setAll({
-                height: am5.percent(68),
-                cornerRadiusTR: 5,
-                cornerRadiusBR: 5,
-                cornerRadiusTL: 5,
-                cornerRadiusBL: 5,
+                height: am5.percent(70),
+                cornerRadiusTR: 6,
+                cornerRadiusBR: 6,
+                cornerRadiusTL: 6,
+                cornerRadiusBL: 6,
                 strokeOpacity: 0
             });
+
             series.columns.template.adapters.add("fill", function(fill, target) {
                 const ctx = target.dataItem && target.dataItem.dataContext;
-                return ctx && ctx.color ? color(ctx.color) : color("__PRIMARY__");
+                return ctx && ctx.color
+                    ? color(ctx.color)
+                    : color("__PRIMARY__");
             });
+
             series.columns.template.adapters.add("stroke", function(stroke, target) {
                 const ctx = target.dataItem && target.dataItem.dataContext;
-                return ctx && ctx.color ? color(ctx.color) : color("__PRIMARY__");
+                return ctx && ctx.color
+                    ? color(ctx.color)
+                    : color("__PRIMARY__");
+            });
+
+            series.bullets.push(function(root, series, dataItem) {
+                const ctx = dataItem.dataContext || {};
+                return am5.Bullet.new(root, {
+                    locationX: 1,
+                    sprite: am5.Label.new(root, {
+                        text: String(ctx.deltaLabel || ""),
+                        fill: color("__TEXT__"),
+                        centerY: am5.p50,
+                        centerX: am5.p100,
+                        dx: -8,
+                        fontSize: 11,
+                        fontWeight: "600"
+                    })
+                });
             });
 
             series.data.setAll(data);
-            series.appear(600);
-            chart.appear(600, 80);
+            series.appear(650);
+            chart.appear(650, 80);
+
             chart.set("cursor", am5xy.XYCursor.new(root, {
                 behavior: "none",
                 yAxis: yAxis
@@ -1101,6 +1236,7 @@ classification_filter = filter_3.multiselect(
     "Movimentos",
     MOVEMENT_ORDER,
     default=[],
+    format_func=_movement_label,
 )
 top_n = filter_4.selectbox(
     "Top clientes",
@@ -1310,6 +1446,9 @@ impact = (
         **{
             "Δ Receita": ("Δ Receita", "sum"),
             "Clientes": ("Cliente", "nunique"),
+            "Veículos anterior": ("Veículos anterior", "sum"),
+            "Veículos atual": ("Veículos atual", "sum"),
+            "Δ Veículos": ("Δ Veículos", "sum"),
         }
     )
     if not detail.empty
@@ -1319,39 +1458,139 @@ impact = (
 impact_data = []
 mix_data = []
 if not impact.empty:
-    impact = impact.sort_values("Δ Receita", ascending=True)
+    impact["Impacto absoluto"] = impact["Δ Receita"].abs()
+    impact = impact.sort_values(
+        "Impacto absoluto",
+        ascending=False,
+    )
+
     for _, row in impact.iterrows():
-        classification = str(row["Classificação"])
+        raw_classification = str(row["Classificação"])
         delta = _safe_float(row["Δ Receita"])
         clients_count = _safe_int(row["Clientes"])
-        color_value = MOVEMENT_COLORS.get(
-            classification,
-            branding.get("primary_color", "#0F766E"),
-        )
+        previous_vehicles = _safe_int(row["Veículos anterior"])
+        current_vehicles = _safe_int(row["Veículos atual"])
+        vehicle_delta = _safe_int(row["Δ Veículos"])
+
         impact_data.append(
             {
-                "classification": classification,
+                "classification": _movement_label(raw_classification),
+                "rawClassification": raw_classification,
+                "description": _movement_description(raw_classification),
+                "directionLabel": _impact_direction_label(delta),
                 "deltaRevenue": delta,
+                "impactMagnitude": abs(delta),
                 "deltaLabel": _money_delta(delta),
                 "clients": clients_count,
-                "color": color_value,
+                "previousVehicles": previous_vehicles,
+                "currentVehicles": current_vehicles,
+                "vehicleDelta": vehicle_delta,
+                "vehicleDeltaLabel": f"{vehicle_delta:+d}",
+                "color": _impact_color(delta),
             }
         )
         mix_data.append(
             {
-                "classification": classification,
+                "classification": _movement_label(raw_classification),
                 "clients": clients_count,
-                "color": color_value,
+                "color": MOVEMENT_COLORS.get(
+                    raw_classification,
+                    branding.get("primary_color", "#0F766E"),
+                ),
             }
         )
 
+lost_clients = (
+    int((detail_scope["Classificação"] == "Churn total").sum())
+    if not detail_scope.empty
+    else 0
+)
+
+lost_vehicles = (
+    int(
+        detail_scope.loc[
+            detail_scope["Classificação"] == "Churn total",
+            "Veículos anterior",
+        ].sum()
+    )
+    if not detail_scope.empty
+    else 0
+)
+
+vehicles_left_base = (
+    int(
+        abs(
+            detail_scope.loc[
+                detail_scope["Δ Veículos"] < 0,
+                "Δ Veículos",
+            ].sum()
+        )
+    )
+    if not detail_scope.empty
+    else 0
+)
+
+st.markdown("### Como interpretar os movimentos")
+
+meaning_1, meaning_2 = st.columns(2)
+with meaning_1:
+    st.info(
+        "**Manteve a base (Estável):** o cliente tinha veículos ativos "
+        "no mês anterior e continua ativo no mês atual, sem mudança relevante "
+        "de veículos ou faturamento."
+    )
+
+with meaning_2:
+    st.info(
+        "**Sem base nos dois meses (Sem movimento):** o cliente não tinha "
+        "veículos ativos nem no mês anterior nem no atual. Isso não representa "
+        "perda de cliente neste comparativo."
+    )
+
+with st.expander("Entenda todos os movimentos"):
+    for movement in MOVEMENT_ORDER:
+        st.markdown(
+            f"**{_movement_label(movement)}** — "
+            f"{_movement_description(movement)}"
+        )
+
+loss_1, loss_2, loss_3 = st.columns(3)
+loss_1.metric("Clientes perdidos", lost_clients)
+loss_2.metric(
+    "Veículos de clientes perdidos",
+    lost_vehicles,
+)
+loss_3.metric(
+    "Veículos que saíram da base",
+    vehicles_left_base,
+)
+
 diag_1, diag_2 = st.columns([1.35, 1])
+
 with diag_1:
-    st.markdown("#### Impacto na receita por movimento")
-    _render_amcharts_chart("impact", impact_data, height=360)
+    st.markdown("#### Impacto financeiro por movimento")
+    st.caption(
+        "Todas as barras crescem para a direita para facilitar a comparação. "
+        "Verde = ganho de receita, vermelho = perda e cinza = impacto neutro. "
+        "O valor exibido mantém o sinal real (+ ou -)."
+    )
+    _render_amcharts_chart(
+        "impact",
+        impact_data,
+        height=390,
+    )
+
 with diag_2:
-    st.markdown("#### Composição dos movimentos")
-    _render_amcharts_chart("mix", mix_data, height=360)
+    st.markdown("#### Quantidade de clientes por movimento")
+    st.caption(
+        "Mostra quantos clientes ficaram em cada situação "
+        "no período selecionado."
+    )
+    _render_amcharts_chart(
+        "mix",
+        mix_data,
+        height=390,
+    )
 
 monthly_rows = []
 for period in periods:
@@ -1445,9 +1684,18 @@ else:
         height=max(330, min(680, 90 + len(movers_data) * 34)),
     )
 
+    detail_display = detail_sorted.copy()
+    detail_display["Classificação"] = detail_display[
+        "Classificação"
+    ].map(_movement_label)
+
     with st.expander("Ver tabela completa dos clientes", expanded=False):
+        st.caption(
+            "Na coluna Variação da receita, valores positivos ficam verdes "
+            "e valores negativos ficam vermelhos."
+        )
         st.dataframe(
-            detail_sorted,
+            _style_churn_table(detail_display),
             width="stretch",
             hide_index=True,
             column_config={
@@ -1457,14 +1705,32 @@ else:
                 "Receita atual": st.column_config.NumberColumn(
                     format="R$ %.2f"
                 ),
-                "Δ Receita": st.column_config.NumberColumn(format="R$ %.2f"),
-                "Δ Receita %": st.column_config.NumberColumn(format="%.2f%%"),
-                "Veículos anterior": st.column_config.NumberColumn(format="%d"),
-                "Veículos atual": st.column_config.NumberColumn(format="%d"),
-                "Δ Veículos": st.column_config.NumberColumn(format="%d"),
-                "Ativações": st.column_config.NumberColumn(format="%d"),
-                "Desativações": st.column_config.NumberColumn(format="%d"),
-                "Suspensões": st.column_config.NumberColumn(format="%d"),
+                "Δ Receita": st.column_config.NumberColumn(
+                    "Variação da receita",
+                    format="R$ %.2f",
+                ),
+                "Δ Receita %": st.column_config.NumberColumn(
+                    "Variação da receita (%)",
+                    format="%.2f%%",
+                ),
+                "Veículos anterior": st.column_config.NumberColumn(
+                    format="%d"
+                ),
+                "Veículos atual": st.column_config.NumberColumn(
+                    format="%d"
+                ),
+                "Δ Veículos": st.column_config.NumberColumn(
+                    format="%d"
+                ),
+                "Ativações": st.column_config.NumberColumn(
+                    format="%d"
+                ),
+                "Desativações": st.column_config.NumberColumn(
+                    format="%d"
+                ),
+                "Suspensões": st.column_config.NumberColumn(
+                    format="%d"
+                ),
             },
         )
 
