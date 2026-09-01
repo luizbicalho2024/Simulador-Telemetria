@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import io
 import json
 from collections import defaultdict
@@ -872,7 +873,7 @@ am5.ready(function() {
     components.html(html, height=int(height) + 28, scrolling=False)
 
 
-def _executive_read(
+def _commercial_summary_cards(
     *,
     revenue_delta: float,
     revenue_delta_pct: float,
@@ -882,41 +883,142 @@ def _executive_read(
     detail: pd.DataFrame,
 ) -> str:
     if revenue_delta > 0:
-        movement_text = (
-            f"cresceu {money(abs(revenue_delta))} "
-            f"({abs(revenue_delta_pct):.2f}%)"
-        )
+        result_title = f"Alta de {money(abs(revenue_delta))}"
+        result_detail = f"{abs(revenue_delta_pct):.2f}% acima do mês anterior"
+        result_tone = "positive"
     elif revenue_delta < 0:
-        movement_text = (
-            f"caiu {money(abs(revenue_delta))} "
-            f"({abs(revenue_delta_pct):.2f}%)"
-        )
+        result_title = f"Queda de {money(abs(revenue_delta))}"
+        result_detail = f"{abs(revenue_delta_pct):.2f}% abaixo do mês anterior"
+        result_tone = "negative"
     else:
-        movement_text = "ficou estável"
+        result_title = "Faturamento estável"
+        result_detail = "Sem variação relevante no mês"
+        result_tone = "neutral"
 
-    text = (
-        f"O faturamento **{movement_text}** frente ao mês anterior. "
-        f"A base variou **{active_delta:+d} veículos**, com "
-        f"**{activations} ativações** e **{deactivations} desativações**."
-    )
+    if active_delta > 0:
+        base_title = f"+{active_delta} veículos"
+        base_detail = "Crescimento da base"
+        base_tone = "positive"
+    elif active_delta < 0:
+        base_title = f"{active_delta} veículos"
+        base_detail = "Redução da base"
+        base_tone = "negative"
+    else:
+        base_title = "Base estável"
+        base_detail = "Sem variação no total de veículos"
+        base_tone = "neutral"
+
+    base_detail += f" · {activations} entradas / {deactivations} saídas"
+
+    loss_client = "Sem perda relevante"
+    loss_value = "R$ 0,00"
+    gain_client = "Sem ganho relevante"
+    gain_value = "R$ 0,00"
 
     if not detail.empty:
         negatives = detail[detail["Δ Receita"] < 0]
         positives = detail[detail["Δ Receita"] > 0]
+
         if not negatives.empty:
             top_loss = negatives.loc[negatives["Δ Receita"].idxmin()]
-            text += (
-                f" Maior pressão negativa: **{top_loss['Cliente']}** "
-                f"({_money_delta(_safe_float(top_loss['Δ Receita']))})."
-            )
+            loss_client = str(top_loss["Cliente"])
+            loss_value = _money_delta(_safe_float(top_loss["Δ Receita"]))
+
         if not positives.empty:
             top_gain = positives.loc[positives["Δ Receita"].idxmax()]
-            text += (
-                f" Maior contribuição positiva: **{top_gain['Cliente']}** "
-                f"({_money_delta(_safe_float(top_gain['Δ Receita']))})."
-            )
+            gain_client = str(top_gain["Cliente"])
+            gain_value = _money_delta(_safe_float(top_gain["Δ Receita"]))
 
-    return text
+    def esc(value: object) -> str:
+        return html.escape(str(value or ""))
+
+    return f"""
+<style>
+.churn-commercial-summary {{ margin: 14px 0 8px; }}
+.churn-commercial-title {{
+    font-size: .92rem;
+    font-weight: 700;
+    margin: 0 0 9px;
+    color: var(--app-text);
+}}
+.churn-commercial-grid {{
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+}}
+.churn-commercial-card {{
+    background: var(--app-surface);
+    border: 1px solid var(--app-border);
+    border-radius: 12px;
+    padding: 13px 14px;
+    min-height: 112px;
+    box-sizing: border-box;
+}}
+.churn-commercial-label {{
+    color: var(--app-surface-muted);
+    font-size: .76rem;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: .035em;
+    margin-bottom: 7px;
+}}
+.churn-commercial-value {{
+    color: var(--app-surface-text);
+    font-size: 1.08rem;
+    line-height: 1.25;
+    font-weight: 750;
+}}
+.churn-commercial-detail {{
+    color: var(--app-surface-muted);
+    font-size: .80rem;
+    line-height: 1.35;
+    margin-top: 5px;
+}}
+.churn-commercial-card.positive {{ border-top: 3px solid #16A34A; }}
+.churn-commercial-card.negative {{ border-top: 3px solid #DC2626; }}
+.churn-commercial-card.neutral {{ border-top: 3px solid #64748B; }}
+.churn-commercial-client {{
+    font-size: .90rem;
+    line-height: 1.28;
+    overflow-wrap: anywhere;
+}}
+@media (max-width: 900px) {{
+    .churn-commercial-grid {{
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }}
+}}
+@media (max-width: 560px) {{
+    .churn-commercial-grid {{
+        grid-template-columns: 1fr;
+    }}
+}}
+</style>
+<div class="churn-commercial-summary">
+  <div class="churn-commercial-title">Resumo comercial do mês</div>
+  <div class="churn-commercial-grid">
+    <div class="churn-commercial-card {result_tone}">
+      <div class="churn-commercial-label">Resultado do mês</div>
+      <div class="churn-commercial-value">{esc(result_title)}</div>
+      <div class="churn-commercial-detail">{esc(result_detail)}</div>
+    </div>
+    <div class="churn-commercial-card {base_tone}">
+      <div class="churn-commercial-label">Base de veículos</div>
+      <div class="churn-commercial-value">{esc(base_title)}</div>
+      <div class="churn-commercial-detail">{esc(base_detail)}</div>
+    </div>
+    <div class="churn-commercial-card negative">
+      <div class="churn-commercial-label">Maior perda</div>
+      <div class="churn-commercial-value churn-commercial-client">{esc(loss_client)}</div>
+      <div class="churn-commercial-detail">{esc(loss_value)}</div>
+    </div>
+    <div class="churn-commercial-card positive">
+      <div class="churn-commercial-label">Maior ganho</div>
+      <div class="churn-commercial-value churn-commercial-client">{esc(gain_client)}</div>
+      <div class="churn-commercial-detail">{esc(gain_value)}</div>
+    </div>
+  </div>
+</div>
+"""
 
 
 diagnostics = connection_diagnostics()
@@ -1159,15 +1261,16 @@ metric_6.metric(
     delta_color="inverse",
 )
 
-st.info(
-    _executive_read(
+st.markdown(
+    _commercial_summary_cards(
         revenue_delta=revenue_delta,
         revenue_delta_pct=revenue_delta_pct,
         active_delta=active_delta,
         activations=activations,
         deactivations=deactivations,
         detail=detail,
-    )
+    ),
+    unsafe_allow_html=True,
 )
 
 st.markdown("### Diagnóstico do mês")
