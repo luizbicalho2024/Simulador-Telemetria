@@ -269,8 +269,23 @@ body { font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-s
     background: __SURFACE__;
     padding: 10px 10px 4px;
 }
-#__CHART_ID__ { width: 100%; height: __HEIGHT__px; }
-.chart-fallback { color: __MUTED__; font-size: 13px; padding: 18px; }
+#__CHART_ID__ {
+    width: 100%;
+    height: __HEIGHT__px;
+    min-height: __HEIGHT__px;
+    position: relative;
+    overflow: hidden;
+}
+#__CHART_ID__ > div {
+    width: 100% !important;
+    height: 100% !important;
+}
+.chart-fallback {
+    color: __MUTED__;
+    font-size: 13px;
+    padding: 18px;
+    box-sizing: border-box;
+}
 </style>
 <script src="https://cdn.amcharts.com/lib/version/5.20.3/index.js"></script>
 <script src="https://cdn.amcharts.com/lib/version/5.20.3/xy.js"></script>
@@ -279,9 +294,7 @@ body { font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-s
 </head>
 <body>
 <div class="chart-shell">
-    <div id="__CHART_ID__">
-        <div class="chart-fallback">Carregando análise interativa...</div>
-    </div>
+    <div id="__CHART_ID__"></div>
 </div>
 
 <script>
@@ -334,7 +347,18 @@ am5.ready(function() {
             });
         }
 
-        const root = am5.Root.new("__CHART_ID__");
+        const host = document.getElementById("__CHART_ID__");
+        if (!host) {
+            throw new Error("Container do gráfico não encontrado.");
+        }
+
+        // O amCharts adiciona seus elementos ao container sem remover filhos
+        // preexistentes. Mantemos o host totalmente limpo para evitar texto
+        // residual e deslocamento do canvas.
+        host.replaceChildren();
+        host.setAttribute("aria-busy", "false");
+
+        const root = am5.Root.new(host);
         root.setThemes([am5themes_Animated.new(root)]);
 
         if (kind === "impact") {
@@ -870,7 +894,8 @@ am5.ready(function() {
     for key, value in replacements.items():
         html = html.replace(key, value)
 
-    components.html(html, height=int(height) + 28, scrolling=False)
+    # O shell soma padding e borda à altura útil do gráfico.
+    components.html(html, height=int(height) + 22, scrolling=False)
 
 
 def _commercial_summary_cards(
