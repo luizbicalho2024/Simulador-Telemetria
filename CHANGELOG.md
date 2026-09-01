@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.3.0 — Interface compacta PJ e amCharts
+
+- Produtos e serviços reorganizados em linhas compactas, reduzindo rolagem e excesso de métricas visuais.
+- Preço padrão, preço aplicado, margem e instalação ficam visíveis em uma única linha por produto.
+- Condições personalizadas passam a ser editadas em popover sob demanda, sem expandir toda a página.
+- Ponto de equilíbrio passa a exibir gráfico interativo amCharts 5 comparando instalação cobrada e isenta.
+- Linha de referência visual indica o piso de governança comercial diretamente no gráfico.
+- Tabelas detalhadas dos cenários permanecem disponíveis em expansores para análise complementar.
+
 ## 2.2.0 — Governança comercial do Simulador PJ
 
 - Simulação PJ passa a aceitar preços e margens abaixo do piso comercial para análise de cenários.
