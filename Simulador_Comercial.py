@@ -507,9 +507,21 @@ if st.session_state.get("role") == "admin":
                     format="%.2f",
                     help=(
                         "Custo único não vinculado à quantidade, como mobilização, cadastro, "
-                        "treinamento ou deslocamento administrativo."
+                        "treinamento ou deslocamento administrativo. Esse valor é somado "
+                        "integralmente ao custo de toda proposta PJ."
                     ),
                 )
+                if fixed_implementation_cost > 0:
+                    st.warning(
+                        f"Todas as propostas PJ receberão {money(fixed_implementation_cost)} "
+                        "de custo fixo, inclusive propostas de 1 veículo. "
+                        "Use R$ 0,00 quando não existir um custo fixo global aplicável "
+                        "a todas as propostas."
+                    )
+                else:
+                    st.caption(
+                        "Nenhum custo fixo global será aplicado às propostas PJ."
+                    )
                 header_name, header_price, header_cost = st.columns([1.7, 1, 1])
                 header_name.markdown("**Produto**")
                 header_price.markdown("**Preço de instalação**")
