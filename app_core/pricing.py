@@ -49,21 +49,25 @@ def sale_price_from_margin(cost: Any, target_margin_percent: Any) -> Decimal:
 
     A margem é calculada sobre o preço de venda:
     preço = custo / (1 - margem/100).
+
+    O simulador pode calcular margens abaixo do piso comercial — inclusive
+    negativas — porque o piso é uma regra de aprovação, não de cálculo. O
+    único limite matemático é margem inferior a 100%.
     """
     normalized_cost = to_decimal(cost)
     target = to_decimal(target_margin_percent)
     if normalized_cost < 0:
         raise ValueError("O custo não pode ser negativo.")
-    if target < MIN_CUSTOM_MARGIN_PERCENT or target >= 100:
-        raise ValueError(
-            f"A margem personalizada deve estar entre {MIN_CUSTOM_MARGIN_PERCENT:.2f}% e 99,99%."
-        )
+    if target >= 100:
+        raise ValueError("A margem alvo deve ser inferior a 100%.")
     denominator = Decimal("1") - (target / Decimal("100"))
+    if denominator <= 0:
+        raise ValueError("A margem alvo gera um preço matematicamente inválido.")
     return quantize_money(normalized_cost / denominator)
 
 
 def minimum_sale_price(cost: Any, minimum_margin_percent: Any = MIN_CUSTOM_MARGIN_PERCENT) -> Decimal:
-    """Preço mínimo permitido para preservar a margem configurada."""
+    """Preço de referência necessário para preservar a margem configurada."""
     return sale_price_from_margin(cost, minimum_margin_percent)
 
 
@@ -83,7 +87,7 @@ def validate_minimum_margin(
     cost: Any,
     minimum_margin_percent: Any = MIN_CUSTOM_MARGIN_PERCENT,
 ) -> tuple[bool, Decimal | None]:
-    """Valida se o preço respeita o piso de margem."""
+    """Classifica se o preço respeita o piso comercial configurado."""
     percent = gross_margin_percent(sale_price, cost)
     minimum = quantize_percent(minimum_margin_percent)
     return bool(percent is not None and percent >= minimum), percent

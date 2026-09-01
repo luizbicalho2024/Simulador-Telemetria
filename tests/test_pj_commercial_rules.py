@@ -11,14 +11,19 @@ from app_core.pricing import (
 )
 
 
-def test_custom_margin_never_accepts_less_than_thirty_percent():
+def test_margin_below_floor_can_be_simulated_but_is_not_policy_compliant():
     assert MIN_CUSTOM_MARGIN_PERCENT == Decimal("30.00")
-    try:
-        sale_price_from_margin(70, 29.99)
-    except ValueError:
-        pass
-    else:
-        raise AssertionError("Margem abaixo de 30% deveria ser rejeitada.")
+    price = sale_price_from_margin(70, 20)
+    assert price == Decimal("87.50")
+    valid, percent = validate_minimum_margin(price, 70, 30)
+    assert valid is False
+    assert percent == Decimal("20.00")
+
+
+def test_negative_margin_can_be_simulated_for_governance_analysis():
+    price = sale_price_from_margin(120, -20)
+    assert price == Decimal("100.00")
+    assert gross_margin_percent(price, 120) == Decimal("-20.00")
 
 
 def test_custom_value_floor_preserves_thirty_percent_margin():
