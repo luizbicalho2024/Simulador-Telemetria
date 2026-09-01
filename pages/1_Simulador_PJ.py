@@ -206,9 +206,9 @@ body { font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-s
     padding: 18px;
 }
 </style>
-<script src="https://cdn.amcharts.com/lib/5/index.js"></script>
-<script src="https://cdn.amcharts.com/lib/5/xy.js"></script>
-<script src="https://cdn.amcharts.com/lib/5/themes/Animated.js"></script>
+<script src="https://cdn.amcharts.com/lib/version/5.20.3/index.js"></script>
+<script src="https://cdn.amcharts.com/lib/version/5.20.3/xy.js"></script>
+<script src="https://cdn.amcharts.com/lib/version/5.20.3/themes/Animated.js"></script>
 </head>
 <body>
 <div class="chart-shell">
@@ -217,9 +217,24 @@ body { font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-s
     </div>
 </div>
 <script>
+function showChartError(message) {
+    const host = document.getElementById("__CHART_ID__");
+    if (!host) return;
+    host.innerHTML =
+        '<div class="chart-fallback"><strong>Gráfico indisponível.</strong><br>' +
+        message +
+        '<br><small>A tabela detalhada abaixo continua disponível para análise.</small></div>';
+}
+
+if (typeof am5 === "undefined" || typeof am5xy === "undefined") {
+    showChartError(
+        "Não foi possível carregar a biblioteca amCharts. Verifique bloqueio de CDN, proxy ou política de conteúdo do navegador."
+    );
+} else {
 am5.ready(function() {
-    const data = __DATA__;
-    const minimumMargin = __MIN_MARGIN__;
+    try {
+        const data = __DATA__;
+        const minimumMargin = __MIN_MARGIN__;
 
     function color(hex) {
         return am5.color(parseInt(hex.replace("#", ""), 16));
@@ -285,7 +300,7 @@ am5.ready(function() {
             stroke: color(seriesColor),
             fill: color(seriesColor),
             tooltip: am5.Tooltip.new(root, {
-                labelText: "[bold]" + name + "[/]\n{valueX} veículos · {valueY}%"
+                labelText: "[bold]" + name + "[/] · {valueX} veículos · {valueY}%"
             })
         }));
 
@@ -352,8 +367,15 @@ am5.ready(function() {
         strokeOpacity: 0.25
     });
 
-    chart.appear(700, 80);
+        chart.appear(700, 80);
+    } catch (error) {
+        console.error("Falha ao renderizar o gráfico amCharts do Simulador PJ:", error);
+        showChartError(
+            "O amCharts foi carregado, mas ocorreu uma falha durante a renderização. Consulte o console do navegador para o detalhe técnico."
+        );
+    }
 });
+}
 </script>
 </body>
 </html>
