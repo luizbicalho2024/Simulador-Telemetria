@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.4.0 — Dashboard executivo de churn com amCharts
+
+- Página Churn e Base Ativa reorganizada para leitura executiva, com filtros mais claros e resumo automático do mês.
+- Gráficos Plotly substituídos por amCharts 5.20.3 com tooltips, animações, cursores e identidade visual da plataforma.
+- Novo diagnóstico de impacto de receita por movimento e composição de churn, contração, expansão, novos clientes e reativações.
+- Evolução histórica passa a combinar faturamento e base ativa, além de ativações, desativações, suspensões e saldo líquido.
+- Ranking visual dos clientes que mais explicam a alta ou queda de receita, com controle de Top N.
+- Filtro de clientes passa a afetar também KPIs e séries históricas, eliminando divergência entre filtros e indicadores.
+- Tabela completa fica em expander e drill-down por cliente continua disponível com snapshots por período.
+- Fallback técnico dos gráficos preserva KPIs e tabelas caso o CDN do amCharts não carregue.
+
 ## 2.3.1 — Correção de renderização do amCharts
 
 - Corrigida quebra de linha escapada no tooltip que gerava `SyntaxError` dentro do iframe do Streamlit.
