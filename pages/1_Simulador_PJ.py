@@ -20,7 +20,6 @@ from app_core.pricing import (
     quantize_money,
     sale_price_from_margin,
     to_decimal,
-    validate_minimum_margin,
 )
 from app_core.proposal_documents import generate_pj_proposal
 from app_core.ui import apply_branding, configure_page, money, render_hero, render_sidebar
@@ -31,13 +30,12 @@ require_auth()
 render_sidebar()
 render_hero(
     "Simulador de venda — Pessoa Jurídica",
-    "Simule preço, instalação, rentabilidade, equilíbrio da frota e fluxo de aprovação comercial.",
+    "Simule livremente qualquer condição comercial. O piso de margem é uma regra de aprovação, não um bloqueio de análise.",
 )
 
 ROLE = str(st.session_state.get("role") or "user")
 USERNAME = str(st.session_state.get("username") or "").strip().lower()
 USER_NAME = str(st.session_state.get("name") or USERNAME or "Usuário")
-IS_APPROVER = ROLE in {"admin", "head_comercial"}
 
 pricing_config = db.get_pricing_config()
 plans = {
@@ -59,6 +57,33 @@ minimum_custom_margin = max(
 )
 quantity_defaults = pricing_config.get("CENARIOS_QUANTIDADE_PJ", [1, 5, 10, 25, 50, 100, 200])
 
+OFFER_PRESETS = {
+    "VERDIO Start": {
+        "subtitle": "Rastreamento + app + bloqueio",
+        "positioning": "Entrada competitiva",
+        "range": "R$ 49–69/mês",
+        "keywords": ("gprs", "gsm"),
+    },
+    "VERDIO Fleet": {
+        "subtitle": "Start + CAN + RFID",
+        "positioning": "Eficiência / combustível",
+        "range": "R$ 89–129/mês",
+        "keywords": ("gprs", "gsm", "can", "rfid", "identificador"),
+    },
+    "VERDIO Safety": {
+        "subtitle": "Fleet + vídeo + DMS/ADAS",
+        "positioning": "Risco, sinistro e jornada",
+        "range": "R$ 179–299/mês",
+        "keywords": ("gprs", "gsm", "can", "rfid", "identificador", "video", "vídeo", "dms", "adas"),
+    },
+    "VERDIO Sat": {
+        "subtitle": "Cobertura satelital para operações críticas",
+        "positioning": "Sombra de sinal / agro / rota longa",
+        "range": "R$ 149–229/mês",
+        "keywords": ("sat", "satélite", "satelite"),
+    },
+}
+
 if "pj_results" not in st.session_state:
     st.session_state.pj_results = None
 
@@ -73,14 +98,44 @@ def _margin_label(percent: Decimal | None) -> str:
 
 def _status_label(status: str) -> str:
     return {
-        "approved": "Aprovada",
-        "pending_approval": "Aguardando aprovação",
+        "approved": "Liberada para emissão",
+        "pending_approval": "Aguardando Head Comercial",
         "rejected": "Rejeitada",
     }.get(status, status or "Sem status")
 
 
 def _safe_float(value: object) -> float:
     return float(to_decimal(value))
+
+
+def _product_matches(product: str, preset_name: str) -> bool:
+    normalized = product.casefold()
+    preset = OFFER_PRESETS[preset_name]
+    if preset_name == "VERDIO Start":
+        return any(keyword in normalized for keyword in preset["keywords"])
+    if preset_name == "VERDIO Sat":
+        return any(keyword in normalized for keyword in preset["keywords"])
+
+    is_gsm = "gprs" in normalized or "gsm" in normalized
+    is_can = "can" in normalized or "telemetria" in normalized
+    is_rfid = "rfid" in normalized or "identificador" in normalized
+    is_video = "video" in normalized or "vídeo" in normalized or "dms" in normalized or "adas" in normalized
+    if preset_name == "VERDIO Fleet":
+        return is_gsm or is_can or is_rfid
+    if preset_name == "VERDIO Safety":
+        return is_gsm or is_can or is_rfid or is_video
+    return False
+
+
+def _apply_preset(preset_name: str, contract_term: str) -> None:
+    for product in plans.get(contract_term, {}):
+        product_id = _product_key(product)
+        st.session_state[f"pj_enabled_{contract_term}_{product_id}"] = _product_matches(product, preset_name)
+        st.session_state.pop(f"pj_mode_{contract_term}_{product_id}", None)
+        st.session_state.pop(f"pj_custom_value_{contract_term}_{product_id}", None)
+        st.session_state.pop(f"pj_custom_margin_{contract_term}_{product_id}", None)
+    st.session_state.pj_offer_reference = preset_name
+    st.session_state.pj_results = None
 
 
 def clear_simulation() -> None:
@@ -140,18 +195,43 @@ with client_col:
         key="pj_validity_days",
     )
 
+st.markdown("### Arquitetura comercial Bionio Frotas")
+st.caption(
+    "Use os pacotes como ponto de partida. As faixas abaixo são referência de posicionamento; "
+    "a margem real calculada pelo simulador é quem determina a necessidade de aprovação."
+)
+preset_columns = st.columns(4)
+for index, (preset_name, preset) in enumerate(OFFER_PRESETS.items()):
+    with preset_columns[index]:
+        with st.container(border=True):
+            st.markdown(f"**{preset_name}**")
+            st.caption(str(preset["subtitle"]))
+            st.caption(str(preset["positioning"]))
+            st.markdown(f"**{preset['range']}**")
+            if st.button(
+                f"Aplicar {preset_name.replace('VERDIO ', '')}",
+                width="stretch",
+                key=f"pj_preset_{index}",
+            ):
+                _apply_preset(preset_name, contract_term)
+                st.rerun()
+
+active_reference = st.session_state.get("pj_offer_reference")
+if active_reference in OFFER_PRESETS:
+    st.info(f"Referência ativa: {active_reference}. Você pode incluir, remover ou reprificar itens livremente.")
+
 st.markdown("#### Produtos e serviços")
 st.info(
-    "O comercial pode usar preço ou margem personalizados, mas nenhuma condição personalizada "
-    f"pode ficar abaixo de {minimum_custom_margin:.2f}% de margem. Descontos e isenção de "
-    "instalação seguem para aprovação do Head Comercial."
+    f"Piso de governança: {minimum_custom_margin:.2f}% de margem total da proposta. "
+    "O comercial pode simular preços e margens abaixo desse piso. Quando a condição final ficar "
+    "abaixo da política, a proposta será registrada para decisão do Head Comercial e o download "
+    "permanecerá bloqueado até a aprovação."
 )
 
 selected: dict[str, dict[str, object]] = {}
 current_plan_costs = costs_by_plan.get(contract_term, {})
-validation_errors: list[str] = []
 
-for product_index, (product, base_price) in enumerate(plans[contract_term].items()):
+for product, base_price in plans[contract_term].items():
     product_id = _product_key(product)
     recurring_cost = quantize_money(current_plan_costs.get(product, 0))
     recurring_cost_configured = recurring_cost > 0
@@ -220,30 +300,34 @@ for product_index, (product, base_price) in enumerate(plans[contract_term].items
                 floor_price = minimum_sale_price(recurring_cost, minimum_custom_margin)
                 custom_value = st.number_input(
                     "Preço mensal personalizado por veículo",
-                    min_value=float(floor_price),
-                    value=max(float(base_price), float(floor_price)),
+                    min_value=0.01,
+                    value=max(0.01, float(base_price)),
                     step=1.0,
                     format="%.2f",
                     key=f"pj_custom_value_{contract_term}_{product_id}",
                     help=(
-                        f"Preço mínimo permitido para manter {minimum_custom_margin:.2f}% de margem: "
-                        f"{money(floor_price)}."
+                        f"Referência para manter {minimum_custom_margin:.2f}% de margem unitária: "
+                        f"{money(floor_price)}. Valores menores são permitidos para simulação."
                     ),
                 )
                 effective_price = quantize_money(custom_value)
             elif pricing_mode == "Margem personalizada":
-                default_margin = max(
-                    float(minimum_custom_margin),
-                    min(float(base_margin_percent or minimum_custom_margin), 99.0),
+                default_margin = min(
+                    max(float(base_margin_percent or minimum_custom_margin), -500.0),
+                    99.0,
                 )
                 target_margin = st.number_input(
                     "Margem desejada sobre o preço de venda (%)",
-                    min_value=float(minimum_custom_margin),
+                    min_value=-500.0,
                     max_value=99.0,
                     value=default_margin,
                     step=0.5,
                     format="%.2f",
                     key=f"pj_custom_margin_{contract_term}_{product_id}",
+                    help=(
+                        "Margens abaixo do piso, inclusive negativas, podem ser simuladas. "
+                        "A proposta final será submetida à alçada comercial quando necessário."
+                    ),
                 )
                 effective_price = sale_price_from_margin(recurring_cost, target_margin)
                 st.caption(f"Preço calculado: {money(effective_price)} por veículo/mês")
@@ -260,28 +344,15 @@ for product_index, (product, base_price) in enumerate(plans[contract_term].items
             )
             custom_discount = pricing_mode != "Preço padrão" and effective_price < base_price
 
-            if pricing_mode != "Preço padrão" and recurring_cost_configured:
-                valid_margin, calculated_percent = validate_minimum_margin(
-                    effective_price,
-                    recurring_cost,
-                    minimum_custom_margin,
-                )
-                if not valid_margin:
-                    validation_errors.append(
-                        f"{product}: condição personalizada com margem "
-                        f"{_margin_label(calculated_percent)}, abaixo do piso de "
-                        f"{minimum_custom_margin:.2f}%."
-                    )
-
             if effective_margin_value is not None:
                 message = (
                     f"Margem simulada: {money(effective_margin_value)} "
                     f"({_margin_label(effective_margin_percent)}) por veículo/mês."
                 )
                 if effective_margin_percent is not None and effective_margin_percent >= minimum_custom_margin:
-                    st.success(message)
+                    st.success(message + " Dentro da política de margem.")
                 else:
-                    st.warning(message)
+                    st.warning(message + " Abaixo do piso; a decisão será feita pela margem consolidada da proposta.")
 
             selected[product] = {
                 "base_price": base_price,
@@ -340,6 +411,35 @@ if selected:
     charge_installation = installation_policy == "Cobrar instalação"
     chosen_totals = charged_totals if charge_installation else waived_totals
 
+    st.markdown("### Resumo executivo da simulação")
+    chosen_margin_percent = chosen_totals["margin_percent"]
+    below_margin_floor = (
+        chosen_margin_percent is None or chosen_margin_percent < minimum_custom_margin
+    )
+    summary_cols = st.columns(5)
+    summary_cols[0].metric("Mensalidade da frota", money(chosen_totals["monthly_revenue"]))
+    summary_cols[1].metric("Receita do contrato", money(chosen_totals["total_revenue"]))
+    summary_cols[2].metric("Custo total", money(chosen_totals["total_cost"]))
+    summary_cols[3].metric("Margem total", money(chosen_totals["total_margin"]))
+    summary_cols[4].metric("Margem final", _margin_label(chosen_margin_percent))
+
+    if below_margin_floor:
+        gap = (
+            minimum_custom_margin - chosen_margin_percent
+            if chosen_margin_percent is not None
+            else minimum_custom_margin
+        )
+        st.warning(
+            f"Condição fora da política: margem final de {_margin_label(chosen_margin_percent)}; "
+            f"piso {minimum_custom_margin:.2f}% (desvio de {gap:.2f} p.p.). "
+            "A simulação continua disponível, mas a proposta ficará bloqueada para download até aprovação do Head Comercial."
+        )
+    else:
+        st.success(
+            f"Condição dentro da política: margem final de {_margin_label(chosen_margin_percent)}, "
+            f"acima do piso de {minimum_custom_margin:.2f}%."
+        )
+
     st.markdown("### Comparativo de rentabilidade")
     normal_col, waived_col = st.columns(2)
     with normal_col:
@@ -392,9 +492,10 @@ if selected:
                 target_margin_percent=minimum_custom_margin,
             )
             if break_even is None:
-                st.error(
+                st.warning(
                     f"A estrutura atual não alcança {minimum_custom_margin:.2f}% de margem, "
-                    "mesmo aumentando a quantidade de veículos."
+                    "mesmo aumentando a quantidade de veículos. Isso não impede a simulação, "
+                    "mas exige decisão comercial para emissão."
                 )
             else:
                 st.success(
@@ -435,31 +536,22 @@ if selected:
     custom_discount_products = [
         product for product, item in selected.items() if bool(item["custom_discount"])
     ]
-    has_personalized_condition = any(
-        str(item["pricing_mode"]) != "Preço padrão" for item in selected.values()
-    )
     installation_has_impact = (
         installation_sale_per_vehicle > 0 or installation_cost_per_vehicle > 0
     )
     installation_waived = not charge_installation and installation_has_impact
     approval_reasons: list[str] = []
-    if custom_discount_products:
+    if below_margin_floor:
         approval_reasons.append(
-            "Desconto personalizado em: " + ", ".join(custom_discount_products)
+            "Margem final abaixo do piso: "
+            f"{_margin_label(chosen_margin_percent)} < {minimum_custom_margin:.2f}%"
         )
-    if installation_waived:
-        approval_reasons.append("Isenção da cobrança de instalação")
-    approval_required = bool(approval_reasons)
-
-    chosen_margin_percent = chosen_totals["margin_percent"]
-    if (has_personalized_condition or installation_waived) and (
-        chosen_margin_percent is None or chosen_margin_percent < minimum_custom_margin
-    ):
-        validation_errors.append(
-            "A condição final da proposta ficou com margem de "
-            f"{_margin_label(chosen_margin_percent)}, abaixo do piso de "
-            f"{minimum_custom_margin:.2f}% após considerar instalação e custos da implantação."
-        )
+        if custom_discount_products:
+            approval_reasons.append(
+                "Desconto personalizado em: " + ", ".join(custom_discount_products)
+            )
+        if installation_waived:
+            approval_reasons.append("Instalação isenta com impacto na rentabilidade")
 
     analysis = {
         "months": months,
@@ -472,21 +564,17 @@ if selected:
         "waived_totals": waived_totals,
         "chosen_totals": chosen_totals,
         "charge_installation": charge_installation,
-        "approval_required": approval_required,
+        "below_margin_floor": below_margin_floor,
+        "approval_required": below_margin_floor,
         "approval_reasons": approval_reasons,
     }
-
-if validation_errors:
-    st.error("A proposta possui condições comerciais inválidas:")
-    for error in dict.fromkeys(validation_errors):
-        st.markdown(f"- {error}")
 
 submitted = st.button(
     "Calcular e registrar proposta",
     type="primary",
     width="stretch",
     key="pj_submit",
-    disabled=not selected or bool(validation_errors),
+    disabled=not selected,
 )
 
 if submitted and analysis is not None:
@@ -494,13 +582,14 @@ if submitted and analysis is not None:
         st.warning("Informe a empresa e o responsável.")
     elif not bool(analysis["all_costs_configured"]):
         st.warning(
-            "Cadastre os custos mensais de todos os produtos selecionados antes de registrar a proposta."
+            "Cadastre os custos mensais de todos os produtos selecionados antes de registrar a proposta. "
+            "A simulação visual continua disponível, mas não é seguro submeter uma proposta sem custo real."
         )
     else:
         chosen_totals = analysis["chosen_totals"]
         approval_required = bool(analysis["approval_required"])
         approval_reasons = list(analysis["approval_reasons"])
-        status = "approved" if not approval_required or IS_APPROVER else "pending_approval"
+        status = "pending_approval" if approval_required else "approved"
         validity_label = (date.today() + timedelta(days=int(validity_days))).strftime("%d/%m/%Y")
 
         proposal_items: list[dict[str, str]] = []
@@ -591,8 +680,10 @@ if submitted and analysis is not None:
             "status": status,
             "approval_required": approval_required,
             "approval_reasons": approval_reasons,
-            "approved_by_username": USERNAME if status == "approved" and approval_required else None,
-            "approved_by_name": USER_NAME if status == "approved" and approval_required else None,
+            "minimum_margin_percent": _safe_float(minimum_custom_margin),
+            "below_margin_floor": bool(analysis["below_margin_floor"]),
+            "pricing_policy_status": "requires_head_approval" if approval_required else "within_policy",
+            "offer_reference": active_reference if active_reference in OFFER_PRESETS else None,
             "quantidade_veiculos": int(vehicle_count),
             "prazo_contrato": contract_term,
             "instalacao": installation_policy,
@@ -618,6 +709,7 @@ if submitted and analysis is not None:
                 "status": status,
                 "approval_required": approval_required,
                 "approval_reasons": approval_reasons,
+                "minimum_margin_percent": minimum_custom_margin,
                 "chosen_totals": chosen_totals,
                 "charged_totals": analysis["charged_totals"],
                 "waived_totals": analysis["waived_totals"],
@@ -633,30 +725,33 @@ if submitted and analysis is not None:
                     "veiculos": vehicle_count,
                     "prazo": contract_term,
                     "status": status,
+                    "margem_percentual": _safe_float(chosen_totals["margin_percent"] or 0),
+                    "piso_margem": _safe_float(minimum_custom_margin),
                     "motivos_aprovacao": approval_reasons,
                 },
             )
             if status == "pending_approval":
                 st.warning(
-                    "Proposta registrada e enviada para aprovação do Head Comercial. "
-                    "O documento só poderá ser baixado depois da aprovação."
+                    "Proposta registrada para aprovação do Head Comercial. Os valores simulados permanecem visíveis, "
+                    "mas o documento comercial só poderá ser baixado depois da aprovação."
                 )
             else:
-                st.success("Proposta registrada e aprovada para emissão.")
+                st.success("Proposta dentro da política e liberada para emissão.")
 
 result = st.session_state.get("pj_results")
 if result:
     st.markdown("### Resultado registrado")
     status = str(result.get("status") or "")
-    status_cols = st.columns(4)
+    status_cols = st.columns(5)
     chosen = result["chosen_totals"]
     status_cols[0].metric("Status", _status_label(status))
     status_cols[1].metric("Receita total", money(chosen["total_revenue"]))
     status_cols[2].metric("Margem total", money(chosen["total_margin"]))
     status_cols[3].metric("Margem (%)", _margin_label(chosen["margin_percent"]))
+    status_cols[4].metric("Piso", f"{to_decimal(result.get('minimum_margin_percent', minimum_custom_margin)):.2f}%")
 
     if result.get("approval_reasons"):
-        st.caption("Motivos de aprovação: " + "; ".join(result["approval_reasons"]))
+        st.warning("Motivos de aprovação: " + "; ".join(result["approval_reasons"]))
 
     st.dataframe(
         pd.DataFrame(result["item_rows"]),
@@ -678,7 +773,7 @@ if result:
             document_bytes = generate_pj_proposal(result["context"])
             safe_company = "_".join(result["context"]["NOME_EMPRESA"].split())
             st.download_button(
-                "Baixar proposta aprovada em DOCX",
+                "Baixar proposta liberada em DOCX",
                 data=document_bytes,
                 file_name=f"Proposta_{safe_company}.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -688,7 +783,8 @@ if result:
             st.error(f"Não foi possível gerar o documento: {exc}")
     else:
         st.info(
-            "Acompanhe o andamento em Aprovações comerciais. O download será liberado após a aprovação."
+            "O resultado econômico continua disponível nesta tela. O arquivo da proposta permanece bloqueado "
+            "até a decisão do Head Comercial."
         )
         st.page_link(
             "pages/12_Aprovacoes_Comerciais.py",

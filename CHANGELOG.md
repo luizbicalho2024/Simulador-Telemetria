@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.2.0 — Governança comercial do Simulador PJ
+
+- Simulação PJ passa a aceitar preços e margens abaixo do piso comercial para análise de cenários.
+- Piso de 30% deixa de bloquear a simulação e passa a funcionar como gatilho de aprovação do Head Comercial.
+- Propostas abaixo do piso ficam registradas com os valores econômicos visíveis, mas com download bloqueado até aprovação.
+- Margem consolidada considera mensalidade, custo recorrente, instalação e custo fixo de implantação antes de decidir a alçada.
+- Descontos e isenção de instalação só exigem aprovação quando derrubam a margem consolidada abaixo do piso.
+- Snapshot da proposta registra piso de margem, status da política, motivo de aprovação e referência comercial usada.
+- Inclusão dos atalhos comerciais VERDIO Start, Fleet, Safety e Sat como presets de composição, mantendo liberdade para ajustes manuais.
+- Faixas de posicionamento comercial exibidas como referência, sem substituir a análise de custo e margem real.
+- Cálculo por margem personalizada passa a aceitar cenários abaixo do piso, inclusive margens negativas, preservando validação matemática abaixo de 100%.
+- Testes de regras PJ atualizados para validar simulação abaixo do piso e classificação de conformidade.
+
 ## 2.1.0 — Personalização visual e navegação
 
 - Salvamento de cores liberado mesmo quando a combinação escolhida possui contraste reduzido.
