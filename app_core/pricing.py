@@ -230,6 +230,234 @@ def proposal_totals(
     }
 
 
+def mixed_proposal_totals(
+    *,
+    items: Iterable[dict[str, Any]],
+    months: Any,
+    charge_installation: bool = True,
+    fixed_cost: Any = 0,
+) -> dict[str, Decimal | None]:
+    """Consolida uma proposta em que cada produto possui quantidade própria."""
+    contract_months = max(Decimal("1"), to_decimal(months, "1"))
+    normalized_fixed_cost = quantize_money(fixed_cost)
+
+    monthly_revenue = Decimal("0")
+    monthly_cost = Decimal("0")
+    one_time_cost = Decimal("0")
+    installation_revenue = Decimal("0")
+    installation_cost = Decimal("0")
+    device_quantity = Decimal("0")
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+
+        quantity = max(
+            Decimal("0"),
+            to_decimal(item.get("quantity"), "0"),
+        )
+        if quantity <= 0:
+            continue
+
+        device_quantity += quantity
+
+        recurring_sale = quantize_money(item.get("recurring_sale", 0))
+        recurring_cost = quantize_money(item.get("recurring_cost", 0))
+        one_time = quantize_money(item.get("one_time_cost", 0))
+        installation_sale = quantize_money(item.get("installation_sale", 0))
+        installation_unit_cost = quantize_money(
+            item.get("installation_cost", 0)
+        )
+
+        monthly_revenue += recurring_sale * quantity
+        monthly_cost += recurring_cost * quantity
+        one_time_cost += one_time * quantity
+        installation_cost += installation_unit_cost * quantity
+
+        if charge_installation:
+            installation_revenue += installation_sale * quantity
+
+    monthly_revenue = quantize_money(monthly_revenue)
+    monthly_cost = quantize_money(monthly_cost)
+    recurring_revenue = quantize_money(
+        monthly_revenue * contract_months
+    )
+    recurring_cost = quantize_money(
+        monthly_cost * contract_months
+    )
+    one_time_cost = quantize_money(one_time_cost)
+    installation_revenue = quantize_money(installation_revenue)
+    installation_cost = quantize_money(installation_cost)
+
+    total_revenue = quantize_money(
+        recurring_revenue + installation_revenue
+    )
+    total_cost = quantize_money(
+        recurring_cost
+        + one_time_cost
+        + installation_cost
+        + normalized_fixed_cost
+    )
+    total_margin = quantize_money(total_revenue - total_cost)
+    margin_percent = gross_margin_percent(total_revenue, total_cost)
+    monthly_margin = quantize_money(monthly_revenue - monthly_cost)
+
+    payback_months: Decimal | None = None
+    if (
+        not charge_installation
+        and installation_cost > 0
+        and monthly_margin > 0
+    ):
+        payback_months = (
+            installation_cost / monthly_margin
+        ).quantize(
+            PERCENT_QUANT,
+            rounding=ROUND_HALF_UP,
+        )
+
+    return {
+        "device_quantity": device_quantity,
+        "months": contract_months,
+        "monthly_revenue": monthly_revenue,
+        "monthly_cost": monthly_cost,
+        "monthly_margin": monthly_margin,
+        "recurring_revenue": recurring_revenue,
+        "recurring_cost": recurring_cost,
+        "installation_revenue": installation_revenue,
+        "installation_cost": installation_cost,
+        "one_time_cost": one_time_cost,
+        "fixed_cost": normalized_fixed_cost,
+        "total_revenue": total_revenue,
+        "total_cost": total_cost,
+        "total_margin": total_margin,
+        "margin_percent": margin_percent,
+        "payback_months": payback_months,
+    }
+
+
+def mixed_break_even_vehicle_count(
+    *,
+    items: Iterable[dict[str, Any]],
+    base_fleet_vehicles: Any,
+    months: Any,
+    charge_installation: bool = True,
+    fixed_cost: Any = 0,
+    target_margin_percent: Any = MIN_CUSTOM_MARGIN_PERCENT,
+    maximum_vehicles: int = 100_000,
+) -> int | None:
+    """Projeta o equilíbrio mantendo a proporção atual do mix."""
+    base_fleet = max(
+        Decimal("1"),
+        to_decimal(base_fleet_vehicles, "1"),
+    )
+    target = to_decimal(target_margin_percent) / Decimal("100")
+    normalized_fixed_cost = quantize_money(fixed_cost)
+
+    variable_totals = mixed_proposal_totals(
+        items=items,
+        months=months,
+        charge_installation=charge_installation,
+        fixed_cost=0,
+    )
+
+    revenue_per_fleet_vehicle = (
+        to_decimal(variable_totals["total_revenue"]) / base_fleet
+    )
+    cost_per_fleet_vehicle = (
+        to_decimal(variable_totals["total_cost"]) / base_fleet
+    )
+
+    if revenue_per_fleet_vehicle <= 0:
+        return None
+
+    contribution_for_target = (
+        revenue_per_fleet_vehicle
+        * (Decimal("1") - target)
+        - cost_per_fleet_vehicle
+    )
+    if contribution_for_target <= 0:
+        return None
+
+    if normalized_fixed_cost <= 0:
+        return 1
+
+    minimum = (
+        normalized_fixed_cost / contribution_for_target
+    ).to_integral_value(rounding=ROUND_CEILING)
+
+    result = max(1, int(minimum))
+    return result if result <= maximum_vehicles else None
+
+
+def mixed_quantity_scenarios(
+    quantities: Iterable[int],
+    *,
+    items: Iterable[dict[str, Any]],
+    base_fleet_vehicles: Any,
+    months: Any,
+    charge_installation: bool = True,
+    fixed_cost: Any = 0,
+) -> list[dict[str, float | int | None]]:
+    """Projeta cenários de frota preservando a proporção do mix atual."""
+    base_fleet = max(
+        Decimal("1"),
+        to_decimal(base_fleet_vehicles, "1"),
+    )
+    base_items = [
+        dict(item)
+        for item in items
+        if isinstance(item, dict)
+    ]
+    normalized_quantities = sorted(
+        {max(1, int(quantity)) for quantity in quantities}
+    )
+
+    rows: list[dict[str, float | int | None]] = []
+    for fleet_quantity in normalized_quantities:
+        scale = Decimal(fleet_quantity) / base_fleet
+        scaled_items: list[dict[str, Any]] = []
+
+        for item in base_items:
+            scaled = dict(item)
+            scaled["quantity"] = (
+                to_decimal(item.get("quantity"), "0") * scale
+            )
+            scaled_items.append(scaled)
+
+        totals = mixed_proposal_totals(
+            items=scaled_items,
+            months=months,
+            charge_installation=charge_installation,
+            fixed_cost=fixed_cost,
+        )
+        rows.append(
+            {
+                "Veículos": fleet_quantity,
+                "Receita do contrato": float(
+                    totals["total_revenue"] or 0
+                ),
+                "Custo total": float(
+                    totals["total_cost"] or 0
+                ),
+                "Margem total": float(
+                    totals["total_margin"] or 0
+                ),
+                "Margem (%)": (
+                    float(totals["margin_percent"])
+                    if totals["margin_percent"] is not None
+                    else None
+                ),
+                "Payback instalação (meses)": (
+                    float(totals["payback_months"])
+                    if totals["payback_months"] is not None
+                    else None
+                ),
+            }
+        )
+
+    return rows
+
+
 def break_even_vehicle_count(
     *,
     recurring_sale_per_vehicle: Any,
