@@ -136,11 +136,20 @@ def proposal_totals(
     monthly_cost = quantize_money(monthly_cost_vehicle * vehicle_count)
     monthly_margin = quantize_money(monthly_revenue - monthly_cost)
 
-    installation_subsidy = quantize_money(
-        installation_cost + (Decimal("0.00") if charge_installation else normalized_fixed_cost)
+    # Payback de instalação mede somente o custo da instalação isenta.
+    # O custo fixo da proposta continua compondo a margem final e o ponto de
+    # equilíbrio, mas não deve ser chamado de subsídio da instalação.
+    installation_subsidy = (
+        installation_cost
+        if not charge_installation
+        else Decimal("0.00")
     )
     payback_months: Decimal | None = None
-    if not charge_installation and monthly_margin > 0:
+    if (
+        not charge_installation
+        and installation_subsidy > 0
+        and monthly_margin > 0
+    ):
         payback_months = (installation_subsidy / monthly_margin).quantize(
             PERCENT_QUANT,
             rounding=ROUND_HALF_UP,

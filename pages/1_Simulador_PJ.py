@@ -212,9 +212,7 @@ body { font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-s
 </head>
 <body>
 <div class="chart-shell">
-    <div id="__CHART_ID__">
-        <div class="chart-fallback">Carregando análise interativa de margem...</div>
-    </div>
+    <div id="__CHART_ID__"></div>
 </div>
 <script>
 function showChartError(message) {
@@ -240,7 +238,13 @@ am5.ready(function() {
         return am5.color(parseInt(hex.replace("#", ""), 16));
     }
 
-    const root = am5.Root.new("__CHART_ID__");
+    const host = document.getElementById("__CHART_ID__");
+    if (!host) {
+        throw new Error("Container do gráfico não encontrado.");
+    }
+    host.replaceChildren();
+
+    const root = am5.Root.new(host);
     root.setThemes([am5themes_Animated.new(root)]);
 
     const chart = root.container.children.push(am5xy.XYChart.new(root, {
@@ -468,7 +472,20 @@ with config_col:
             "continua sendo descontado da margem da proposta."
         ),
     )
-    st.caption("Mensalidades são unitárias por veículo; instalação é uma cobrança única.")
+    st.caption(
+        "Mensalidades são unitárias por veículo; instalação é uma cobrança única."
+    )
+    if fixed_implementation_cost > 0:
+        fixed_cost_per_vehicle = quantize_money(
+            fixed_implementation_cost / Decimal(vehicle_count)
+        )
+        st.warning(
+            f"Custo fixo interno aplicado à proposta: "
+            f"{money(fixed_implementation_cost)}. "
+            f"Com {vehicle_count} veículo(s), ele representa "
+            f"{money(fixed_cost_per_vehicle)} por veículo nesta análise. "
+            "Esse custo é aplicado uma única vez à proposta e entra na margem final."
+        )
 
 with client_col:
     st.markdown("#### Dados da proposta")
@@ -729,36 +746,163 @@ if selected:
         charge_installation=False,
         fixed_cost=fixed_implementation_cost,
     )
+
+    charged_operational_totals = proposal_totals(
+        recurring_sale_per_vehicle=recurring_sale_per_vehicle,
+        recurring_cost_per_vehicle=recurring_cost_per_vehicle,
+        months=months,
+        vehicles=vehicle_decimal,
+        installation_sale_per_vehicle=installation_sale_per_vehicle,
+        installation_cost_per_vehicle=installation_cost_per_vehicle,
+        charge_installation=True,
+        fixed_cost=0,
+    )
+    waived_operational_totals = proposal_totals(
+        recurring_sale_per_vehicle=recurring_sale_per_vehicle,
+        recurring_cost_per_vehicle=recurring_cost_per_vehicle,
+        months=months,
+        vehicles=vehicle_decimal,
+        installation_sale_per_vehicle=installation_sale_per_vehicle,
+        installation_cost_per_vehicle=installation_cost_per_vehicle,
+        charge_installation=False,
+        fixed_cost=0,
+    )
+
     charge_installation = installation_policy == "Cobrar instalação"
     chosen_totals = charged_totals if charge_installation else waived_totals
+    chosen_operational_totals = (
+        charged_operational_totals
+        if charge_installation
+        else waived_operational_totals
+    )
+
+    chosen_break_even = break_even_vehicle_count(
+        recurring_sale_per_vehicle=recurring_sale_per_vehicle,
+        recurring_cost_per_vehicle=recurring_cost_per_vehicle,
+        months=months,
+        installation_sale_per_vehicle=installation_sale_per_vehicle,
+        installation_cost_per_vehicle=installation_cost_per_vehicle,
+        charge_installation=charge_installation,
+        fixed_cost=fixed_implementation_cost,
+        target_margin_percent=minimum_custom_margin,
+    )
 
     st.markdown("### Resumo executivo da simulação")
     chosen_margin_percent = chosen_totals["margin_percent"]
+    operational_margin_percent = chosen_operational_totals["margin_percent"]
     below_margin_floor = (
-        chosen_margin_percent is None or chosen_margin_percent < minimum_custom_margin
+        chosen_margin_percent is None
+        or chosen_margin_percent < minimum_custom_margin
     )
-    summary_cols = st.columns(5)
-    summary_cols[0].metric("Mensalidade da frota", money(chosen_totals["monthly_revenue"]))
-    summary_cols[1].metric("Receita do contrato", money(chosen_totals["total_revenue"]))
-    summary_cols[2].metric("Custo total", money(chosen_totals["total_cost"]))
-    summary_cols[3].metric("Margem total", money(chosen_totals["total_margin"]))
-    summary_cols[4].metric("Margem final", _margin_label(chosen_margin_percent))
+    fixed_cost_caused_policy_failure = bool(
+        below_margin_floor
+        and fixed_implementation_cost > 0
+        and operational_margin_percent is not None
+        and operational_margin_percent >= minimum_custom_margin
+    )
 
-    if below_margin_floor:
+    summary_cols = st.columns(6)
+    summary_cols[0].metric(
+        "Mensalidade da frota",
+        money(chosen_totals["monthly_revenue"]),
+    )
+    summary_cols[1].metric(
+        "Receita do contrato",
+        money(chosen_totals["total_revenue"]),
+    )
+    summary_cols[2].metric(
+        "Custo operacional",
+        money(chosen_operational_totals["total_cost"]),
+    )
+    summary_cols[3].metric(
+        "Custo fixo implantação",
+        money(fixed_implementation_cost),
+    )
+    summary_cols[4].metric(
+        "Margem operacional",
+        _margin_label(operational_margin_percent),
+    )
+    summary_cols[5].metric(
+        "Margem final",
+        _margin_label(chosen_margin_percent),
+    )
+    st.caption(
+        f"Margem final em valor: {money(chosen_totals['total_margin'])} · "
+        f"Custo total consolidado: {money(chosen_totals['total_cost'])}"
+    )
+
+    if fixed_cost_caused_policy_failure:
+        fixed_cost_impact_pp = (
+            operational_margin_percent - chosen_margin_percent
+            if chosen_margin_percent is not None
+            else operational_margin_percent
+        )
+        fixed_cost_per_vehicle = quantize_money(
+            fixed_implementation_cost / vehicle_decimal
+        )
+        equilibrium_text = (
+            f" Mantidas as condições atuais, o piso de "
+            f"{minimum_custom_margin:.2f}% é atingido a partir de "
+            f"{chosen_break_even} veículo(s)."
+            if chosen_break_even is not None
+            else ""
+        )
+        st.warning(
+            f"A oferta está dentro da política antes do custo fixo: "
+            f"margem operacional de {_margin_label(operational_margin_percent)}. "
+            f"O bloqueio ocorre porque existe um custo fixo de implantação de "
+            f"{money(fixed_implementation_cost)} aplicado à proposta. "
+            f"Com {int(vehicle_decimal)} veículo(s), esse custo equivale a "
+            f"{money(fixed_cost_per_vehicle)} por veículo e reduz a margem final "
+            f"para {_margin_label(chosen_margin_percent)} "
+            f"(impacto de {fixed_cost_impact_pp:.2f} p.p.)."
+            + equilibrium_text
+        )
+    elif below_margin_floor:
         gap = (
             minimum_custom_margin - chosen_margin_percent
             if chosen_margin_percent is not None
             else minimum_custom_margin
         )
         st.warning(
-            f"Condição fora da política: margem final de {_margin_label(chosen_margin_percent)}; "
-            f"piso {minimum_custom_margin:.2f}% (desvio de {gap:.2f} p.p.). "
-            "A simulação continua disponível, mas a proposta ficará bloqueada para download até aprovação do Head Comercial."
+            f"A margem final ficou em {_margin_label(chosen_margin_percent)}, "
+            f"abaixo do piso de {minimum_custom_margin:.2f}% "
+            f"(diferença de {gap:.2f} p.p.). "
+            "Revise preços, custos e instalação; se a condição comercial precisar "
+            "ser mantida, a proposta seguirá para aprovação do Head Comercial."
         )
     else:
         st.success(
-            f"Condição dentro da política: margem final de {_margin_label(chosen_margin_percent)}, "
-            f"acima do piso de {minimum_custom_margin:.2f}%."
+            f"Condição dentro da política: margem final de "
+            f"{_margin_label(chosen_margin_percent)}, acima do piso de "
+            f"{minimum_custom_margin:.2f}%."
+        )
+
+    with st.expander("Entenda a composição da margem", expanded=False):
+        breakdown_1, breakdown_2, breakdown_3 = st.columns(3)
+        breakdown_1.metric(
+            "Receita recorrente",
+            money(chosen_totals["recurring_revenue"]),
+        )
+        breakdown_1.metric(
+            "Receita de instalação",
+            money(chosen_totals["installation_revenue"]),
+        )
+        breakdown_2.metric(
+            "Custo recorrente",
+            money(chosen_totals["recurring_cost"]),
+        )
+        breakdown_2.metric(
+            "Custo de instalação",
+            money(chosen_totals["installation_cost"]),
+        )
+        breakdown_3.metric(
+            "Custo fixo da proposta",
+            money(chosen_totals["fixed_cost"]),
+        )
+        breakdown_3.metric(
+            "Margem final",
+            money(chosen_totals["total_margin"]),
         )
 
     st.markdown("### Comparativo de rentabilidade")
@@ -770,7 +914,8 @@ if selected:
         m2.metric("Margem (%)", _margin_label(charged_totals["margin_percent"]))
         st.caption(
             f"Receita de instalação: {money(charged_totals['installation_revenue'])} · "
-            f"Custo de instalação: {money(charged_totals['installation_cost'])}"
+            f"Custo de instalação: {money(charged_totals['installation_cost'])} · "
+            f"Custo fixo da proposta: {money(charged_totals['fixed_cost'])}"
         )
     with waived_col:
         st.markdown("#### Margem isentando instalação")
@@ -779,7 +924,8 @@ if selected:
         m2.metric("Margem (%)", _margin_label(waived_totals["margin_percent"]))
         st.caption(
             f"Receita de instalação: {money(waived_totals['installation_revenue'])} · "
-            f"Custo mantido na margem: {money(waived_totals['installation_cost'])}"
+            f"Custo mantido na margem: {money(waived_totals['installation_cost'])} · "
+            f"Custo fixo da proposta: {money(waived_totals['fixed_cost'])}"
         )
         if waived_totals["payback_months"] is not None:
             st.caption(
@@ -907,10 +1053,19 @@ if selected:
     installation_waived = not charge_installation and installation_has_impact
     approval_reasons: list[str] = []
     if below_margin_floor:
-        approval_reasons.append(
-            "Margem final abaixo do piso: "
-            f"{_margin_label(chosen_margin_percent)} < {minimum_custom_margin:.2f}%"
-        )
+        if fixed_cost_caused_policy_failure:
+            approval_reasons.append(
+                "Custo fixo de implantação reduz a margem final: "
+                f"{money(fixed_implementation_cost)} por proposta; "
+                f"margem operacional {_margin_label(operational_margin_percent)}; "
+                f"margem final {_margin_label(chosen_margin_percent)}"
+            )
+        else:
+            approval_reasons.append(
+                "Margem final abaixo do piso: "
+                f"{_margin_label(chosen_margin_percent)} < "
+                f"{minimum_custom_margin:.2f}%"
+            )
         if custom_discount_products:
             approval_reasons.append(
                 "Desconto personalizado em: " + ", ".join(custom_discount_products)
@@ -927,7 +1082,11 @@ if selected:
         "all_costs_configured": all_costs_configured,
         "charged_totals": charged_totals,
         "waived_totals": waived_totals,
+        "charged_operational_totals": charged_operational_totals,
+        "waived_operational_totals": waived_operational_totals,
         "chosen_totals": chosen_totals,
+        "chosen_operational_totals": chosen_operational_totals,
+        "fixed_cost_caused_policy_failure": fixed_cost_caused_policy_failure,
         "charge_installation": charge_installation,
         "below_margin_floor": below_margin_floor,
         "approval_required": below_margin_floor,
@@ -1058,7 +1217,16 @@ if submitted and analysis is not None:
             "custo_instalacao_veiculo": _safe_float(analysis["installation_cost_per_vehicle"]),
             "custo_fixo_implantacao": _safe_float(fixed_implementation_cost),
             "receita_total": _safe_float(chosen_totals["total_revenue"]),
+            "custo_operacional_total": _safe_float(
+                analysis["chosen_operational_totals"]["total_cost"]
+            ),
             "custo_total": _safe_float(chosen_totals["total_cost"]),
+            "margem_operacional_total": _safe_float(
+                analysis["chosen_operational_totals"]["total_margin"]
+            ),
+            "margem_operacional_percentual": _safe_float(
+                analysis["chosen_operational_totals"]["margin_percent"] or 0
+            ),
             "margem_total": _safe_float(chosen_totals["total_margin"]),
             "margem_percentual": _safe_float(chosen_totals["margin_percent"] or 0),
             "itens": database_items,
